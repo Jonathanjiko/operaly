@@ -5,15 +5,8 @@ export interface LabelProps
 
 export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
   ({ className, ...props }, ref) => {
-    return (
-      <label
-        ref={ref}
-        className={className}
-        {...props}
-      />
-    )
+    return <label ref={ref} className={className} {...props} />
   }
 )
 
 Label.displayName = "Label"
-add missing label component
