@@ -1,214 +1,344 @@
 "use client"
 
-import { 
-  BarChart3, 
-  Users, 
-  Calendar, 
-  FileText, 
+import { useEffect, useMemo, useState } from "react"
+import {
+  BarChart3,
+  FileText,
+  Users,
+  FolderOpen,
+  CheckSquare,
+  Zap,
   TrendingUp,
-  Clock,
-  CheckCircle2,
-  MessageSquare,
-  ArrowUp,
-  ArrowDown
+  RefreshCw,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { supabase } from "@/lib/supabase"
+import { getCurrentClientId } from "@/lib/dashboard-client"
 
-const stats = [
-  { 
-    label: "Clientes activos", 
-    value: "47", 
-    change: "+12%", 
-    trend: "up",
-    icon: Users,
-    color: "text-[#3B82F6]",
-    bgColor: "bg-[#3B82F6]/10"
-  },
-  { 
-    label: "Casos este mes", 
-    value: "23", 
-    change: "+8%", 
-    trend: "up",
-    icon: FileText,
-    color: "text-[#7C3AED]",
-    bgColor: "bg-[#7C3AED]/10"
-  },
-  { 
-    label: "Tareas completadas", 
-    value: "89", 
-    change: "+24%", 
-    trend: "up",
-    icon: CheckCircle2,
-    color: "text-[#34D399]",
-    bgColor: "bg-[#34D399]/10"
-  },
-  { 
-    label: "Horas facturadas", 
-    value: "156", 
-    change: "-3%", 
-    trend: "down",
-    icon: Clock,
-    color: "text-[#F59E0B]",
-    bgColor: "bg-[#F59E0B]/10"
-  },
-]
+type UsageMonthlyRow = {
+  id: string
+  client_id: string
+  period_yyyymm: string | null
+  period_month: string | null
+  messages_used: number | null
+  tokens_used: number | null
+  docs_count: number | null
+  storage_used_mb: number | null
+  audio_minutes_used: number | null
+  research_used: number | null
+  automations_used: number | null
+  workflows_active: number | null
+  chunks_used: number | null
+  file_pages_used: number | null
+  updated_at: string | null
+}
 
-const monthlyData = [
-  { month: "Ene", clientes: 32, casos: 15, tareas: 67 },
-  { month: "Feb", clientes: 35, casos: 18, tareas: 72 },
-  { month: "Mar", clientes: 38, casos: 21, tareas: 78 },
-  { month: "Abr", clientes: 42, casos: 19, tareas: 85 },
-  { month: "May", clientes: 45, casos: 22, tareas: 82 },
-  { month: "Jun", clientes: 47, casos: 23, tareas: 89 },
-]
+type SubscriptionRow = {
+  id: string
+  status: string | null
+  created_at: string | null
+}
 
-const sofiaInsights = [
-  {
-    type: "recommendation",
-    message: "Tienes 5 clientes que no han sido contactados en más de 30 días. ¿Quieres que les envíe un mensaje de seguimiento?",
-  },
-  {
-    type: "alert",
-    message: "El caso de María López tiene una fecha límite en 3 días y aún hay 2 tareas pendientes.",
-  },
-  {
-    type: "insight",
-    message: "Tu productividad ha aumentado un 24% este mes comparado con el anterior. ¡Excelente trabajo!",
-  },
-]
+export default function ProfessionalAnalyticsPage() {
+  const [loading, setLoading] = useState(true)
+  const [clientId, setClientId] = useState("")
+  const [usage, setUsage] = useState<UsageMonthlyRow | null>(null)
+  const [documentsCount, setDocumentsCount] = useState(0)
+  const [contactsCount, setContactsCount] = useState(0)
+  const [casesCount, setCasesCount] = useState(0)
+  const [tasksCount, setTasksCount] = useState(0)
+  const [activeRecurringCount, setActiveRecurringCount] = useState(0)
+  const [subscriptionStatus, setSubscriptionStatus] = useState("—")
 
-export default function AnalyticsPage() {
+  const loadAnalytics = async () => {
+    setLoading(true)
+
+    try {
+      const currentClientId = await getCurrentClientId()
+      setClientId(currentClientId)
+
+      const { data: usageRows, error: usageError } = await supabase
+        .from("usage_monthly")
+        .select("*")
+        .eq("client_id", currentClientId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+
+      if (usageError) {
+        throw usageError
+      }
+
+      setUsage((usageRows?.[0] as UsageMonthlyRow) || null)
+
+      const [
+        documentsRes,
+        contactsRes,
+        casesRes,
+        tasksRes,
+        recurringRes,
+        subscriptionsRes,
+      ] = await Promise.all([
+        supabase
+          .from("documents")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", currentClientId),
+
+        supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", currentClientId),
+
+        supabase
+          .from("cases")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", currentClientId),
+
+        supabase
+          .from("tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", currentClientId),
+
+        supabase
+          .from("recurring_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("client_id", currentClientId)
+          .eq("status", "active"),
+
+        supabase
+          .from("subscriptions")
+          .select("id, status, created_at")
+          .eq("client_id", currentClientId)
+          .order("created_at", { ascending: false })
+          .limit(1),
+      ])
+
+      if (documentsRes.error) throw documentsRes.error
+      if (contactsRes.error) throw contactsRes.error
+      if (casesRes.error) throw casesRes.error
+      if (tasksRes.error) throw tasksRes.error
+      if (recurringRes.error) throw recurringRes.error
+      if (subscriptionsRes.error) throw subscriptionsRes.error
+
+      setDocumentsCount(documentsRes.count || 0)
+      setContactsCount(contactsRes.count || 0)
+      setCasesCount(casesRes.count || 0)
+      setTasksCount(tasksRes.count || 0)
+      setActiveRecurringCount(recurringRes.count || 0)
+
+      const lastSubscription = (subscriptionsRes.data?.[0] as SubscriptionRow) || null
+      setSubscriptionStatus(lastSubscription?.status || "—")
+    } catch (err: any) {
+      alert(err.message || "No se pudieron cargar las analíticas.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAnalytics()
+  }, [])
+
+  const cards = useMemo(() => {
+    return [
+      {
+        label: "Mensajes usados",
+        value: usage?.messages_used ?? 0,
+        helper: "uso mensual",
+        icon: TrendingUp,
+        color: "#3B82F6",
+      },
+      {
+        label: "Tokens usados",
+        value: usage?.tokens_used ?? 0,
+        helper: "uso mensual",
+        icon: BarChart3,
+        color: "#06B6D4",
+      },
+      {
+        label: "Documentos",
+        value: documentsCount,
+        helper: "archivos cargados",
+        icon: FileText,
+        color: "#7C3AED",
+      },
+      {
+        label: "Contactos",
+        value: contactsCount,
+        helper: "registrados",
+        icon: Users,
+        color: "#22C55E",
+      },
+      {
+        label: "Casos",
+        value: casesCount,
+        helper: "activos e históricos",
+        icon: FolderOpen,
+        color: "#F59E0B",
+      },
+      {
+        label: "Tareas",
+        value: tasksCount,
+        helper: "totales",
+        icon: CheckSquare,
+        color: "#EF4444",
+      },
+      {
+        label: "Automatizaciones",
+        value: usage?.automations_used ?? activeRecurringCount,
+        helper: "uso o activas",
+        icon: Zap,
+        color: "#8B5CF6",
+      },
+      {
+        label: "Estado del plan",
+        value: subscriptionStatus,
+        helper: "suscripción actual",
+        icon: TrendingUp,
+        color: "#14B8A6",
+      },
+    ]
+  }, [
+    usage,
+    documentsCount,
+    contactsCount,
+    casesCount,
+    tasksCount,
+    activeRecurringCount,
+    subscriptionStatus,
+  ])
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-muted-foreground">
+        Cargando analíticas...
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[#0F1F63]">Analíticas</h1>
-        <p className="text-muted-foreground">Métricas y rendimiento de tu práctica profesional</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[#0F1F63]">Analíticas</h1>
+          <p className="text-muted-foreground mt-1">
+            Métricas reales de uso de tu cuenta Assistant
+          </p>
+        </div>
+
+        <Button
+          variant="outline"
+          className="rounded-xl"
+          onClick={loadAnalytics}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Actualizar
+        </Button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-border/50">
-            <CardContent className="pt-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="text-3xl font-bold text-[#0F1F63] mt-1">{stat.value}</p>
-                  <div className={`flex items-center gap-1 mt-2 text-sm ${stat.trend === "up" ? "text-[#34D399]" : "text-red-500"}`}>
-                    {stat.trend === "up" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                    {stat.change} vs mes anterior
-                  </div>
-                </div>
-                <div className={`p-3 rounded-xl ${stat.bgColor}`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
+      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {cards.map((card) => (
+          <div
+            key={card.label}
+            className="bg-card rounded-2xl border border-border p-5 hover:shadow-lg transition-shadow"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${card.color}15` }}
+              >
+                <card.icon
+                  className="w-5 h-5"
+                  style={{ color: card.color }}
+                />
               </div>
-            </CardContent>
-          </Card>
+
+              <TrendingUp className="w-4 h-4 text-[#34D399]" />
+            </div>
+
+            <p className="text-3xl font-bold text-[#0F1F63] break-words">
+              {card.value}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">{card.label}</p>
+            <p className="text-xs text-[#34D399] mt-2">{card.helper}</p>
+          </div>
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Activity Chart */}
-        <Card className="lg:col-span-2 border-border/50">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-[#0F1F63]">Actividad mensual</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-end justify-between gap-2">
-              {monthlyData.map((data) => (
-                <div key={data.month} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full flex flex-col gap-1">
-                    <div 
-                      className="w-full bg-[#3B82F6] rounded-t"
-                      style={{ height: `${data.clientes * 2}px` }}
-                    />
-                    <div 
-                      className="w-full bg-[#7C3AED]"
-                      style={{ height: `${data.casos * 3}px` }}
-                    />
-                    <div 
-                      className="w-full bg-[#34D399] rounded-b"
-                      style={{ height: `${data.tareas}px` }}
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground">{data.month}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#3B82F6]" />
-                <span className="text-sm text-muted-foreground">Clientes</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#7C3AED]" />
-                <span className="text-sm text-muted-foreground">Casos</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#34D399]" />
-                <span className="text-sm text-muted-foreground">Tareas</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <h2 className="text-xl font-semibold text-[#0F1F63] mb-5">
+            Uso mensual
+          </h2>
 
-        {/* Sofia Insights */}
-        <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-[#0F1F63] flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
-                <MessageSquare className="w-3 h-3 text-white" />
-              </div>
-              Insights de Sofía
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {sofiaInsights.map((insight, index) => (
-              <div 
-                key={index}
-                className={`p-4 rounded-xl text-sm ${
-                  insight.type === "recommendation" 
-                    ? "bg-[#3B82F6]/10 border border-[#3B82F6]/20" 
-                    : insight.type === "alert"
-                    ? "bg-[#F59E0B]/10 border border-[#F59E0B]/20"
-                    : "bg-[#34D399]/10 border border-[#34D399]/20"
-                }`}
-              >
-                {insight.message}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+          <div className="space-y-4">
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Período</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.period_yyyymm || usage?.period_month || "Sin registro"}
+              </p>
+            </div>
 
-      {/* Performance Summary */}
-      <Card className="border-border/50">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-[#0F1F63] flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-[#34D399]" />
-            Resumen de rendimiento
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid sm:grid-cols-3 gap-6">
-            <div className="text-center p-6 rounded-xl bg-secondary/30">
-              <p className="text-4xl font-bold text-[#3B82F6]">94%</p>
-              <p className="text-sm text-muted-foreground mt-2">Tasa de retención de clientes</p>
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Storage usado</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.storage_used_mb ?? 0} MB
+              </p>
             </div>
-            <div className="text-center p-6 rounded-xl bg-secondary/30">
-              <p className="text-4xl font-bold text-[#7C3AED]">4.2h</p>
-              <p className="text-sm text-muted-foreground mt-2">Tiempo promedio por caso</p>
+
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Páginas procesadas</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.file_pages_used ?? 0}
+              </p>
             </div>
-            <div className="text-center p-6 rounded-xl bg-secondary/30">
-              <p className="text-4xl font-bold text-[#34D399]">98%</p>
-              <p className="text-sm text-muted-foreground mt-2">Satisfacción de clientes</p>
+
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Chunks procesados</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.chunks_used ?? 0}
+              </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <h2 className="text-xl font-semibold text-[#0F1F63] mb-5">
+            Estado de automatizaciones
+          </h2>
+
+          <div className="space-y-4">
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Automatizaciones usadas</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.automations_used ?? 0}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Automatizaciones activas</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {activeRecurringCount}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Workflows activos</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.workflows_active ?? 0}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-secondary/20 border border-border p-4">
+              <p className="text-sm text-muted-foreground">Última actualización</p>
+              <p className="font-medium text-[#0F1F63] mt-1">
+                {usage?.updated_at
+                  ? new Date(usage.updated_at).toLocaleString()
+                  : "Sin datos"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
