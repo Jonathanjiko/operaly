@@ -37,7 +37,8 @@ export default function SetupClient() {
   const [city, setCity] = useState("")
   const [phone, setPhone] = useState("")
   const [language, setLanguage] = useState("es")
-
+  const [phoneError, setPhoneError] = useState("")
+  
   const [submitting, setSubmitting] = useState(false)
   const [authData, setAuthData] = useState<RegisterAuthData | null>(null)
 
@@ -55,7 +56,20 @@ export default function SetupClient() {
     }
   }, [])
 
-  const nextStep = () => setStep((s) => Math.min(totalSteps, s + 1))
+    const nextStep = () => {
+    if (step === 4) {
+      const normalized = normalizePhone(phone, countryCode)
+
+      if (!normalized.ok) {
+        setPhoneError(normalized.error)
+        return
+      }
+
+      setPhoneError("")
+    }
+
+    setStep((s) => Math.min(totalSteps, s + 1))
+  }
   const prevStep = () => setStep((s) => Math.max(1, s - 1))
 
   const canContinue =
