@@ -300,25 +300,39 @@ export default function SetupClient() {
               </div>
             </div>
           )}
-
+          
           {step === 4 && (
             <div>
               <div className="mb-8">
                 <h1 className="text-4xl font-bold text-[#132B73] mb-3">
                   Número de teléfono
                 </h1>
+          
                 <p className="text-[#5F6B7A] text-lg">
-                  Este será tu número principal. Puedes escribirlo con código país, por ejemplo: +51999999999.
+                  Este será tu número principal. Puedes escribirlo con código país,
+                  por ejemplo: +51999999999.
                 </p>
               </div>
-
+          
               <Input
                 placeholder="+51 999 999 999"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="h-16 rounded-2xl text-lg border-[#D9E1EC]"
+                onChange={(e) => {
+                  setPhone(e.target.value)
+          
+                  if (phoneError) {
+                    setPhoneError("")
+                  }
+                }}
+                className={`h-16 rounded-2xl text-lg ${
+                  phoneError ? "border-red-400" : "border-[#D9E1EC]"
+                }`}
               />
-
+          
+              {phoneError && (
+                <p className="text-sm text-red-500 mt-3">{phoneError}</p>
+              )}
+          
               <p className="text-sm text-[#7A8493] mt-4">
                 Si no incluyes el +, intentaremos completarlo según el país elegido.
               </p>
