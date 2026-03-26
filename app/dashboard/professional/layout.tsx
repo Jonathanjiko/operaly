@@ -163,7 +163,7 @@ export default function ProfessionalDashboardLayout({
 
             {!collapsed && (
               <div>
-                <p className="text-sm font-semibold text-[#0F1F63]">Sofía</p>
+                <p className="text-sm font-semibold text-[#0F1F63]">Operaly</p>
                 <p className="text-xs text-[#34D399]">Activa</p>
               </div>
             )}
