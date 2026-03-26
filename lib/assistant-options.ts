@@ -43,18 +43,54 @@ export function normalizePhone(input: string, countryCode: string) {
   const raw = (input || "").trim()
 
   if (!raw) {
-    return { ok: false, value: "", error: "Ingresa tu número de teléfono." }
+    return {
+      ok: false,
+      value: "",
+      error: "Ingresa tu número de teléfono.",
+    }
   }
 
   const cleaned = raw.replace(/[^\d+]/g, "")
 
+  const COUNTRY_RULES: Record<
+    string,
+    { dial: string; nationalMin: number; nationalMax: number }
+  > = {
+    PE: { dial: "51", nationalMin: 9, nationalMax: 9 },
+    MX: { dial: "52", nationalMin: 10, nationalMax: 10 },
+    CO: { dial: "57", nationalMin: 10, nationalMax: 10 },
+    AR: { dial: "54", nationalMin: 10, nationalMax: 10 },
+    CL: { dial: "56", nationalMin: 9, nationalMax: 9 },
+    EC: { dial: "593", nationalMin: 9, nationalMax: 9 },
+    ES: { dial: "34", nationalMin: 9, nationalMax: 9 },
+    US: { dial: "1", nationalMin: 10, nationalMax: 10 },
+  }
+
+  const rule = COUNTRY_RULES[countryCode]
+
   if (cleaned.startsWith("+")) {
     const digits = cleaned.slice(1).replace(/\D/g, "")
+
     if (digits.length < 8 || digits.length > 15) {
       return {
         ok: false,
         value: "",
         error: "Tu número con código país debe tener entre 8 y 15 dígitos.",
+      }
+    }
+
+    if (rule && digits.startsWith(rule.dial)) {
+      const national = digits.slice(rule.dial.length)
+
+      if (
+        national.length < rule.nationalMin ||
+        national.length > rule.nationalMax
+      ) {
+        return {
+          ok: false,
+          value: "",
+          error: `El número no coincide con el formato esperado para ${countryCode}.`,
+        }
       }
     }
 
@@ -66,9 +102,8 @@ export function normalizePhone(input: string, countryCode: string) {
   }
 
   const localDigits = cleaned.replace(/\D/g, "")
-  const dial = COUNTRY_DIAL_CODES[countryCode]
 
-  if (!dial) {
+  if (!rule) {
     return {
       ok: false,
       value: "",
@@ -76,19 +111,20 @@ export function normalizePhone(input: string, countryCode: string) {
     }
   }
 
-  const combined = `${dial}${localDigits}`
-
-  if (combined.length < 8 || combined.length > 15) {
+  if (
+    localDigits.length < rule.nationalMin ||
+    localDigits.length > rule.nationalMax
+  ) {
     return {
       ok: false,
       value: "",
-      error: "No pudimos validar tu número. Revísalo e inténtalo otra vez.",
+      error: `El número no coincide con el formato esperado para ${countryCode}.`,
     }
   }
 
   return {
     ok: true,
-    value: `+${combined}`,
+    value: `+${rule.dial}${localDigits}`,
     error: "",
   }
 }
