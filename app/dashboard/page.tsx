@@ -7,16 +7,14 @@ export default function DashboardPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // Default redirect to business dashboard
-    // In a real app, this would check user's account type from auth/session
-    router.replace("/dashboard/business")
+    router.replace("/dashboard/professional")
   }, [router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
       <div className="flex flex-col items-center gap-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#3B82F6]"></div>
-        <p className="text-muted-foreground">Redirigiendo al dashboard...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#3B82F6]" />
+        <p className="text-[#5F6B7A]">Redirigiendo a tu dashboard...</p>
       </div>
     </div>
   )
