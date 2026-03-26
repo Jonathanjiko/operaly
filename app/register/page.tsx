@@ -1,31 +1,83 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ArrowRight, Eye, EyeOff, Check } from "lucide-react"
+import { OPERLAY_PLANS, getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
+
+type SignupDraft = {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  companyName: string
+  country: string
+  businessType: string
+  password: string
+  planCode: OperalyPlanCode
+}
 
 export default function RegisterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialPlan = (searchParams.get("plan") as OperalyPlanCode | null) || "trial"
+
   const [showPassword, setShowPassword] = useState(false)
-  const [name, setName] = useState("")
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
   const [email, setEmail] = useState("")
+  const [phone, setPhone] = useState("")
+  const [companyName, setCompanyName] = useState("")
+  const [country, setCountry] = useState("")
+  const [businessType, setBusinessType] = useState("")
   const [password, setPassword] = useState("")
+  const [planCode, setPlanCode] = useState<OperalyPlanCode>(
+    getPlanByCode(initialPlan)?.code || "trial"
+  )
+
+  const selectedPlan = useMemo(() => getPlanByCode(planCode), [planCode])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    router.push("/select-account-type")
+
+    const payload: SignupDraft = {
+      firstName,
+      lastName,
+      email,
+      phone,
+      companyName,
+      country,
+      businessType,
+      password,
+      planCode,
+    }
+
+    localStorage.setItem("operaly_pending_signup", JSON.stringify(payload))
+
+    if (planCode === "trial") {
+      router.push("/onboarding?plan=trial")
+      return
+    }
+
+    router.push(`/iniciar-pago?plan=${planCode}`)
   }
+
+  const isValid =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    email.trim().length > 0 &&
+    password.trim().length >= 6 &&
+    country.trim().length > 0 &&
+    businessType.trim().length > 0
 
   return (
     <div className="min-h-screen flex">
-      {/* Left side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          {/* Logo */}
+        <div className="w-full max-w-xl">
           <Link href="/" className="inline-block mb-12">
             <Image
               src="/images/operaly-logo.png"
@@ -36,72 +88,144 @@ export default function RegisterPage() {
             />
           </Link>
 
-          {/* Header */}
           <div className="mb-10">
             <h1 className="text-3xl font-bold text-[#0F1F63] mb-3">
-              Crea tu cuenta
+              Crea tu cuenta en Operaly
             </h1>
             <p className="text-muted-foreground">
-              Empieza tu prueba gratuita de 7 días. Sin tarjeta de crédito.
+              Completa tus datos, elige tu plan y continúa con tu activación.
             </p>
           </div>
 
-          {/* Social login buttons */}
-          <div className="space-y-3 mb-8">
-            <button className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              <span className="font-medium text-foreground">Continuar con Google</span>
-            </button>
-
-            <button className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-card hover:bg-secondary/50 transition-colors">
-              <svg className="w-5 h-5 text-[#1877F2]" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-              </svg>
-              <span className="font-medium text-foreground">Continuar con Facebook</span>
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="relative mb-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-4 text-muted-foreground">o regístrate con email</span>
-            </div>
-          </div>
-
-          {/* Email form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Nombre completo
+                Plan elegido
               </label>
-              <Input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Tu nombre"
-                className="h-12 rounded-xl"
-              />
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                {OPERLAY_PLANS.map((plan) => {
+                  const active = plan.code === planCode
+                  return (
+                    <button
+                      key={plan.code}
+                      type="button"
+                      onClick={() => setPlanCode(plan.code)}
+                      className={`rounded-2xl border p-4 text-left transition-all ${
+                        active
+                          ? "border-[#3B82F6] bg-[#3B82F6]/5"
+                          : "border-border bg-card hover:border-[#3B82F6]/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-[#0F1F63]">{plan.name}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {plan.currency} {plan.price}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{plan.description}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {selectedPlan && (
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4 text-sm">
+                <span className="font-medium text-[#0F1F63]">Resumen:</span>{" "}
+                Estás registrándote con el plan <strong>{selectedPlan.name}</strong>.
+              </div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Nombre
+                </label>
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Tu nombre"
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Apellido
+                </label>
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Tu apellido"
+                  className="h-12 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@email.com"
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Teléfono
+                </label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+51 999 999 999"
+                  className="h-12 rounded-xl"
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Email
+                Empresa o marca
               </label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Nombre comercial"
                 className="h-12 rounded-xl"
               />
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  País
+                </label>
+                <Input
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="Perú"
+                  className="h-12 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Tipo de negocio o perfil
+                </label>
+                <Input
+                  value={businessType}
+                  onChange={(e) => setBusinessType(e.target.value)}
+                  placeholder="Restaurante, abogado, consultor..."
+                  className="h-12 rounded-xl"
+                />
+              </div>
             </div>
 
             <div>
@@ -126,22 +250,22 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <Button 
+            <Button
               type="submit"
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] hover:opacity-90 text-white font-semibold"
+              disabled={!isValid}
+              className="w-full h-12 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] hover:opacity-90 text-white font-semibold disabled:opacity-50"
             >
-              Crear cuenta
+              {planCode === "trial" ? "Continuar con trial" : "Continuar al pago"}
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </form>
 
-          {/* Benefits */}
           <div className="mt-8 p-4 rounded-xl bg-secondary/30 border border-border">
             <div className="space-y-2">
               {[
-                "7 días de prueba gratis",
-                "Sin tarjeta de crédito",
-                "Cancela cuando quieras"
+                "Planes oficiales alineados con backend",
+                "Registro completo del usuario",
+                "Flujo separado entre trial y pago",
               ].map((benefit) => (
                 <div key={benefit} className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Check className="w-4 h-4 text-[#34D399]" />
@@ -151,7 +275,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Login link */}
           <p className="mt-8 text-center text-sm text-muted-foreground">
             ¿Ya tienes una cuenta?{" "}
             <Link href="/login" className="text-[#3B82F6] font-medium hover:underline">
@@ -161,14 +284,11 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Right side - Visual */}
       <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-[#0F1F63] via-[#1a2d7c] to-[#0F1F63] relative overflow-hidden">
-        {/* Gradient orbs */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gradient-to-br from-[#3B82F6]/30 to-[#06B6D4]/30 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-gradient-to-br from-[#7C3AED]/30 to-[#3B82F6]/30 rounded-full blur-3xl" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gradient-to-br from-[#34D399]/20 to-[#06B6D4]/20 rounded-full blur-2xl" />
-        
-        {/* Content */}
+
         <div className="relative z-10 text-center px-12">
           <div className="mb-8">
             <Image
@@ -180,10 +300,10 @@ export default function RegisterPage() {
             />
           </div>
           <h2 className="text-3xl font-bold text-white mb-4">
-            Empieza en minutos
+            Registro unificado
           </h2>
           <p className="text-white/70 text-lg max-w-md">
-            Conecta tu WhatsApp y deja que Sofía se encargue de atender a tus clientes automáticamente.
+            Un solo flujo de alta para Trial, Core, Pro y Pro Plus.
           </p>
         </div>
       </div>
