@@ -1,221 +1,276 @@
 "use client"
 
-import { useState } from "react"
-import { 
-  FileText, 
-  Upload, 
-  Search, 
-  Filter, 
-  Grid3X3, 
-  List, 
-  MoreVertical,
-  Download,
-  Trash2,
-  Eye,
-  FolderOpen,
-  FileSpreadsheet,
-  FileImage,
-  File,
-  Plus,
-  Sparkles,
-  MessageSquare
-} from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { FileText, Upload, Trash2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { supabase } from "@/lib/supabase"
+import { getCurrentClientId } from "@/lib/dashboard-client"
 
-const documents = [
-  { id: 1, name: "Contrato-Cliente-2024-001.pdf", type: "pdf", size: "2.4 MB", date: "12 Mar 2024", client: "María García", analyzed: true },
-  { id: 2, name: "Análisis-Financiero-Q1.xlsx", type: "excel", size: "1.8 MB", date: "10 Mar 2024", client: "Carlos López", analyzed: true },
-  { id: 3, name: "Propuesta-Comercial.docx", type: "word", size: "540 KB", date: "8 Mar 2024", client: "Ana Martínez", analyzed: false },
-  { id: 4, name: "Acta-Reunión-Marzo.pdf", type: "pdf", size: "320 KB", date: "5 Mar 2024", client: null, analyzed: true },
-  { id: 5, name: "Evidencia-Fotográfica.jpg", type: "image", size: "4.2 MB", date: "3 Mar 2024", client: "Pedro Sánchez", analyzed: false },
-  { id: 6, name: "Reporte-Mensual.pdf", type: "pdf", size: "1.1 MB", date: "1 Mar 2024", client: null, analyzed: true },
-]
-
-const folders = [
-  { id: 1, name: "Contratos", count: 24, color: "#3B82F6" },
-  { id: 2, name: "Facturas", count: 56, color: "#34D399" },
-  { id: 3, name: "Propuestas", count: 12, color: "#F59E0B" },
-  { id: 4, name: "Reportes", count: 18, color: "#7C3AED" },
-]
-
-const getFileIcon = (type: string) => {
-  switch (type) {
-    case "pdf": return <FileText className="w-6 h-6 text-[#EF4444]" />
-    case "excel": return <FileSpreadsheet className="w-6 h-6 text-[#34D399]" />
-    case "word": return <FileText className="w-6 h-6 text-[#3B82F6]" />
-    case "image": return <FileImage className="w-6 h-6 text-[#7C3AED]" />
-    default: return <File className="w-6 h-6 text-muted-foreground" />
-  }
+type DocumentRow = {
+  id: string
+  client_id: string
+  title: string | null
+  file_name: string | null
+  mime_type: string | null
+  file_size_bytes: number | null
+  page_count: number | null
+  chunk_count: number | null
+  status: string | null
+  source: string | null
+  channel: string | null
+  storage_path: string | null
+  created_at: string | null
 }
 
-export default function DocumentsPage() {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list")
-  const [searchQuery, setSearchQuery] = useState("")
+export default function ProfessionalDocumentsPage() {
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [documents, setDocuments] = useState<DocumentRow[]>([])
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const loadDocuments = async () => {
+    setLoading(true)
+
+    try {
+      const clientId = await getCurrentClientId()
+
+      const { data, error } = await supabase
+        .from("documents")
+        .select(
+          "id, client_id, title, file_name, mime_type, file_size_bytes, page_count, chunk_count, status, source, channel, storage_path, created_at"
+        )
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      setDocuments((data || []) as DocumentRow[])
+    } catch (err: any) {
+      alert(err.message || "No se pudieron cargar los documentos.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDocuments()
+  }, [])
+
+  const handleOpenUpload = () => {
+    inputRef.current?.click()
+  }
+
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    setUploading(true)
+
+    try {
+      const clientId = await getCurrentClientId()
+      const ext = file.name.split(".").pop() || "bin"
+      const path = `dashboard/${clientId}/${Date.now()}-${file.name.replace(/\s+/g, "-")}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("client-docs")
+        .upload(path, file, {
+          upsert: false,
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { error: insertError } = await supabase.from("documents").insert({
+        client_id: clientId,
+        title: file.name,
+        file_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        file_size_bytes: file.size,
+        page_count: null,
+        chunk_count: null,
+        status: "uploaded",
+        source: "dashboard_upload",
+        channel: "web",
+        storage_path: path,
+      })
+
+      if (insertError) {
+        throw insertError
+      }
+
+      await loadDocuments()
+    } catch (err: any) {
+      alert(err.message || "No se pudo subir el documento.")
+    } finally {
+      setUploading(false)
+      if (inputRef.current) {
+        inputRef.current.value = ""
+      }
+    }
+  }
+
+  const handleDelete = async (row: DocumentRow) => {
+    const ok = window.confirm(`¿Eliminar "${row.file_name || row.title}"?`)
+
+    if (!ok) {
+      return
+    }
+
+    try {
+      if (row.storage_path) {
+        await supabase.storage.from("client-docs").remove([row.storage_path])
+      }
+
+      const { error } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", row.id)
+
+      if (error) {
+        throw error
+      }
+
+      await loadDocuments()
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar el documento.")
+    }
+  }
+
+  const totalSizeMb = useMemo(() => {
+    return (
+      documents.reduce((acc, item) => acc + (item.file_size_bytes || 0), 0) /
+      1024 /
+      1024
+    ).toFixed(2)
+  }, [documents])
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#0F1F63]">Documentos</h1>
+          <h1 className="text-3xl font-bold text-[#0F1F63]">Documentos</h1>
           <p className="text-muted-foreground mt-1">
-            Gestiona y analiza tus documentos con Sofía
+            Sube, organiza y elimina tus archivos.
           </p>
         </div>
-        <Button className="rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white">
-          <Upload className="w-4 h-4 mr-2" />
-          Subir documento
-        </Button>
-      </div>
 
-      {/* Sofia analysis hint */}
-      <div className="bg-gradient-to-r from-[#7C3AED]/5 via-[#3B82F6]/5 to-[#06B6D4]/5 rounded-2xl border border-[#7C3AED]/20 p-5">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center shrink-0">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-[#0F1F63]">Análisis inteligente con Sofía</h3>
-            <p className="text-sm text-muted-foreground">
-              Sube tus documentos y pregúntale a Sofía cualquier cosa sobre ellos. Puede resumir, extraer datos y responder preguntas.
-            </p>
-          </div>
-          <Button variant="outline" className="rounded-xl hidden md:flex">
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Preguntar a Sofía
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            className="rounded-xl"
+            onClick={loadDocuments}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Actualizar
           </Button>
-        </div>
-      </div>
 
-      {/* Folders */}
-      <div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-4">Carpetas</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {folders.map((folder) => (
-            <button 
-              key={folder.id}
-              className="flex items-center gap-3 p-4 rounded-xl bg-card border border-border hover:shadow-md hover:border-[#3B82F6]/30 transition-all text-left"
-            >
-              <div 
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: `${folder.color}15` }}
-              >
-                <FolderOpen className="w-5 h-5" style={{ color: folder.color }} />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">{folder.name}</p>
-                <p className="text-sm text-muted-foreground">{folder.count} archivos</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+          <Button
+            className="rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
+            onClick={handleOpenUpload}
+            disabled={uploading}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {uploading ? "Subiendo..." : "Subir documento"}
+          </Button>
 
-      {/* Search and filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar documentos..."
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]"
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileChange}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="rounded-xl">
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros
-          </Button>
-          <div className="flex items-center border border-border rounded-xl overflow-hidden">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2.5 ${viewMode === "list" ? "bg-secondary" : "hover:bg-secondary/50"}`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`p-2.5 ${viewMode === "grid" ? "bg-secondary" : "hover:bg-secondary/50"}`}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-          </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="bg-card rounded-2xl border border-border p-5">
+          <p className="text-sm text-muted-foreground mb-1">Total archivos</p>
+          <p className="text-3xl font-bold text-[#0F1F63]">
+            {documents.length}
+          </p>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-5">
+          <p className="text-sm text-muted-foreground mb-1">Tamaño total</p>
+          <p className="text-3xl font-bold text-[#0F1F63]">
+            {totalSizeMb} MB
+          </p>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border p-5">
+          <p className="text-sm text-muted-foreground mb-1">Con estado uploaded</p>
+          <p className="text-3xl font-bold text-[#0F1F63]">
+            {documents.filter((d) => d.status === "uploaded").length}
+          </p>
         </div>
       </div>
 
-      {/* Documents list */}
-      {viewMode === "list" ? (
-        <div className="bg-card rounded-2xl border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-muted-foreground border-b border-border">
-                <th className="p-4 font-medium">Nombre</th>
-                <th className="p-4 font-medium hidden md:table-cell">Cliente</th>
-                <th className="p-4 font-medium hidden lg:table-cell">Tamaño</th>
-                <th className="p-4 font-medium hidden md:table-cell">Fecha</th>
-                <th className="p-4 font-medium">Estado</th>
-                <th className="p-4 font-medium w-12"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-secondary/50 flex items-center justify-center">
-                        {getFileIcon(doc.type)}
-                      </div>
-                      <span className="font-medium text-foreground">{doc.name}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">
-                    {doc.client || "—"}
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground hidden lg:table-cell">{doc.size}</td>
-                  <td className="p-4 text-sm text-muted-foreground hidden md:table-cell">{doc.date}</td>
-                  <td className="p-4">
-                    {doc.analyzed ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] text-xs font-medium">
-                        <Sparkles className="w-3 h-3" />
-                        Analizado
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-full bg-secondary text-muted-foreground text-xs font-medium">
-                        Sin analizar
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <button className="p-2 rounded-lg hover:bg-secondary">
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+        <div className="px-6 py-5 border-b border-border">
+          <h2 className="text-lg font-semibold text-[#0F1F63]">
+            Archivos del cliente
+          </h2>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {documents.map((doc) => (
-            <div key={doc.id} className="bg-card rounded-xl border border-border p-4 hover:shadow-md hover:border-[#3B82F6]/30 transition-all">
-              <div className="aspect-square rounded-lg bg-secondary/50 flex items-center justify-center mb-4">
-                {getFileIcon(doc.type)}
+
+        {loading ? (
+          <div className="p-8 text-muted-foreground">Cargando documentos...</div>
+        ) : documents.length === 0 ? (
+          <div className="p-8 text-muted-foreground">
+            Todavía no tienes documentos cargados.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="px-6 py-5 flex items-center justify-between gap-4 hover:bg-secondary/20 transition-colors"
+              >
+                <div className="flex items-start gap-4 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-[#3B82F6]/10 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-[#3B82F6]" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="font-medium text-[#0F1F63] truncate">
+                      {doc.title || doc.file_name || "Documento"}
+                    </p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {doc.file_name || "Sin nombre"} · {doc.mime_type || "archivo"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Estado: {doc.status || "—"} · Fuente: {doc.source || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right text-sm text-muted-foreground">
+                    <p>{doc.file_size_bytes ? `${(doc.file_size_bytes / 1024).toFixed(1)} KB` : "—"}</p>
+                    <p>{doc.created_at ? new Date(doc.created_at).toLocaleString() : "—"}</p>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="rounded-xl"
+                    onClick={() => handleDelete(doc)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-              <p className="font-medium text-foreground text-sm truncate">{doc.name}</p>
-              <p className="text-xs text-muted-foreground mt-1">{doc.size} • {doc.date}</p>
-              {doc.analyzed && (
-                <span className="inline-flex items-center gap-1 mt-2 text-xs text-[#7C3AED]">
-                  <Sparkles className="w-3 h-3" />
-                  Analizado
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
