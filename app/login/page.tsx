@@ -18,7 +18,7 @@ export default function LoginPage() {
     e.preventDefault()
     // In production, this would authenticate the user
     // For demo purposes, redirect to business dashboard
-    router.push("/dashboard/business")
+    router.push("/dashboard")
   }
 
   return (
