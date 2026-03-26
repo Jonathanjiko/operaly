@@ -41,7 +41,6 @@ type SubscriptionRow = {
 
 export default function ProfessionalAnalyticsPage() {
   const [loading, setLoading] = useState(true)
-  const [clientId, setClientId] = useState("")
   const [usage, setUsage] = useState<UsageMonthlyRow | null>(null)
   const [documentsCount, setDocumentsCount] = useState(0)
   const [contactsCount, setContactsCount] = useState(0)
@@ -54,13 +53,12 @@ export default function ProfessionalAnalyticsPage() {
     setLoading(true)
 
     try {
-      const currentClientId = await getCurrentClientId()
-      setClientId(currentClientId)
+      const clientId = await getCurrentClientId()
 
       const { data: usageRows, error: usageError } = await supabase
         .from("usage_monthly")
         .select("*")
-        .eq("client_id", currentClientId)
+        .eq("client_id", clientId)
         .order("updated_at", { ascending: false })
         .limit(1)
 
@@ -81,33 +79,33 @@ export default function ProfessionalAnalyticsPage() {
         supabase
           .from("documents")
           .select("id", { count: "exact", head: true })
-          .eq("client_id", currentClientId),
+          .eq("client_id", clientId),
 
         supabase
           .from("contacts")
           .select("id", { count: "exact", head: true })
-          .eq("client_id", currentClientId),
+          .eq("client_id", clientId),
 
         supabase
           .from("cases")
           .select("id", { count: "exact", head: true })
-          .eq("client_id", currentClientId),
+          .eq("client_id", clientId),
 
         supabase
           .from("tasks")
           .select("id", { count: "exact", head: true })
-          .eq("client_id", currentClientId),
+          .eq("client_id", clientId),
 
         supabase
           .from("recurring_tasks")
           .select("id", { count: "exact", head: true })
-          .eq("client_id", currentClientId)
+          .eq("client_id", clientId)
           .eq("status", "active"),
 
         supabase
           .from("subscriptions")
           .select("id, status, created_at")
-          .eq("client_id", currentClientId)
+          .eq("client_id", clientId)
           .order("created_at", { ascending: false })
           .limit(1),
       ])
