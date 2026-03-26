@@ -1,103 +1,195 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Image from "next/image"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-export default function RegisterPage() {
+export default function RegisterClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const accountType = (searchParams.get("type") as "assistant" | "seller") || "assistant"
   const initialPlan = (searchParams.get("plan") as OperalyPlanCode | null) || "trial"
+  const [planCode] = useState<OperalyPlanCode>(initialPlan)
 
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [email, setEmail] = useState("")
-  const [phone, setPhone] = useState("")
-  const [country, setCountry] = useState("PE")
-  const [businessType, setBusinessType] = useState("")
-  const [password, setPassword] = useState("")
-  const [planCode, setPlanCode] = useState<OperalyPlanCode>(initialPlan)
+  const selectedPlan = useMemo(() => getPlanByCode(planCode), [planCode])
 
-  const plan = useMemo(() => getPlanByCode(planCode), [planCode])
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // 🔹 1. CREAR USUARIO AUTH
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-      })
-
-      if (authError) throw authError
-
-      // 🔹 2. LLAMAR RPC (TU FUNCIÓN REAL)
-      const { data, error } = await supabase.rpc("operaly_provision_signup", {
-        p_full_name: `${firstName} ${lastName}`,
-        p_whatsapp_phone: phone,
-        p_country_code: country,
-        p_profession_code: businessType,
-        p_plan_code: planCode,
-        p_activate_now: planCode === "trial",
+        options: {
+          data: {
+            account_type: "assistant",
+            selected_plan: planCode,
+          },
+        },
       })
 
       if (error) throw error
 
-      // 🔹 guardar info temporal
-      localStorage.setItem("operaly_client_id", data.client_id)
-      localStorage.setItem("operaly_account_type", accountType)
+      localStorage.setItem(
+        "operaly_register_auth",
+        JSON.stringify({
+          email,
+          planCode,
+          authUserId: data.user?.id || null,
+          method: "email",
+        })
+      )
 
-      // 🔹 3. REDIRECCIÓN
-      if (planCode === "trial") {
-        router.push("/onboarding")
-      } else {
-        router.push(`/iniciar-pago?plan=${planCode}&cid=${data.client_id}`)
-      }
+      router.push(`/register/setup?plan=${planCode}`)
     } catch (err: any) {
-      alert(err.message || "Error en registro")
+      alert(err.message || "No pudimos crear tu cuenta.")
     } finally {
       setLoading(false)
     }
   }
 
-  const isValid =
-    email &&
-    password.length >= 6 &&
-    firstName &&
-    lastName &&
-    phone &&
-    country &&
-    businessType
+  const handleOAuth = async (provider: "google" | "facebook") => {
+    try {
+      const redirectTo = `${window.location.origin}/register/setup?plan=${planCode}`
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      })
+
+      if (error) throw error
+      if (!data?.url) throw new Error("No se pudo iniciar el acceso social.")
+    } catch (err: any) {
+      alert(err.message || "No se pudo iniciar el acceso social.")
+    }
+  }
+
+  const isValid = email.trim().length > 0 && password.trim().length >= 6
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <form onSubmit={handleSubmit} className="max-w-xl w-full space-y-4">
+    <div className="min-h-screen flex bg-[#F7F9FC]">
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md">
+          <div className="mb-10">
+            <Image
+              src="/images/operaly-logo.png"
+              alt="Operaly"
+              width={56}
+              height={56}
+              className="mb-8"
+            />
 
-        <h1 className="text-2xl font-bold">
-          REGISTER NUEVO SUPABASE TEST
-        </h1>
+            <h1 className="text-4xl font-bold text-[#132B73] mb-3">
+              Crea tu cuenta
+            </h1>
 
-        <Input placeholder="Nombre" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        <Input placeholder="Apellido" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Input placeholder="Teléfono WhatsApp" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <Input placeholder="País (PE, MX...)" value={country} onChange={(e) => setCountry(e.target.value)} />
-        <Input placeholder="Profesión / rubro" value={businessType} onChange={(e) => setBusinessType(e.target.value)} />
-        <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <p className="text-[#5F6B7A] text-lg">
+              {selectedPlan?.code === "trial"
+                ? "Empieza tu prueba gratuita y configura Operaly a tu medida."
+                : `Vas a registrarte con el plan ${selectedPlan?.name}. Primero creamos tu cuenta.`}
+            </p>
+          </div>
 
-        <Button disabled={!isValid || loading} className="w-full">
-          {loading ? "Creando cuenta..." : "Crear cuenta"}
-        </Button>
-      </form>
+          <div className="space-y-4 mb-6">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-14 rounded-2xl text-base"
+              onClick={() => handleOAuth("google")}
+            >
+              Continuar con Google
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-14 rounded-2xl text-base"
+              onClick={() => handleOAuth("facebook")}
+            >
+              Continuar con Facebook
+            </Button>
+          </div>
+
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-[#D9E1EC]" />
+            </div>
+            <div className="relative flex justify-center text-sm uppercase tracking-wide">
+              <span className="bg-[#F7F9FC] px-4 text-[#7A8493]">O regístrate con email</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleEmailRegister} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[#132B73] mb-2">
+                Email
+              </label>
+              <Input
+                type="email"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-14 rounded-2xl border-[#D9E1EC] bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[#132B73] mb-2">
+                Contraseña
+              </label>
+              <Input
+                type="password"
+                placeholder="Crea una contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-14 rounded-2xl border-[#D9E1EC] bg-white"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              disabled={!isValid || loading}
+              className="w-full h-14 rounded-2xl text-base bg-gradient-to-r from-[#3B82F6] to-[#22C7E5] hover:opacity-90"
+            >
+              {loading ? "Creando cuenta..." : "Continuar"}
+            </Button>
+          </form>
+
+          <p className="text-sm text-[#7A8493] mt-6">
+            ¿Ya tienes una cuenta?{" "}
+            <Link href="/login" className="text-[#3B82F6] font-medium">
+              Iniciar sesión
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-[#132B73] via-[#173A8E] to-[#0F2259] p-10">
+        <div className="max-w-lg text-white">
+          <h2 className="text-4xl font-bold mb-4">
+            Un asistente que se adapta a tu forma de trabajar
+          </h2>
+          <p className="text-white/75 text-lg leading-8">
+            Primero creamos tu acceso. Luego te haremos unas preguntas rápidas para personalizar Operaly según tu profesión, país, idioma y número principal.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
