@@ -94,6 +94,17 @@ export default function SetupClient() {
           p_activate_now: planCode === "trial",
         }
       )
+      if (provisionError) throw provisionError
+
+      const provisionRow = Array.isArray(provisionData)
+        ? provisionData[0]
+        : provisionData
+
+      if (!provisionRow?.client_id) {
+        throw new Error("No se pudo provisionar el cliente.")
+      }
+
+      const clientId = provisionRow.client_id as string
 
       if (provisionError) throw provisionError
       if (!provisionData?.client_id) throw new Error("No se pudo provisionar el cliente.")
