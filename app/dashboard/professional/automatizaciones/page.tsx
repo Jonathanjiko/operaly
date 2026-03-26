@@ -217,18 +217,26 @@ export default function ProfessionalAutomationsPage() {
 
       <div className="grid md:grid-cols-3 gap-4">
         <div className="bg-card rounded-2xl border border-border p-5">
-          <p className="text-sm text-muted-foreground mb-1">Automatizaciones activas</p>
+          <p className="text-sm text-muted-foreground mb-1">
+            Automatizaciones activas
+          </p>
           <p className="text-3xl font-bold text-[#0F1F63]">{activeCount}</p>
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-5">
-          <p className="text-sm text-muted-foreground mb-1">Recordatorios pendientes</p>
+          <p className="text-sm text-muted-foreground mb-1">
+            Recordatorios pendientes
+          </p>
           <p className="text-3xl font-bold text-[#0F1F63]">{pendingReminders}</p>
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-5">
-          <p className="text-sm text-muted-foreground mb-1">Total automatizaciones</p>
-          <p className="text-3xl font-bold text-[#0F1F63]">{recurringTasks.length}</p>
+          <p className="text-sm text-muted-foreground mb-1">
+            Total automatizaciones
+          </p>
+          <p className="text-3xl font-bold text-[#0F1F63]">
+            {recurringTasks.length}
+          </p>
         </div>
       </div>
 
@@ -326,8 +334,10 @@ export default function ProfessionalAutomationsPage() {
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Próxima ejecución:{" "}
-                    {row.next_run ? new Date(row.next_run).toLocaleString() : "—"} · Estado:{" "}
-                    {row.status || "—"}
+                    {row.next_run
+                      ? new Date(row.next_run).toLocaleString()
+                      : "—"}{" "}
+                    · Estado: {row.status || "—"}
                   </p>
                 </div>
 
@@ -381,8 +391,11 @@ export default function ProfessionalAutomationsPage() {
                     Canal: {row.channel || "—"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Fecha: {row.remind_at ? new Date(row.remind_at).toLocaleString() : "—"} ·{" "}
-                    {row.sent ? "Enviado" : "Pendiente"}
+                    Fecha:{" "}
+                    {row.remind_at
+                      ? new Date(row.remind_at).toLocaleString()
+                      : "—"}{" "}
+                    · {row.sent ? "Enviado" : "Pendiente"}
                   </p>
                 </div>
               </div>
