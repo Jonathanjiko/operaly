@@ -1,233 +1,323 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Plus, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { 
-  Plus, Search, CheckCircle2, Circle, Clock, AlertTriangle,
-  Calendar, User, MoreHorizontal, Flag
-} from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { getCurrentClientId } from "@/lib/dashboard-client"
 
-const tasks = [
-  { 
-    id: 1, 
-    title: "Revisar contrato López vs López",
-    description: "Revisar cláusulas de custodia compartida",
-    client: "María López",
-    case: "Divorcio López",
-    priority: "high",
-    dueDate: "Hoy",
-    dueTime: "5:00 PM",
-    completed: false,
-    category: "revision"
-  },
-  { 
-    id: 2, 
-    title: "Llamar a Carlos Mendoza",
-    description: "Confirmar reunión de mañana",
-    client: "Carlos Mendoza",
-    case: "Tech Solutions",
-    priority: "medium",
-    dueDate: "Hoy",
-    dueTime: "3:00 PM",
-    completed: true,
-    category: "llamada"
-  },
-  { 
-    id: 3, 
-    title: "Preparar documentos tributarios",
-    description: "Declaración anual 2025",
-    client: "Ana García",
-    case: "Planificación Tributaria",
-    priority: "high",
-    dueDate: "Mañana",
-    dueTime: "10:00 AM",
-    completed: false,
-    category: "documentos"
-  },
-  { 
-    id: 4, 
-    title: "Enviar propuesta a nuevo cliente",
-    description: "Propuesta de servicios legales",
-    client: "Pedro Ruiz",
-    case: null,
-    priority: "low",
-    dueDate: "15 Abr",
-    dueTime: "12:00 PM",
-    completed: false,
-    category: "propuesta"
-  },
-]
-
-const priorityConfig = {
-  high: { label: "Alta", color: "#EF4444", bgColor: "bg-red-50" },
-  medium: { label: "Media", color: "#F59E0B", bgColor: "bg-amber-50" },
-  low: { label: "Baja", color: "#22C55E", bgColor: "bg-green-50" },
+type TaskRow = {
+  id: string
+  client_id: string
+  title: string | null
+  description: string | null
+  due_at: string | null
+  status: string | null
+  priority: string | null
+  category: string | null
+  created_at: string | null
 }
 
-export default function TasksPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [completedTasks, setCompletedTasks] = useState<number[]>([2])
-  const [filter, setFilter] = useState("all")
+const columns = [
+  { key: "pending", label: "Pendientes" },
+  { key: "in_progress", label: "En progreso" },
+  { key: "completed", label: "Completadas" },
+]
 
-  const toggleTask = (taskId: number) => {
-    setCompletedTasks(prev => 
-      prev.includes(taskId) 
-        ? prev.filter(id => id !== taskId)
-        : [...prev, taskId]
-    )
+export default function ProfessionalTasksPage() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [tasks, setTasks] = useState<TaskRow[]>([])
+
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [dueAt, setDueAt] = useState("")
+  const [priority, setPriority] = useState("medium")
+
+  const loadTasks = async () => {
+    setLoading(true)
+
+    try {
+      const clientId = await getCurrentClientId()
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id, client_id, title, description, due_at, status, priority, category, created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      setTasks((data || []) as TaskRow[])
+    } catch (err: any) {
+      alert(err.message || "No se pudieron cargar las tareas.")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const filteredTasks = tasks.filter(task => {
-    if (filter === "completed" && !completedTasks.includes(task.id)) return false
-    if (filter === "pending" && completedTasks.includes(task.id)) return false
-    if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    return true
-  })
+  useEffect(() => {
+    loadTasks()
+  }, [])
 
-  const pendingCount = tasks.filter(t => !completedTasks.includes(t.id)).length
-  const completedCount = completedTasks.length
-  const todayTasks = tasks.filter(t => t.dueDate === "Hoy" && !completedTasks.includes(t.id)).length
+  const grouped = useMemo(() => {
+    return {
+      pending: tasks.filter((t) => (t.status || "pending") === "pending"),
+      in_progress: tasks.filter((t) => t.status === "in_progress"),
+      completed: tasks.filter((t) => t.status === "completed"),
+    }
+  }, [tasks])
+
+  const handleCreate = async () => {
+    if (!title.trim()) {
+      alert("Ingresa un título para la tarea.")
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const clientId = await getCurrentClientId()
+
+      const { error } = await supabase.from("tasks").insert({
+        client_id: clientId,
+        title: title.trim(),
+        description: description.trim() || null,
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+        status: "pending",
+        priority,
+        category: "general",
+        source: "dashboard",
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setTitle("")
+      setDescription("")
+      setDueAt("")
+      setPriority("medium")
+      await loadTasks()
+    } catch (err: any) {
+      alert(err.message || "No se pudo crear la tarea.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const moveTask = async (id: string, nextStatus: string) => {
+    try {
+      const payload: any = {
+        status: nextStatus,
+      }
+
+      if (nextStatus === "completed") {
+        payload.completed_at = new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .update(payload)
+        .eq("id", id)
+
+      if (error) {
+        throw error
+      }
+
+      await loadTasks()
+    } catch (err: any) {
+      alert(err.message || "No se pudo actualizar la tarea.")
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const ok = window.confirm("¿Eliminar esta tarea?")
+
+    if (!ok) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", id)
+
+      if (error) {
+        throw error
+      }
+
+      await loadTasks()
+    } catch (err: any) {
+      alert(err.message || "No se pudo eliminar la tarea.")
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F1F63]">Tareas</h1>
-          <p className="text-muted-foreground">Organiza tu trabajo diario</p>
+          <h1 className="text-3xl font-bold text-[#0F1F63]">Tareas</h1>
+          <p className="text-muted-foreground mt-1">
+            Gestiona pendientes en formato tablero.
+          </p>
         </div>
-        <Button className="bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] hover:opacity-90 text-white rounded-xl">
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva tarea
+
+        <Button
+          variant="outline"
+          className="rounded-xl"
+          onClick={loadTasks}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Actualizar
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#F59E0B]/10 flex items-center justify-center">
-              <Clock className="w-6 h-6 text-[#F59E0B]" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[#0F1F63]">{pendingCount}</p>
-              <p className="text-sm text-muted-foreground">Pendientes</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#EF4444]/10 flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-[#EF4444]" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[#0F1F63]">{todayTasks}</p>
-              <p className="text-sm text-muted-foreground">Para hoy</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#34D399]/10 flex items-center justify-center">
-              <CheckCircle2 className="w-6 h-6 text-[#34D399]" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[#0F1F63]">{completedCount}</p>
-              <p className="text-sm text-muted-foreground">Completadas</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="bg-card rounded-2xl border border-border p-6">
+        <h2 className="text-lg font-semibold text-[#0F1F63] mb-5">
+          Nueva tarea
+        </h2>
 
-      {/* Search and filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <div className="grid md:grid-cols-2 gap-4">
           <Input
-            type="text"
-            placeholder="Buscar tareas..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 h-12 rounded-xl"
+            placeholder="Título"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="h-12 rounded-xl"
           />
+
+          <Input
+            type="datetime-local"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+            className="h-12 rounded-xl"
+          />
+
+          <Input
+            placeholder="Descripción"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="h-12 rounded-xl"
+          />
+
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            className="h-12 rounded-xl border border-input bg-background px-3"
+          >
+            <option value="low">Baja</option>
+            <option value="medium">Media</option>
+            <option value="high">Alta</option>
+          </select>
         </div>
-        <div className="flex gap-2">
-          {[
-            { id: "all", label: "Todas" },
-            { id: "pending", label: "Pendientes" },
-            { id: "completed", label: "Completadas" },
-          ].map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                filter === f.id 
-                  ? "bg-[#3B82F6] text-white" 
-                  : "bg-secondary text-foreground hover:bg-secondary/80"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+
+        <Button
+          className="mt-5 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
+          onClick={handleCreate}
+          disabled={saving}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          {saving ? "Guardando..." : "Crear tarea"}
+        </Button>
       </div>
 
-      {/* Tasks list */}
-      <div className="space-y-3">
-        {filteredTasks.map((task) => {
-          const isCompleted = completedTasks.includes(task.id)
-          const priority = priorityConfig[task.priority as keyof typeof priorityConfig]
-          
-          return (
-            <div 
-              key={task.id}
-              className={`bg-card rounded-2xl border border-border p-5 hover:shadow-md transition-all ${
-                isCompleted ? "opacity-60" : ""
-              }`}
+      {loading ? (
+        <div className="text-muted-foreground">Cargando tareas...</div>
+      ) : (
+        <div className="grid lg:grid-cols-3 gap-5">
+          {columns.map((column) => (
+            <div
+              key={column.key}
+              className="bg-card rounded-2xl border border-border p-4"
             >
-              <div className="flex items-start gap-4">
-                <button
-                  onClick={() => toggleTask(task.id)}
-                  className="mt-1 flex-shrink-0"
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-6 h-6 text-[#34D399]" />
-                  ) : (
-                    <Circle className="w-6 h-6 text-muted-foreground hover:text-[#3B82F6] transition-colors" />
-                  )}
-                </button>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-[#0F1F63]">
+                  {column.label}
+                </h2>
+                <span className="text-sm text-muted-foreground">
+                  {grouped[column.key as keyof typeof grouped].length}
+                </span>
+              </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className={`font-semibold text-[#0F1F63] ${isCompleted ? "line-through" : ""}`}>
-                      {task.title}
-                    </h3>
-                    <Flag className="w-4 h-4" style={{ color: priority.color }} />
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                    {task.client && (
-                      <span className="flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5" />
-                        {task.client}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {task.dueDate}, {task.dueTime}
-                    </span>
-                  </div>
-                </div>
+              <div className="space-y-3">
+                {grouped[column.key as keyof typeof grouped].map((task) => (
+                  <div
+                    key={task.id}
+                    className="rounded-xl border border-border p-4 bg-secondary/20"
+                  >
+                    <p className="font-medium text-[#0F1F63]">
+                      {task.title || "Tarea"}
+                    </p>
 
-                <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
-                  <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-                </button>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {task.description || "Sin descripción"}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Prioridad: {task.priority || "—"} ·{" "}
+                      {task.due_at ? new Date(task.due_at).toLocaleString() : "Sin fecha"}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {column.key !== "pending" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => moveTask(task.id, "pending")}
+                        >
+                          Pendiente
+                        </Button>
+                      )}
+
+                      {column.key !== "in_progress" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => moveTask(task.id, "in_progress")}
+                        >
+                          En progreso
+                        </Button>
+                      )}
+
+                      {column.key !== "completed" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => moveTask(task.id, "completed")}
+                        >
+                          Completar
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="rounded-lg"
+                        onClick={() => handleDelete(task.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {grouped[column.key as keyof typeof grouped].length === 0 && (
+                  <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No hay tareas en esta columna.
+                  </div>
+                )}
               </div>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
