@@ -83,7 +83,7 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="max-w-xl w-full space-y-4">
 
         <h1 className="text-2xl font-bold">
-          Registro Operaly ({accountType})
+          REGISTER NUEVO SUPABASE TEST
         </h1>
 
         <Input placeholder="Nombre" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
