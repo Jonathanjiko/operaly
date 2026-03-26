@@ -94,6 +94,7 @@ export default function SetupClient() {
           p_activate_now: planCode === "trial",
         }
       )
+
       if (provisionError) throw provisionError
 
       const provisionRow = Array.isArray(provisionData)
@@ -103,14 +104,7 @@ export default function SetupClient() {
       if (!provisionRow?.client_id) {
         throw new Error("No se pudo provisionar el cliente.")
       }
-
       const clientId = provisionRow.client_id as string
-
-      if (provisionError) throw provisionError
-      if (!provisionData?.client_id) throw new Error("No se pudo provisionar el cliente.")
-
-      const clientId = provisionData.client_id as string
-
       const { error: completeError } = await supabase.rpc(
         "operaly_complete_assistant_profile",
         {
