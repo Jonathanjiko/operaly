@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import CalendarView from "@/components/CalendarView"
 
 type EventItem = {
   id: string
@@ -59,6 +60,12 @@ export default function AgendaPage() {
 
   const filtered = events.filter((e) => e.date === selectedDate)
 
+  const calendarEvents = items.map((item) => ({
+    title: item.title,
+    start: new Date(item.when),
+    end: new Date(item.when),
+  }))
+  
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Agenda</h1>
