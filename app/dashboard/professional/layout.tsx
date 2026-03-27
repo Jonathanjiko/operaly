@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   FileText,
@@ -49,8 +49,10 @@ export default function ProfessionalDashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [checkingAccess, setCheckingAccess] = useState(true)
   const [profile, setProfile] = useState<SidebarProfile>({
     fullName: "Tu cuenta",
     initials: "OP",
@@ -60,15 +62,30 @@ export default function ProfessionalDashboardLayout({
     const loadProfile = async () => {
       try {
         const { data, error } = await supabase.auth.getUser()
-        if (error) throw error
+
+        if (error) {
+          throw error
+        }
 
         const user = data.user
-        if (!user) return
+
+        if (!user) {
+          router.replace("/login")
+          return
+        }
 
         const meta = user.user_metadata || {}
-        const fullName =
-          meta.full_name ||
-          "Tu cuenta"
+        const clientId =
+          meta.client_id ||
+          localStorage.getItem("operaly_client_id")
+
+        if (!clientId) {
+          const selectedPlan = meta.selected_plan || "trial"
+          router.replace(`/register/setup?plan=${selectedPlan}`)
+          return
+        }
+
+        const fullName = meta.full_name || "Tu cuenta"
 
         const parts = String(fullName).trim().split(/\s+/)
         const initials = parts
@@ -82,12 +99,23 @@ export default function ProfessionalDashboardLayout({
         })
       } catch (err) {
         console.error(err)
+        router.replace("/login")
+      } finally {
+        setCheckingAccess(false)
       }
     }
 
     loadProfile()
-  }, [])
+  }, [router])
 
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
+        <p className="text-[#5F6B7A]">Validando tu acceso...</p>
+      </div>
+    )
+  }  
+  
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 flex items-center justify-between px-4">
