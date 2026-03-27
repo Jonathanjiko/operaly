@@ -437,7 +437,7 @@ export default function ProfessionalTasksPage() {
 
     const currentTask = tasks.find((task) => task.id === taskId)
 
-    if (!currentTask || currentTask.status === newStatus) {
+    if (!currentTask || normalizeStatus(currentTask.status) === newStatus) {
       return
     }
 
