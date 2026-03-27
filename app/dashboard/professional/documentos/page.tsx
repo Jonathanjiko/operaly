@@ -75,41 +75,36 @@ export default function ProfessionalDocumentsPage() {
 
     try {
       const clientId = await getCurrentClientId()
-      
       const path = `${clientId}/${Date.now()}-${file.name}`
-      
+
       const { error: uploadError } = await supabase.storage
         .from("client-docs")
-        .upload(path, file)
-      
-      if (uploadError) throw uploadError
-      
-      await supabase.from("documents").insert({
-        client_id: clientId,
-        file_name: file.name,
-        file_path: path,
-        status: "uploaded",
-      })
+        .upload(path, file, {
+          upsert: false,
+        })
 
       if (uploadError) {
         throw uploadError
       }
 
-      const { error: insertError } = await supabase.from("documents").insert({
-        client_id: clientId,
-        title: file.name,
-        file_name: file.name,
-        mime_type: file.type || "application/octet-stream",
-        file_size_bytes: file.size,
-        page_count: null,
-        chunk_count: null,
-        status: "uploaded",
-        source: "dashboard_upload",
-        channel: "web",
-        storage_path: path,
-      })
+      const { error: insertError } = await supabase
+        .from("documents")
+        .insert({
+          client_id: clientId,
+          title: file.name,
+          file_name: file.name,
+          mime_type: file.type || "application/octet-stream",
+          file_size_bytes: file.size,
+          page_count: null,
+          chunk_count: null,
+          status: "uploaded",
+          source: "dashboard_upload",
+          channel: "web",
+          storage_path: path,
+        })
 
       if (insertError) {
+        await supabase.storage.from("client-docs").remove([path])
         throw insertError
       }
 
@@ -118,6 +113,7 @@ export default function ProfessionalDocumentsPage() {
       alert(err.message || "No se pudo subir el documento.")
     } finally {
       setUploading(false)
+
       if (inputRef.current) {
         inputRef.current.value = ""
       }
@@ -133,7 +129,13 @@ export default function ProfessionalDocumentsPage() {
 
     try {
       if (row.storage_path) {
-        await supabase.storage.from("client-docs").remove([row.storage_path])
+        const { error: storageError } = await supabase.storage
+          .from("client-docs")
+          .remove([row.storage_path])
+
+        if (storageError) {
+          throw storageError
+        }
       }
 
       const { error } = await supabase
@@ -213,7 +215,9 @@ export default function ProfessionalDocumentsPage() {
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-5">
-          <p className="text-sm text-muted-foreground mb-1">Con estado uploaded</p>
+          <p className="text-sm text-muted-foreground mb-1">
+            Con estado uploaded
+          </p>
           <p className="text-3xl font-bold text-[#0F1F63]">
             {documents.filter((d) => d.status === "uploaded").length}
           </p>
@@ -228,7 +232,9 @@ export default function ProfessionalDocumentsPage() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-muted-foreground">Cargando documentos...</div>
+          <div className="p-8 text-muted-foreground">
+            Cargando documentos...
+          </div>
         ) : documents.length === 0 ? (
           <div className="p-8 text-muted-foreground">
             Todavía no tienes documentos cargados.
@@ -249,30 +255,26 @@ export default function ProfessionalDocumentsPage() {
                     <p className="font-medium text-[#0F1F63] truncate">
                       {doc.title || doc.file_name || "Documento"}
                     </p>
+
                     <p className="text-sm text-muted-foreground truncate">
-                      {doc.file_name || "Sin nombre"} · {doc.mime_type || "archivo"}
+                      {doc.file_name || "Sin nombre"} ·{" "}
+                      {doc.mime_type || "archivo"}
                     </p>
+
                     <p className="text-xs text-muted-foreground mt-1">
                       Estado: {doc.status || "—"} · Fuente: {doc.source || "—"}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right text-sm text-muted-foreground">
-                    <p>{doc.file_size_bytes ? `${(doc.file_size_bytes / 1024).toFixed(1)} KB` : "—"}</p>
-                    <p>{doc.created_at ? new Date(doc.created_at).toLocaleString() : "—"}</p>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="rounded-xl"
-                    onClick={() => handleDelete(doc)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="rounded-xl"
+                  onClick={() => handleDelete(doc)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
             ))}
           </div>
