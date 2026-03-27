@@ -1,213 +1,106 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { CalendarDays, RefreshCw, Clock3, Repeat } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import { AppToast } from "@/components/ui/app-toast"
 
-type AgendaItem = {
+type EventItem = {
   id: string
   title: string
-  when: string
-  source: "task" | "recurring"
-  status: string | null
+  date: string
+  type: "task" | "automation"
 }
 
-export default function ProfessionalAgendaPage() {
-  const [loading, setLoading] = useState(true)
-  const [items, setItems] = useState<AgendaItem[]>([])
+export default function AgendaPage() {
+  const [clientId, setClientId] = useState("")
+  const [selectedDate, setSelectedDate] = useState<string>("")
+  const [events, setEvents] = useState<EventItem[]>([])
 
-  const [toastOpen, setToastOpen] = useState(false)
-  const [toastType, setToastType] = useState<"success" | "error" | "info">("info")
-  const [toastMessage, setToastMessage] = useState("")
-
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "info" = "info"
-  ) => {
-    setToastMessage(message)
-    setToastType(type)
-    setToastOpen(true)
-  }
-
-  const closeToast = () => {
-    setToastOpen(false)
-    setToastMessage("")
-  }
-
-  const loadAgenda = async () => {
-    setLoading(true)
-
-    try {
-      const clientId = await getCurrentClientId()
-
-      const { data: tasks, error: tasksError } = await supabase
-        .from("tasks")
-        .select("id, title, due_at, status")
-        .eq("client_id", clientId)
-        .not("due_at", "is", null)
-
-      if (tasksError) {
-        throw tasksError
-      }
-
-      const { data: recurring, error: recurringError } = await supabase
-        .from("recurring_tasks")
-        .select("id, title, next_run, status")
-        .eq("client_id", clientId)
-        .not("next_run", "is", null)
-
-      if (recurringError) {
-        throw recurringError
-      }
-
-      const merged: AgendaItem[] = [
-        ...(tasks || []).map((t: any) => ({
-          id: t.id,
-          title: t.title || "Tarea",
-          when: t.due_at,
-          source: "task" as const,
-          status: t.status || null,
-        })),
-        ...(recurring || []).map((r: any) => ({
-          id: r.id,
-          title: r.title || "Recurrente",
-          when: r.next_run,
-          source: "recurring" as const,
-          status: r.status || null,
-        })),
-      ].sort((a, b) => new Date(a.when).getTime() - new Date(b.when).getTime())
-
-      setItems(merged)
-    } catch (err: any) {
-      showToast(err.message || "No se pudo cargar la agenda.", "error")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const today = new Date().toISOString().slice(0, 10)
 
   useEffect(() => {
-    loadAgenda()
+    const init = async () => {
+      const id = await getCurrentClientId()
+      setClientId(id)
+      setSelectedDate(today)
+      loadEvents(id)
+    }
+    init()
   }, [])
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, AgendaItem[]>()
+  const loadEvents = async (clientId: string) => {
+    const { data: tasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("client_id", clientId)
 
-    for (const item of items) {
-      const key = new Date(item.when).toLocaleDateString()
+    const { data: automations } = await supabase
+      .from("recurring_tasks")
+      .select("*")
+      .eq("client_id", clientId)
 
-      if (!map.has(key)) {
-        map.set(key, [])
-      }
+    const mapped: EventItem[] = [
+      ...(tasks || []).map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        date: t.due_date?.slice(0, 10),
+        type: "task",
+      })),
+      ...(automations || []).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        date: a.next_run?.slice(0, 10),
+        type: "automation",
+      })),
+    ]
 
-      map.get(key)!.push(item)
-    }
+    setEvents(mapped)
+  }
 
-    return Array.from(map.entries())
-  }, [items])
+  const filtered = events.filter((e) => e.date === selectedDate)
 
   return (
-    <>
-      <AppToast
-        open={toastOpen}
-        type={toastType}
-        message={toastMessage}
-        onClose={closeToast}
-      />
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Agenda</h1>
 
-      <div className="space-y-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-[#0F1F63]">Agenda</h1>
-            <p className="text-muted-foreground mt-1">
-              Vista temporal de tareas y automatizaciones.
-            </p>
-          </div>
-
-          <Button
-            variant="outline"
-            className="rounded-xl"
-            onClick={loadAgenda}
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Actualizar
-          </Button>
+      <div className="flex gap-6">
+        {/* CALENDARIO SIMPLE */}
+        <div className="bg-white p-4 rounded-xl shadow w-64">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-full border rounded-lg p-2"
+          />
         </div>
 
-        <div className="bg-card rounded-2xl border border-border p-6">
-          {loading ? (
-            <p className="text-muted-foreground">Cargando agenda...</p>
-          ) : grouped.length === 0 ? (
-            <p className="text-muted-foreground">
-              No tienes eventos agendados todavía.
-            </p>
-          ) : (
-            <div className="space-y-8">
-              {grouped.map(([date, dayItems]) => (
-                <div key={date}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <CalendarDays className="w-5 h-5 text-[#3B82F6]" />
-                    <h2 className="font-semibold text-[#0F1F63]">{date}</h2>
-                  </div>
+        {/* EVENTOS */}
+        <div className="flex-1 bg-white p-4 rounded-xl shadow">
+          <h2 className="font-semibold mb-4">
+            Eventos del {selectedDate}
+          </h2>
 
-                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {dayItems.map((item) => (
-                      <div
-                        key={item.source + item.id}
-                        className="rounded-2xl border border-border bg-secondary/20 p-5 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-[#0F1F63]">
-                              {item.title}
-                            </p>
-
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Estado: {item.status || "—"}
-                            </p>
-                          </div>
-
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              item.source === "task"
-                                ? "bg-[#3B82F6]/10 text-[#3B82F6]"
-                                : "bg-[#8B5CF6]/10 text-[#8B5CF6]"
-                            }`}
-                          >
-                            {item.source === "task" ? (
-                              <Clock3 className="w-5 h-5" />
-                            ) : (
-                              <Repeat className="w-5 h-5" />
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-5 text-sm text-muted-foreground">
-                          {new Date(item.when).toLocaleString()}
-                        </div>
-
-                        <div className="mt-3">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                              item.source === "task"
-                                ? "bg-[#3B82F6]/10 text-[#3B82F6]"
-                                : "bg-[#8B5CF6]/10 text-[#8B5CF6]"
-                            }`}
-                          >
-                            {item.source === "task" ? "Tarea" : "Automatización"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          {filtered.length === 0 && (
+            <p className="text-gray-400">No hay eventos</p>
           )}
+
+          {filtered.map((e) => (
+            <div
+              key={e.id}
+              className={`p-3 rounded-lg mb-2 ${
+                e.type === "task"
+                  ? "bg-blue-50"
+                  : "bg-purple-50"
+              }`}
+            >
+              <p className="font-medium">{e.title}</p>
+              <span className="text-xs text-gray-500">
+                {e.type === "task" ? "Tarea" : "Automatización"}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
-    </>
+    </div>
   )
 }
