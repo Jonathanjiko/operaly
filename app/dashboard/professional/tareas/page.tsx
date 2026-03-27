@@ -10,6 +10,17 @@ import {
   X,
   CalendarDays,
 } from "lucide-react"
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  DragEndEvent,
+} from "@dnd-kit/core"
+import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
@@ -34,7 +45,146 @@ const columns = [
   { key: "completed", label: "Completadas" },
 ]
 
+type ToastType = "success" | "error" | "info"
+
+function DroppableColumn({
+  id,
+  label,
+  count,
+  children,
+}: {
+  id: string
+  label: string
+  count: number
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`bg-card rounded-2xl border border-border p-4 transition-colors ${
+        isOver ? "ring-2 ring-[#3B82F6]/30 bg-[#3B82F6]/5" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-[#0F1F63]">{label}</h2>
+        <span className="text-sm text-muted-foreground">{count}</span>
+      </div>
+
+      <div className="space-y-3">{children}</div>
+    </div>
+  )
+}
+
+function DraggableTaskCard({
+  task,
+  onEdit,
+  onDelete,
+  onMove,
+}: {
+  task: TaskRow
+  onEdit: (task: TaskRow) => void
+  onDelete: (id: string) => void
+  onMove: (id: string, nextStatus: string) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: task.id,
+    })
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-xl border border-border p-4 bg-secondary/20 ${
+        isDragging ? "opacity-70 shadow-xl" : ""
+      }`}
+    >
+      <div
+        {...listeners}
+        {...attributes}
+        className="cursor-grab active:cursor-grabbing"
+      >
+        <p className="font-medium text-[#0F1F63]">{task.title || "Tarea"}</p>
+
+        <p className="text-sm text-muted-foreground mt-1">
+          {task.description || "Sin descripción"}
+        </p>
+
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+          <CalendarDays className="w-4 h-4" />
+          <span>
+            {task.due_at
+              ? new Date(task.due_at).toLocaleString()
+              : "Sin fecha"}
+          </span>
+        </div>
+
+        <p className="text-xs text-muted-foreground mt-2">
+          Prioridad: {task.priority || "—"}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mt-4">
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-lg"
+          onClick={() => onMove(task.id, "pending")}
+        >
+          Pendiente
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-lg"
+          onClick={() => onMove(task.id, "in_progress")}
+        >
+          En progreso
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-lg"
+          onClick={() => onMove(task.id, "completed")}
+        >
+          Completar
+        </Button>
+
+        <Button
+          variant="outline"
+          size="icon"
+          className="rounded-lg"
+          onClick={() => onEdit(task)}
+        >
+          <Pencil className="w-4 h-4" />
+        </Button>
+
+        <Button
+          variant="outline"
+          size="icon"
+          className="rounded-lg"
+          onClick={() => onDelete(task.id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function ProfessionalTasksPage() {
+  const sensors = useSensors(useSensor(PointerSensor))
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -52,13 +202,10 @@ export default function ProfessionalTasksPage() {
   const [editStatus, setEditStatus] = useState("pending")
 
   const [toastOpen, setToastOpen] = useState(false)
-  const [toastType, setToastType] = useState<"success" | "error" | "info">("info")
+  const [toastType, setToastType] = useState<ToastType>("info")
   const [toastMessage, setToastMessage] = useState("")
 
-  const showToast = (
-    message: string,
-    type: "success" | "error" | "info" = "info"
-  ) => {
+  const showToast = (message: string, type: ToastType = "info") => {
     setToastMessage(message)
     setToastType(type)
     setToastOpen(true)
@@ -118,11 +265,7 @@ export default function ProfessionalTasksPage() {
     setEditingId(task.id)
     setEditTitle(task.title || "")
     setEditDescription(task.description || "")
-    setEditDueAt(
-      task.due_at
-        ? new Date(task.due_at).toISOString().slice(0, 16)
-        : ""
-    )
+    setEditDueAt(task.due_at ? new Date(task.due_at).toISOString().slice(0, 16) : "")
     setEditPriority(task.priority || "medium")
     setEditStatus(task.status || "pending")
   }
@@ -258,6 +401,29 @@ export default function ProfessionalTasksPage() {
     }
   }
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over) {
+      return
+    }
+
+    const taskId = String(active.id)
+    const newStatus = String(over.id)
+
+    if (!["pending", "in_progress", "completed"].includes(newStatus)) {
+      return
+    }
+
+    const currentTask = tasks.find((task) => task.id === taskId)
+
+    if (!currentTask || currentTask.status === newStatus) {
+      return
+    }
+
+    await moveTask(taskId, newStatus)
+  }
+
   return (
     <>
       <AppToast
@@ -334,179 +500,113 @@ export default function ProfessionalTasksPage() {
           </Button>
         </div>
 
+        {editingId && (
+          <div className="bg-card rounded-2xl border border-border p-6">
+            <h2 className="text-lg font-semibold text-[#0F1F63] mb-5">
+              Editar tarea
+            </h2>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+
+              <Input
+                type="datetime-local"
+                value={editDueAt}
+                onChange={(e) => setEditDueAt(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+
+              <Input
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="h-12 rounded-xl"
+              />
+
+              <select
+                value={editPriority}
+                onChange={(e) => setEditPriority(e.target.value)}
+                className="h-12 rounded-xl border border-input bg-background px-3"
+              >
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+              </select>
+
+              <select
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+                className="h-12 rounded-xl border border-input bg-background px-3"
+              >
+                <option value="pending">Pendiente</option>
+                <option value="in_progress">En progreso</option>
+                <option value="completed">Completada</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <Button
+                className="rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
+                onClick={() => handleSaveEdit(editingId)}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Guardar
+              </Button>
+
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={cancelEditing}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="text-muted-foreground">Cargando tareas...</div>
         ) : (
-          <div className="grid lg:grid-cols-3 gap-5">
-            {columns.map((column) => (
-              <div
-                key={column.key}
-                className="bg-card rounded-2xl border border-border p-4"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-[#0F1F63]">
-                    {column.label}
-                  </h2>
-                  <span className="text-sm text-muted-foreground">
-                    {grouped[column.key as keyof typeof grouped].length}
-                  </span>
-                </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="grid lg:grid-cols-3 gap-5">
+              {columns.map((column) => {
+                const columnTasks = grouped[column.key as keyof typeof grouped]
 
-                <div className="space-y-3">
-                  {grouped[column.key as keyof typeof grouped].map((task) => (
-                    <div
-                      key={task.id}
-                      className="rounded-xl border border-border p-4 bg-secondary/20"
-                    >
-                      {editingId === task.id ? (
-                        <div className="space-y-3">
-                          <Input
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            className="h-11 rounded-xl"
-                          />
-
-                          <Input
-                            value={editDescription}
-                            onChange={(e) => setEditDescription(e.target.value)}
-                            className="h-11 rounded-xl"
-                          />
-
-                          <Input
-                            type="datetime-local"
-                            value={editDueAt}
-                            onChange={(e) => setEditDueAt(e.target.value)}
-                            className="h-11 rounded-xl"
-                          />
-
-                          <select
-                            value={editPriority}
-                            onChange={(e) => setEditPriority(e.target.value)}
-                            className="h-11 rounded-xl border border-input bg-background px-3 w-full"
-                          >
-                            <option value="low">Baja</option>
-                            <option value="medium">Media</option>
-                            <option value="high">Alta</option>
-                          </select>
-
-                          <select
-                            value={editStatus}
-                            onChange={(e) => setEditStatus(e.target.value)}
-                            className="h-11 rounded-xl border border-input bg-background px-3 w-full"
-                          >
-                            <option value="pending">Pendiente</option>
-                            <option value="in_progress">En progreso</option>
-                            <option value="completed">Completada</option>
-                          </select>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              className="rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
-                              onClick={() => handleSaveEdit(task.id)}
-                            >
-                              <Save className="w-4 h-4 mr-2" />
-                              Guardar
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              className="rounded-xl"
-                              onClick={cancelEditing}
-                            >
-                              <X className="w-4 h-4 mr-2" />
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="font-medium text-[#0F1F63]">
-                            {task.title || "Tarea"}
-                          </p>
-
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {task.description || "Sin descripción"}
-                          </p>
-
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-                            <CalendarDays className="w-4 h-4" />
-                            <span>
-                              {task.due_at
-                                ? new Date(task.due_at).toLocaleString()
-                                : "Sin fecha"}
-                            </span>
-                          </div>
-
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Prioridad: {task.priority || "—"}
-                          </p>
-
-                          <div className="flex flex-wrap gap-2 mt-4">
-                            {column.key !== "pending" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-lg"
-                                onClick={() => moveTask(task.id, "pending")}
-                              >
-                                Pendiente
-                              </Button>
-                            )}
-
-                            {column.key !== "in_progress" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-lg"
-                                onClick={() => moveTask(task.id, "in_progress")}
-                              >
-                                En progreso
-                              </Button>
-                            )}
-
-                            {column.key !== "completed" && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-lg"
-                                onClick={() => moveTask(task.id, "completed")}
-                              >
-                                Completar
-                              </Button>
-                            )}
-
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="rounded-lg"
-                              onClick={() => startEditing(task)}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="rounded-lg"
-                              onClick={() => handleDelete(task.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-
-                  {grouped[column.key as keyof typeof grouped].length === 0 && (
-                    <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No hay tareas en esta columna.
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                return (
+                  <DroppableColumn
+                    key={column.key}
+                    id={column.key}
+                    label={column.label}
+                    count={columnTasks.length}
+                  >
+                    {columnTasks.length > 0 ? (
+                      columnTasks.map((task) => (
+                        <DraggableTaskCard
+                          key={task.id}
+                          task={task}
+                          onEdit={startEditing}
+                          onDelete={handleDelete}
+                          onMove={moveTask}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                        No hay tareas en esta columna.
+                      </div>
+                    )}
+                  </DroppableColumn>
+                )
+              })}
+            </div>
+          </DndContext>
         )}
       </div>
     </>
