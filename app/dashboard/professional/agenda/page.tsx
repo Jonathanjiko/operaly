@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import CalendarView from "@/components/CalendarView"
@@ -13,7 +13,7 @@ type EventItem = {
 }
 
 export default function AgendaPage() {
-  const [clientId, setClientId] = useState("")
+  const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [events, setEvents] = useState<EventItem[]>([])
 
@@ -21,53 +21,72 @@ export default function AgendaPage() {
 
   useEffect(() => {
     const init = async () => {
-      const id = await getCurrentClientId()
-      setClientId(id)
       setSelectedDate(today)
-      loadEvents(id)
+
+      try {
+        const clientId = await getCurrentClientId()
+        await loadEvents(clientId)
+      } finally {
+        setLoading(false)
+      }
     }
+
     init()
   }, [])
 
   const loadEvents = async (clientId: string) => {
-    const { data: tasks } = await supabase
+    const { data: tasks, error: tasksError } = await supabase
       .from("tasks")
-      .select("*")
+      .select("id, title, due_at")
       .eq("client_id", clientId)
 
-    const { data: automations } = await supabase
+    if (tasksError) {
+      throw tasksError
+    }
+
+    const { data: automations, error: automationsError } = await supabase
       .from("recurring_tasks")
-      .select("*")
+      .select("id, title, next_run")
       .eq("client_id", clientId)
+
+    if (automationsError) {
+      throw automationsError
+    }
 
     const mapped: EventItem[] = [
-      ...(tasks || []).map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        date: t.due_date?.slice(0, 10),
-        type: "task",
-      })),
-      ...(automations || []).map((a: any) => ({
-        id: a.id,
-        title: a.title,
-        date: a.next_run?.slice(0, 10),
-        type: "automation",
-      })),
+      ...(tasks || [])
+        .filter((t: any) => t.due_at)
+        .map((t: any) => ({
+          id: t.id,
+          title: t.title || "Tarea",
+          date: t.due_at.slice(0, 10),
+          type: "task" as const,
+        })),
+      ...(automations || [])
+        .filter((a: any) => a.next_run)
+        .map((a: any) => ({
+          id: a.id,
+          title: a.title || "Automatización",
+          date: a.next_run.slice(0, 10),
+          type: "automation" as const,
+        })),
     ]
 
     setEvents(mapped)
   }
 
-  const filtered = events.filter((e) => e.date === selectedDate)
+  const filteredEvents = useMemo(() => {
+    return events.filter((event) => event.date === selectedDate)
+  }, [events, selectedDate])
 
-  const calendarEvents = items
-    .filter((item) => item.when)
-    .map((item) => ({
-      title: item.title,
-      start: new Date(item.when),
-      end: new Date(item.when),
+  const calendarEvents = useMemo(() => {
+    return events.map((event) => ({
+      title: event.title,
+      start: new Date(event.date),
+      end: new Date(event.date),
     }))
-  
+  }, [events])
+
   return (
     <div className="space-y-6">
       <div>
@@ -84,5 +103,44 @@ export default function AgendaPage() {
           <CalendarView events={calendarEvents} />
         )}
       </div>
+
+      <div className="bg-card rounded-2xl border border-border p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-[#0F1F63]">
+            Eventos del día
+          </h2>
+
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="border rounded-lg px-3 py-2"
+          />
+        </div>
+
+        {filteredEvents.length === 0 ? (
+          <p className="text-muted-foreground">
+            No hay eventos para la fecha seleccionada.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {filteredEvents.map((event) => (
+              <div
+                key={event.id}
+                className="rounded-xl border border-border p-4"
+              >
+                <p className="font-medium text-[#0F1F63]">{event.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  Tipo: {event.type === "task" ? "Tarea" : "Automatización"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Fecha: {event.date}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
+}
