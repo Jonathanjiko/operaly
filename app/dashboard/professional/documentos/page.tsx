@@ -128,23 +128,35 @@ export default function ProfessionalDocumentsPage() {
     }
 
     try {
-      if (row.storage_path) {
-        const { error: storageError } = await supabase.storage
-          .from("client-docs")
-          .remove([row.storage_path])
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-        if (storageError) {
-          throw storageError
-        }
+      if (sessionError) {
+        throw sessionError
       }
 
-      const { error } = await supabase
-        .from("documents")
-        .delete()
-        .eq("id", row.id)
+      if (!session?.access_token) {
+        throw new Error("No hay sesión activa.")
+      }
 
-      if (error) {
-        throw error
+      const response = await fetch(`/api/documents/${row.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(
+          payload?.detail ||
+            payload?.error ||
+            payload?.message ||
+            "No se pudo eliminar el documento."
+        )
       }
 
       await loadDocuments()
