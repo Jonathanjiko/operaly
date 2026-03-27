@@ -60,22 +60,29 @@ export default function AgendaPage() {
 
   const filtered = events.filter((e) => e.date === selectedDate)
 
-  const calendarEvents = items.map((item) => ({
-    title: item.title,
-    start: new Date(item.when),
-    end: new Date(item.when),
-  }))
+  const calendarEvents = items
+    .filter((item) => item.when)
+    .map((item) => ({
+      title: item.title,
+      start: new Date(item.when),
+      end: new Date(item.when),
+    }))
   
   return (
-  <div className="space-y-6">
-    <h1 className="text-2xl font-bold">Agenda</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-[#0F1F63]">Agenda</h1>
+        <p className="text-muted-foreground mt-1">
+          Visualiza tareas y automatizaciones en calendario.
+        </p>
+      </div>
 
-    <div className="bg-white rounded-2xl p-4 shadow">
-      {loading ? (
-        <p className="text-gray-400">Cargando agenda...</p>
-      ) : (
-        <CalendarView events={calendarEvents} />
-      )}
+      <div className="bg-card rounded-2xl border border-border p-6">
+        {loading ? (
+          <p className="text-muted-foreground">Cargando agenda...</p>
+        ) : (
+          <CalendarView events={calendarEvents} />
+        )}
+      </div>
     </div>
-  </div>
-)
+  )
