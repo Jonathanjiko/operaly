@@ -47,6 +47,26 @@ const columns = [
 
 type ToastType = "success" | "error" | "info"
 
+const normalizeStatus = (status: string | null) => {
+  if (!status) return "pending"
+
+  const value = status.toLowerCase()
+
+  if (["pending", "todo", "open", "new"].includes(value)) {
+    return "pending"
+  }
+
+  if (["in_progress", "in-progress", "doing", "progress"].includes(value)) {
+    return "in_progress"
+  }
+
+  if (["completed", "done", "closed", "finished"].includes(value)) {
+    return "completed"
+  }
+
+  return "pending"
+}
+
 function DroppableColumn({
   id,
   label,
@@ -248,9 +268,9 @@ export default function ProfessionalTasksPage() {
 
   const grouped = useMemo(() => {
     return {
-      pending: tasks.filter((t) => (t.status || "pending") === "pending"),
-      in_progress: tasks.filter((t) => t.status === "in_progress"),
-      completed: tasks.filter((t) => t.status === "completed"),
+      pending: tasks.filter((t) => normalizeStatus(t.status) === "pending"),
+      in_progress: tasks.filter((t) => normalizeStatus(t.status) === "in_progress"),
+      completed: tasks.filter((t) => normalizeStatus(t.status) === "completed"),
     }
   }, [tasks])
 
