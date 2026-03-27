@@ -30,6 +30,10 @@ export async function GET() {
       channel: "whatsapp",
     })
 
+    if (task.channel === "whatsapp") {
+      console.log("Enviar WhatsApp aquí")
+    }
+    
     // Calcular siguiente ejecución
     const nextRun = calculateNextRun(task)
 
