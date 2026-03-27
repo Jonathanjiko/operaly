@@ -75,14 +75,21 @@ export default function ProfessionalDocumentsPage() {
 
     try {
       const clientId = await getCurrentClientId()
-      const ext = file.name.split(".").pop() || "bin"
-      const path = `dashboard/${clientId}/${Date.now()}-${file.name.replace(/\s+/g, "-")}`
-
+      
+      const path = `${clientId}/${Date.now()}-${file.name}`
+      
       const { error: uploadError } = await supabase.storage
         .from("client-docs")
-        .upload(path, file, {
-          upsert: false,
-        })
+        .upload(path, file)
+      
+      if (uploadError) throw uploadError
+      
+      await supabase.from("documents").insert({
+        client_id: clientId,
+        file_name: file.name,
+        file_path: path,
+        status: "uploaded",
+      })
 
       if (uploadError) {
         throw uploadError
