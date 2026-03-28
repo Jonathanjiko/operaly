@@ -8,24 +8,22 @@ import CalendarView from "@/components/CalendarView"
 type EventItem = {
   id: string
   title: string
-  date: string
+  dateKey: string
   type: "task" | "automation"
-  source_at: string
+  sourceAt: string
 }
 
-function parseLocalDate(value: string | null | undefined): Date | null {
+type ClientPrefs = {
+  timezone: string
+  locale: string
+}
+
+function safeDate(value: string | null | undefined): Date | null {
   if (!value) {
     return null
   }
 
-  const raw = String(value).trim()
-
-  if (!raw) {
-    return null
-  }
-
-  const normalized = raw.replace(" ", "T")
-  const parsed = new Date(normalized)
+  const parsed = new Date(String(value))
 
   if (Number.isNaN(parsed.getTime())) {
     return null
@@ -34,36 +32,71 @@ function parseLocalDate(value: string | null | undefined): Date | null {
   return parsed
 }
 
-function toDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+function getDateKeyInTimeZone(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
 
-  return `${year}-${month}-${day}`
+  return formatter.format(date)
 }
 
-function formatEventDateTime(value: string): string {
-  const parsed = parseLocalDate(value)
+function formatDateTimeInTimeZone(
+  value: string,
+  timeZone: string,
+  locale: string
+): string {
+  const parsed = safeDate(value)
 
   if (!parsed) {
     return value
   }
 
-  return parsed.toLocaleString()
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed)
+}
+
+function mapLanguageToLocale(language: string | null | undefined): string {
+  const value = String(language || "").trim().toLowerCase()
+
+  if (value === "en") return "en-US"
+  if (value === "pt") return "pt-BR"
+  if (value === "fr") return "fr-FR"
+  if (value === "de") return "de-DE"
+  if (value === "it") return "it-IT"
+
+  return "es-PE"
 }
 
 export default function AgendaPage() {
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return toDateKey(new Date())
-  })
+  const [selectedDate, setSelectedDate] = useState<string>("")
   const [events, setEvents] = useState<EventItem[]>([])
+  const [clientPrefs, setClientPrefs] = useState<ClientPrefs>({
+    timezone: "America/Lima",
+    locale: "es-PE",
+  })
 
   useEffect(() => {
     const init = async () => {
       try {
         const clientId = await getCurrentClientId()
-        await loadEvents(clientId)
+        const prefs = await loadClientPrefs(clientId)
+
+        setClientPrefs(prefs)
+
+        const todayKey = getDateKeyInTimeZone(new Date(), prefs.timezone)
+        setSelectedDate(todayKey)
+
+        await loadEvents(clientId, prefs.timezone)
       } finally {
         setLoading(false)
       }
@@ -72,7 +105,30 @@ export default function AgendaPage() {
     init()
   }, [])
 
-  const loadEvents = async (clientId: string) => {
+  const loadClientPrefs = async (clientId: string): Promise<ClientPrefs> => {
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("timezone, preferred_language, language")
+      .eq("id", clientId)
+      .maybeSingle()
+
+    const timezone =
+      clientRow?.timezone && String(clientRow.timezone).trim()
+        ? String(clientRow.timezone).trim()
+        : "America/Lima"
+
+    const language =
+      clientRow?.preferred_language ||
+      clientRow?.language ||
+      "es"
+
+    return {
+      timezone,
+      locale: mapLanguageToLocale(language),
+    }
+  }
+
+  const loadEvents = async (clientId: string, timeZone: string) => {
     const { data: tasks, error: tasksError } = await supabase
       .from("tasks")
       .select("id, title, due_at, status")
@@ -94,54 +150,62 @@ export default function AgendaPage() {
     const mappedTasks: EventItem[] = (tasks || [])
       .filter((task: any) => task.due_at)
       .map((task: any) => {
-        const parsed = parseLocalDate(task.due_at)
-        const dateKey = parsed ? toDateKey(parsed) : String(task.due_at).slice(0, 10)
+        const parsed = safeDate(task.due_at)
+        const dateKey = parsed
+          ? getDateKeyInTimeZone(parsed, timeZone)
+          : ""
 
         return {
           id: task.id,
           title: task.title || "Tarea",
-          date: dateKey,
-          type: "task" as const,
-          source_at: task.due_at,
+          dateKey,
+          type: "task",
+          sourceAt: task.due_at,
         }
       })
+      .filter((item) => item.dateKey)
 
     const mappedAutomations: EventItem[] = (automations || [])
       .filter((item: any) => item.next_run)
       .map((item: any) => {
-        const parsed = parseLocalDate(item.next_run)
-        const dateKey = parsed ? toDateKey(parsed) : String(item.next_run).slice(0, 10)
+        const parsed = safeDate(item.next_run)
+        const dateKey = parsed
+          ? getDateKeyInTimeZone(parsed, timeZone)
+          : ""
 
         return {
           id: item.id,
           title: item.title || "Automatización",
-          date: dateKey,
-          type: "automation" as const,
-          source_at: item.next_run,
+          dateKey,
+          type: "automation",
+          sourceAt: item.next_run,
         }
       })
+      .filter((item) => item.dateKey)
 
     setEvents([...mappedTasks, ...mappedAutomations])
   }
 
   const filteredEvents = useMemo(() => {
-    return events.filter((event) => event.date === selectedDate)
+    return events.filter((event) => event.dateKey === selectedDate)
   }, [events, selectedDate])
 
   const calendarEvents = useMemo(() => {
     return events
       .map((event) => {
-        const parsed = parseLocalDate(event.source_at)
+        const parsed = safeDate(event.sourceAt)
 
         if (!parsed) {
           return null
         }
 
         return {
+          id: event.id,
           title: event.title,
           start: parsed,
           end: parsed,
-          resource: event,
+          type: event.type,
+          sourceAt: event.sourceAt,
         }
       })
       .filter(Boolean)
@@ -161,27 +225,17 @@ export default function AgendaPage() {
           <p className="text-muted-foreground">Cargando agenda...</p>
         ) : (
           <CalendarView
-            events={calendarEvents}
-            onSelectEvent={(calendarEvent: any) => {
-              const start = calendarEvent?.start
-
-              if (start instanceof Date && !Number.isNaN(start.getTime())) {
-                setSelectedDate(toDateKey(start))
-              }
-            }}
-            onSelectSlot={(slotInfo: any) => {
-              const start = slotInfo?.start
-
-              if (start instanceof Date && !Number.isNaN(start.getTime())) {
-                setSelectedDate(toDateKey(start))
-              }
-            }}
+            events={calendarEvents as any[]}
+            locale={clientPrefs.locale}
+            timeZone={clientPrefs.timezone}
+            selectedDate={selectedDate}
+            onSelectDate={(dateKey) => setSelectedDate(dateKey)}
           />
         )}
       </div>
 
       <div className="bg-card rounded-2xl border border-border p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-4">
           <h2 className="text-lg font-semibold text-[#0F1F63]">
             Eventos del día
           </h2>
@@ -202,15 +256,22 @@ export default function AgendaPage() {
           <div className="space-y-3">
             {filteredEvents.map((event) => (
               <div
-                key={`${event.type}-${event.id}-${event.source_at}`}
+                key={`${event.type}-${event.id}-${event.sourceAt}`}
                 className="rounded-xl border border-border p-4"
               >
                 <p className="font-medium text-[#0F1F63]">{event.title}</p>
+
                 <p className="text-sm text-muted-foreground">
                   Tipo: {event.type === "task" ? "Tarea" : "Automatización"}
                 </p>
+
                 <p className="text-sm text-muted-foreground">
-                  Fecha: {formatEventDateTime(event.source_at)}
+                  Fecha:{" "}
+                  {formatDateTimeInTimeZone(
+                    event.sourceAt,
+                    clientPrefs.timezone,
+                    clientPrefs.locale
+                  )}
                 </p>
               </div>
             ))}
