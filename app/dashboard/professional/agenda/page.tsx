@@ -92,9 +92,7 @@ export default function AgendaPage() {
         const prefs = await loadClientPrefs(clientId)
 
         setClientPrefs(prefs)
-
-        const todayKey = getDateKeyInTimeZone(new Date(), prefs.timezone)
-        setSelectedDate(todayKey)
+        setSelectedDate(getDateKeyInTimeZone(new Date(), prefs.timezone))
 
         await loadEvents(clientId, prefs.timezone)
       } finally {
@@ -151,37 +149,39 @@ export default function AgendaPage() {
       .filter((task: any) => task.due_at)
       .map((task: any) => {
         const parsed = safeDate(task.due_at)
-        const dateKey = parsed
-          ? getDateKeyInTimeZone(parsed, timeZone)
-          : ""
+
+        if (!parsed) {
+          return null
+        }
 
         return {
           id: task.id,
           title: task.title || "Tarea",
-          dateKey,
-          type: "task",
+          dateKey: getDateKeyInTimeZone(parsed, timeZone),
+          type: "task" as const,
           sourceAt: task.due_at,
         }
       })
-      .filter((item) => item.dateKey)
+      .filter(Boolean) as EventItem[]
 
     const mappedAutomations: EventItem[] = (automations || [])
       .filter((item: any) => item.next_run)
       .map((item: any) => {
         const parsed = safeDate(item.next_run)
-        const dateKey = parsed
-          ? getDateKeyInTimeZone(parsed, timeZone)
-          : ""
+
+        if (!parsed) {
+          return null
+        }
 
         return {
           id: item.id,
           title: item.title || "Automatización",
-          dateKey,
-          type: "automation",
+          dateKey: getDateKeyInTimeZone(parsed, timeZone),
+          type: "automation" as const,
           sourceAt: item.next_run,
         }
       })
-      .filter((item) => item.dateKey)
+      .filter(Boolean) as EventItem[]
 
     setEvents([...mappedTasks, ...mappedAutomations])
   }
@@ -206,6 +206,7 @@ export default function AgendaPage() {
           end: parsed,
           type: event.type,
           sourceAt: event.sourceAt,
+          dateKey: event.dateKey,
         }
       })
       .filter(Boolean)
