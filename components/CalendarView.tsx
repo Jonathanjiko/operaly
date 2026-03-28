@@ -9,6 +9,7 @@ type CalendarEvent = {
   end: Date
   type?: "task" | "automation"
   sourceAt?: string
+  dateKey?: string
 }
 
 type CalendarViewProps = {
@@ -32,70 +33,64 @@ function getDateKeyInTimeZone(date: Date, timeZone: string): string {
   return formatter.format(date)
 }
 
-function getDatePartsInTimeZone(date: Date, timeZone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-  })
-
-  const parts = formatter.formatToParts(date)
-
-  const map: Record<string, string> = {}
-
-  for (const part of parts) {
-    if (part.type !== "literal") {
-      map[part.type] = part.value
-    }
-  }
-
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    weekday: map.weekday || "",
-  }
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
 }
 
-function buildMonthMatrix(baseDate: Date) {
-  const year = baseDate.getFullYear()
-  const month = baseDate.getMonth()
+function addDays(dateKey: string, days: number): string {
+  const base = parseDateKey(dateKey)
+  base.setUTCDate(base.getUTCDate() + days)
+  return getDateKeyInTimeZone(base, "UTC")
+}
 
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
+function buildMonthMatrix(monthKey: string): string[][] {
+  const [year, month] = monthKey.split("-").map(Number)
 
+  const firstDay = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0))
+  const lastDay = new Date(Date.UTC(year, month, 0, 12, 0, 0))
+
+  const firstWeekDay = (firstDay.getUTCDay() + 6) % 7
   const start = new Date(firstDay)
-  const dayOfWeek = (start.getDay() + 6) % 7
-  start.setDate(start.getDate() - dayOfWeek)
+  start.setUTCDate(start.getUTCDate() - firstWeekDay)
 
+  const lastWeekDay = (lastDay.getUTCDay() + 6) % 7
   const end = new Date(lastDay)
-  const endDayOfWeek = (end.getDay() + 6) % 7
-  end.setDate(end.getDate() + (6 - endDayOfWeek))
+  end.setUTCDate(end.getUTCDate() + (6 - lastWeekDay))
 
-  const days: Date[] = []
-  const current = new Date(start)
+  const allDays: string[] = []
+  const cursor = new Date(start)
 
-  while (current <= end) {
-    days.push(new Date(current))
-    current.setDate(current.getDate() + 1)
+  while (cursor <= end) {
+    allDays.push(getDateKeyInTimeZone(cursor, "UTC"))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
 
-  const weeks: Date[][] = []
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7))
+  const weeks: string[][] = []
+
+  for (let i = 0; i < allDays.length; i += 7) {
+    weeks.push(allDays.slice(i, i + 7))
   }
 
   return weeks
 }
 
-function formatMonthTitle(date: Date, locale: string, timeZone: string) {
+function getMonthKey(dateKey: string): string {
+  return dateKey.slice(0, 7)
+}
+
+function formatMonthTitle(monthKey: string, locale: string): string {
+  const date = parseDateKey(`${monthKey}-01`)
+
   return new Intl.DateTimeFormat(locale, {
-    timeZone,
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   }).format(date)
+}
+
+function formatDayNumber(dateKey: string): string {
+  return dateKey.slice(8, 10)
 }
 
 function formatTime(date: Date, locale: string, timeZone: string) {
@@ -106,25 +101,27 @@ function formatTime(date: Date, locale: string, timeZone: string) {
   }).format(date)
 }
 
-function isSameMonth(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
-}
-
 export default function CalendarView({
   events,
   locale = "es-PE",
   timeZone = "America/Lima",
-  selectedDate,
+  selectedDate = "",
   onSelectDate,
 }: CalendarViewProps) {
+  const todayKey = getDateKeyInTimeZone(new Date(), timeZone)
+  const initialDateKey = selectedDate || todayKey
+
   const [view, setView] = useState<ViewMode>("month")
-  const [currentDate, setCurrentDate] = useState<Date>(new Date())
+  const [currentDateKey, setCurrentDateKey] = useState<string>(initialDateKey)
 
   const eventMap = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
 
     for (const event of events) {
-      const key = getDateKeyInTimeZone(event.start, timeZone)
+      const key =
+        event.dateKey ||
+        getDateKeyInTimeZone(event.start, timeZone)
+
       const current = map.get(key) || []
       current.push(event)
       map.set(key, current)
@@ -138,62 +135,54 @@ export default function CalendarView({
     return map
   }, [events, timeZone])
 
+  const monthKey = getMonthKey(currentDateKey)
+
   const monthMatrix = useMemo(() => {
-    return buildMonthMatrix(currentDate)
-  }, [currentDate])
+    return buildMonthMatrix(monthKey)
+  }, [monthKey])
 
   const selectedEvents = useMemo(() => {
-    if (!selectedDate) {
-      return []
-    }
-
-    return eventMap.get(selectedDate) || []
-  }, [eventMap, selectedDate])
+    return eventMap.get(selectedDate || currentDateKey) || []
+  }, [eventMap, selectedDate, currentDateKey])
 
   const goToday = () => {
-    const now = new Date()
-    setCurrentDate(now)
-
-    if (onSelectDate) {
-      onSelectDate(getDateKeyInTimeZone(now, timeZone))
-    }
+    setCurrentDateKey(todayKey)
+    onSelectDate?.(todayKey)
   }
 
   const goPrev = () => {
-    const next = new Date(currentDate)
-
     if (view === "month") {
-      next.setMonth(next.getMonth() - 1)
-    } else if (view === "week") {
-      next.setDate(next.getDate() - 7)
-    } else {
-      next.setDate(next.getDate() - 1)
+      const [year, month] = monthKey.split("-").map(Number)
+      const prev = new Date(Date.UTC(year, month - 2, 1, 12, 0, 0))
+      setCurrentDateKey(getDateKeyInTimeZone(prev, "UTC"))
+      return
     }
 
-    setCurrentDate(next)
+    if (view === "week") {
+      setCurrentDateKey(addDays(currentDateKey, -7))
+      return
+    }
+
+    setCurrentDateKey(addDays(currentDateKey, -1))
   }
 
   const goNext = () => {
-    const next = new Date(currentDate)
-
     if (view === "month") {
-      next.setMonth(next.getMonth() + 1)
-    } else if (view === "week") {
-      next.setDate(next.getDate() + 7)
-    } else {
-      next.setDate(next.getDate() + 1)
+      const [year, month] = monthKey.split("-").map(Number)
+      const next = new Date(Date.UTC(year, month, 1, 12, 0, 0))
+      setCurrentDateKey(getDateKeyInTimeZone(next, "UTC"))
+      return
     }
 
-    setCurrentDate(next)
-  }
-
-  const handleSelectDay = (date: Date) => {
-    const key = getDateKeyInTimeZone(date, timeZone)
-
-    if (onSelectDate) {
-      onSelectDate(key)
+    if (view === "week") {
+      setCurrentDateKey(addDays(currentDateKey, 7))
+      return
     }
+
+    setCurrentDateKey(addDays(currentDateKey, 1))
   }
+
+  const effectiveSelectedDate = selectedDate || currentDateKey
 
   return (
     <div className="rounded-2xl border border-border p-4 bg-white">
@@ -222,7 +211,7 @@ export default function CalendarView({
         </div>
 
         <div className="text-2xl font-semibold text-[#0F1F63] capitalize">
-          {formatMonthTitle(currentDate, locale, timeZone)}
+          {formatMonthTitle(monthKey, locale)}
         </div>
 
         <div className="flex items-center gap-2">
@@ -288,23 +277,22 @@ export default function CalendarView({
           <div>
             {monthMatrix.map((week, weekIndex) => (
               <div key={weekIndex} className="grid grid-cols-7">
-                {week.map((date) => {
-                  const dateKey = getDateKeyInTimeZone(date, timeZone)
+                {week.map((dateKey) => {
                   const items = eventMap.get(dateKey) || []
-                  const isSelected = selectedDate === dateKey
-                  const currentMonth = isSameMonth(date, currentDate)
+                  const isSelected = effectiveSelectedDate === dateKey
+                  const currentMonth = dateKey.startsWith(monthKey)
 
                   return (
                     <button
-                      key={date.toISOString()}
-                      onClick={() => handleSelectDay(date)}
+                      key={dateKey}
+                      onClick={() => onSelectDate?.(dateKey)}
                       className={`min-h-[140px] border-r border-b border-border p-2 text-left align-top transition-colors ${
                         isSelected ? "bg-blue-50" : "bg-white"
                       } ${!currentMonth ? "text-slate-400" : "text-[#0F1F63]"}`}
                     >
                       <div className="flex justify-end">
                         <span className="text-sm font-medium">
-                          {getDatePartsInTimeZone(date, timeZone).day}
+                          {formatDayNumber(dateKey)}
                         </span>
                       </div>
 
@@ -339,12 +327,14 @@ export default function CalendarView({
               .slice()
               .sort((a, b) => a.start.getTime() - b.start.getTime())
               .map((event) => {
-                const dateKey = getDateKeyInTimeZone(event.start, timeZone)
+                const eventDateKey =
+                  event.dateKey ||
+                  getDateKeyInTimeZone(event.start, timeZone)
 
                 return (
                   <button
                     key={`${event.id}-${event.start.toISOString()}`}
-                    onClick={() => onSelectDate?.(dateKey)}
+                    onClick={() => onSelectDate?.(eventDateKey)}
                     className="w-full text-left rounded-xl border border-border p-4 hover:bg-slate-50"
                   >
                     <p className="font-medium text-[#0F1F63]">{event.title}</p>
