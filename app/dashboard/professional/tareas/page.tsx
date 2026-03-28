@@ -39,32 +39,110 @@ type TaskRow = {
   created_at: string | null
 }
 
+const TASK_STATUS = {
+  PENDING: "pending",
+  IN_PROGRESS: "in_progress",
+  COMPLETED: "completed",
+} as const
+
 const columns = [
-  { key: "pending", label: "Pendientes" },
-  { key: "in_progress", label: "En progreso" },
-  { key: "completed", label: "Completadas" },
+  { key: TASK_STATUS.PENDING, label: "Pendientes" },
+  { key: TASK_STATUS.IN_PROGRESS, label: "En progreso" },
+  { key: TASK_STATUS.COMPLETED, label: "Completadas" },
 ]
 
 type ToastType = "success" | "error" | "info"
 
-const normalizeStatus = (status: string | null) => {
-  if (!status) return "pending"
-
-  const value = status.toLowerCase()
-
-  if (["pending", "todo", "open", "new"].includes(value)) {
-    return "pending"
+function normalizeTaskStatus(value: string | null | undefined): string {
+  if (!value) {
+    return TASK_STATUS.PENDING
   }
 
-  if (["in_progress", "in-progress", "doing", "progress"].includes(value)) {
-    return "in_progress"
+  const status = String(value).trim().toLowerCase()
+
+  if (
+    [
+      TASK_STATUS.PENDING,
+      "todo",
+      "open",
+      "new",
+    ].includes(status)
+  ) {
+    return TASK_STATUS.PENDING
   }
 
-  if (["completed", "done", "closed", "finished"].includes(value)) {
-    return "completed"
+  if (
+    [
+      TASK_STATUS.IN_PROGRESS,
+      "in-progress",
+      "doing",
+      "progress",
+      "active",
+    ].includes(status)
+  ) {
+    return TASK_STATUS.IN_PROGRESS
   }
 
-  return "pending"
+  if (
+    [
+      TASK_STATUS.COMPLETED,
+      "done",
+      "closed",
+      "finished",
+    ].includes(status)
+  ) {
+    return TASK_STATUS.COMPLETED
+  }
+
+  return TASK_STATUS.PENDING
+}
+
+function toLocalDateTimeInput(value: string | null): string {
+  if (!value) {
+    return ""
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return ""
+  }
+
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, "0")
+  const day = String(parsed.getDate()).padStart(2, "0")
+  const hours = String(parsed.getHours()).padStart(2, "0")
+  const minutes = String(parsed.getMinutes()).padStart(2, "0")
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function toIsoOrNull(value: string): string | null {
+  if (!value) {
+    return null
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return parsed.toISOString()
+}
+
+function formatDueAt(value: string | null): string {
+  if (!value) {
+    return "Sin fecha"
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Sin fecha"
+  }
+
+  return parsed.toLocaleString()
 }
 
 function DroppableColumn({
@@ -132,7 +210,9 @@ function DraggableTaskCard({
         {...attributes}
         className="cursor-grab active:cursor-grabbing"
       >
-        <p className="font-medium text-[#0F1F63]">{task.title || "Tarea"}</p>
+        <p className="font-medium text-[#0F1F63]">
+          {task.title || "Tarea"}
+        </p>
 
         <p className="text-sm text-muted-foreground mt-1">
           {task.description || "Sin descripción"}
@@ -140,11 +220,7 @@ function DraggableTaskCard({
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
           <CalendarDays className="w-4 h-4" />
-          <span>
-            {task.due_at
-              ? new Date(task.due_at).toLocaleString()
-              : "Sin fecha"}
-          </span>
+          <span>{formatDueAt(task.due_at)}</span>
         </div>
 
         <p className="text-xs text-muted-foreground mt-2">
@@ -157,7 +233,7 @@ function DraggableTaskCard({
           variant="outline"
           size="sm"
           className="rounded-lg"
-          onClick={() => onMove(task.id, "pending")}
+          onClick={() => onMove(task.id, TASK_STATUS.PENDING)}
         >
           Pendiente
         </Button>
@@ -166,7 +242,7 @@ function DraggableTaskCard({
           variant="outline"
           size="sm"
           className="rounded-lg"
-          onClick={() => onMove(task.id, "in_progress")}
+          onClick={() => onMove(task.id, TASK_STATUS.IN_PROGRESS)}
         >
           En progreso
         </Button>
@@ -175,7 +251,7 @@ function DraggableTaskCard({
           variant="outline"
           size="sm"
           className="rounded-lg"
-          onClick={() => onMove(task.id, "completed")}
+          onClick={() => onMove(task.id, TASK_STATUS.COMPLETED)}
         >
           Completar
         </Button>
@@ -219,7 +295,7 @@ export default function ProfessionalTasksPage() {
   const [editDescription, setEditDescription] = useState("")
   const [editDueAt, setEditDueAt] = useState("")
   const [editPriority, setEditPriority] = useState("medium")
-  const [editStatus, setEditStatus] = useState("pending")
+  const [editStatus, setEditStatus] = useState(TASK_STATUS.PENDING)
 
   const [toastOpen, setToastOpen] = useState(false)
   const [toastType, setToastType] = useState<ToastType>("info")
@@ -254,7 +330,12 @@ export default function ProfessionalTasksPage() {
         throw error
       }
 
-      setTasks((data || []) as TaskRow[])
+      setTasks(
+        (data || []).map((item: any) => ({
+          ...item,
+          status: normalizeTaskStatus(item.status),
+        })) as TaskRow[]
+      )
     } catch (err: any) {
       showToast(err.message || "No se pudieron cargar las tareas.", "error")
     } finally {
@@ -268,9 +349,15 @@ export default function ProfessionalTasksPage() {
 
   const grouped = useMemo(() => {
     return {
-      pending: tasks.filter((t) => normalizeStatus(t.status) === "pending"),
-      in_progress: tasks.filter((t) => normalizeStatus(t.status) === "in_progress"),
-      completed: tasks.filter((t) => normalizeStatus(t.status) === "completed"),
+      pending: tasks.filter(
+        (task) => normalizeTaskStatus(task.status) === TASK_STATUS.PENDING
+      ),
+      in_progress: tasks.filter(
+        (task) => normalizeTaskStatus(task.status) === TASK_STATUS.IN_PROGRESS
+      ),
+      completed: tasks.filter(
+        (task) => normalizeTaskStatus(task.status) === TASK_STATUS.COMPLETED
+      ),
     }
   }, [tasks])
 
@@ -285,9 +372,9 @@ export default function ProfessionalTasksPage() {
     setEditingId(task.id)
     setEditTitle(task.title || "")
     setEditDescription(task.description || "")
-    setEditDueAt(task.due_at ? new Date(task.due_at).toISOString().slice(0, 16) : "")
+    setEditDueAt(toLocalDateTimeInput(task.due_at))
     setEditPriority(task.priority || "medium")
-    setEditStatus(task.status || "pending")
+    setEditStatus(normalizeTaskStatus(task.status))
   }
 
   const cancelEditing = () => {
@@ -296,7 +383,7 @@ export default function ProfessionalTasksPage() {
     setEditDescription("")
     setEditDueAt("")
     setEditPriority("medium")
-    setEditStatus("pending")
+    setEditStatus(TASK_STATUS.PENDING)
   }
 
   const handleCreate = async () => {
@@ -310,19 +397,43 @@ export default function ProfessionalTasksPage() {
     try {
       const clientId = await getCurrentClientId()
 
-      const { error } = await supabase.from("tasks").insert({
+      const insertPayload = {
         client_id: clientId,
         title: title.trim(),
         description: description.trim() || null,
-        due_at: dueAt ? new Date(dueAt).toISOString() : null,
-        status: "pending",
+        due_at: toIsoOrNull(dueAt),
+        status: TASK_STATUS.PENDING,
         priority,
         category: "general",
         source: "dashboard",
-      })
+      }
 
-      if (error) {
-        throw error
+      const { data: insertedTask, error: insertTaskError } = await supabase
+        .from("tasks")
+        .insert(insertPayload)
+        .select("id, client_id, due_at")
+        .single()
+
+      if (insertTaskError) {
+        throw insertTaskError
+      }
+
+      if (insertedTask?.id && insertedTask?.client_id && insertedTask?.due_at) {
+        const reminderPayload = {
+          task_id: insertedTask.id,
+          client_id: insertedTask.client_id,
+          remind_at: insertedTask.due_at,
+          sent: false,
+          channel: "whatsapp",
+        }
+
+        const { error: reminderError } = await supabase
+          .from("task_reminders")
+          .insert(reminderPayload)
+
+        if (reminderError) {
+          throw reminderError
+        }
       }
 
       resetCreateForm()
@@ -345,13 +456,15 @@ export default function ProfessionalTasksPage() {
       const payload: any = {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
-        due_at: editDueAt ? new Date(editDueAt).toISOString() : null,
+        due_at: toIsoOrNull(editDueAt),
         priority: editPriority,
-        status: editStatus,
+        status: normalizeTaskStatus(editStatus),
       }
 
-      if (editStatus === "completed") {
+      if (payload.status === TASK_STATUS.COMPLETED) {
         payload.completed_at = new Date().toISOString()
+      } else {
+        payload.completed_at = null
       }
 
       const { error } = await supabase
@@ -373,12 +486,16 @@ export default function ProfessionalTasksPage() {
 
   const moveTask = async (id: string, nextStatus: string) => {
     try {
+      const normalizedStatus = normalizeTaskStatus(nextStatus)
+
       const payload: any = {
-        status: nextStatus,
+        status: normalizedStatus,
       }
 
-      if (nextStatus === "completed") {
+      if (normalizedStatus === TASK_STATUS.COMPLETED) {
         payload.completed_at = new Date().toISOString()
+      } else {
+        payload.completed_at = null
       }
 
       const { error } = await supabase
@@ -405,13 +522,22 @@ export default function ProfessionalTasksPage() {
     }
 
     try {
-      const { error } = await supabase
+      const { error: reminderDeleteError } = await supabase
+        .from("task_reminders")
+        .delete()
+        .eq("task_id", id)
+
+      if (reminderDeleteError) {
+        throw reminderDeleteError
+      }
+
+      const { error: taskDeleteError } = await supabase
         .from("tasks")
         .delete()
         .eq("id", id)
 
-      if (error) {
-        throw error
+      if (taskDeleteError) {
+        throw taskDeleteError
       }
 
       await loadTasks()
@@ -431,13 +557,23 @@ export default function ProfessionalTasksPage() {
     const taskId = String(active.id)
     const newStatus = String(over.id)
 
-    if (!["pending", "in_progress", "completed"].includes(newStatus)) {
+    if (
+      ![
+        TASK_STATUS.PENDING,
+        TASK_STATUS.IN_PROGRESS,
+        TASK_STATUS.COMPLETED,
+      ].includes(newStatus)
+    ) {
       return
     }
 
     const currentTask = tasks.find((task) => task.id === taskId)
 
-    if (!currentTask || normalizeStatus(currentTask.status) === newStatus) {
+    if (!currentTask) {
+      return
+    }
+
+    if (normalizeTaskStatus(currentTask.status) === newStatus) {
       return
     }
 
@@ -561,9 +697,9 @@ export default function ProfessionalTasksPage() {
                 onChange={(e) => setEditStatus(e.target.value)}
                 className="h-12 rounded-xl border border-input bg-background px-3"
               >
-                <option value="pending">Pendiente</option>
-                <option value="in_progress">En progreso</option>
-                <option value="completed">Completada</option>
+                <option value={TASK_STATUS.PENDING}>Pendiente</option>
+                <option value={TASK_STATUS.IN_PROGRESS}>En progreso</option>
+                <option value={TASK_STATUS.COMPLETED}>Completada</option>
               </select>
             </div>
 
