@@ -91,6 +91,36 @@ function isSameMonth(dateKey: string, monthKey: string): boolean {
   return dateKey.startsWith(monthKey)
 }
 
+function getLabels(locale: string) {
+  if (locale.startsWith("en")) {
+    return {
+      today: "Today",
+      back: "Back",
+      next: "Next",
+      month: "Month",
+      week: "Week",
+      day: "Day",
+      agenda: "Agenda",
+      weekDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      noEvents: "No events for this date.",
+      noRegistered: "No registered events.",
+    }
+  }
+
+  return {
+    today: "Hoy",
+    back: "Atrás",
+    next: "Siguiente",
+    month: "Mes",
+    week: "Semana",
+    day: "Día",
+    agenda: "Agenda",
+    weekDays: ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"],
+    noEvents: "No hay eventos para esta fecha.",
+    noRegistered: "No hay eventos registrados.",
+  }
+}
+
 export default function CalendarView({
   events,
   locale = "es-PE",
@@ -98,6 +128,8 @@ export default function CalendarView({
   onSelectDate,
 }: CalendarViewProps) {
   const todayKey = formatDateKey(new Date())
+  const labels = getLabels(locale)
+
   const [view, setView] = useState<ViewMode>("month")
   const [currentDateKey, setCurrentDateKey] = useState<string>(
     selectedDate || todayKey
@@ -179,21 +211,21 @@ export default function CalendarView({
             onClick={goToday}
             className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-slate-50"
           >
-            Today
+            {labels.today}
           </button>
 
           <button
             onClick={goPrev}
             className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-slate-50"
           >
-            Back
+            {labels.back}
           </button>
 
           <button
             onClick={goNext}
             className="px-4 py-2 rounded-lg border border-border bg-white hover:bg-slate-50"
           >
-            Next
+            {labels.next}
           </button>
         </div>
 
@@ -210,7 +242,7 @@ export default function CalendarView({
                 : "bg-white border-border hover:bg-slate-50"
             }`}
           >
-            Month
+            {labels.month}
           </button>
 
           <button
@@ -221,7 +253,7 @@ export default function CalendarView({
                 : "bg-white border-border hover:bg-slate-50"
             }`}
           >
-            Week
+            {labels.week}
           </button>
 
           <button
@@ -232,7 +264,7 @@ export default function CalendarView({
                 : "bg-white border-border hover:bg-slate-50"
             }`}
           >
-            Day
+            {labels.day}
           </button>
 
           <button
@@ -243,7 +275,7 @@ export default function CalendarView({
                 : "bg-white border-border hover:bg-slate-50"
             }`}
           >
-            Agenda
+            {labels.agenda}
           </button>
         </div>
       </div>
@@ -251,7 +283,7 @@ export default function CalendarView({
       {view === "month" && (
         <div className="overflow-hidden rounded-xl border border-border">
           <div className="grid grid-cols-7 bg-slate-50 border-b border-border">
-            {["lun", "mar", "mié", "jue", "vie", "sáb", "dom"].map((day) => (
+            {labels.weekDays.map((day) => (
               <div
                 key={day}
                 className="px-3 py-2 text-sm font-semibold text-center text-[#0F1F63]"
@@ -272,6 +304,7 @@ export default function CalendarView({
                   return (
                     <button
                       key={dateKey}
+                      type="button"
                       onClick={() => onSelectDate?.(dateKey)}
                       className={`min-h-[140px] border-r border-b border-border p-2 text-left align-top transition-colors ${
                         isSelected ? "bg-blue-50" : "bg-white"
@@ -307,7 +340,7 @@ export default function CalendarView({
         <div className="space-y-3">
           {events.length === 0 ? (
             <div className="text-muted-foreground">
-              No hay eventos registrados.
+              {labels.noRegistered}
             </div>
           ) : (
             events.map((event) => (
@@ -331,7 +364,7 @@ export default function CalendarView({
         <div className="space-y-3">
           {selectedEvents.length === 0 ? (
             <div className="text-muted-foreground">
-              No hay eventos para este día.
+              {labels.noEvents}
             </div>
           ) : (
             selectedEvents.map((event) => (
@@ -354,7 +387,7 @@ export default function CalendarView({
         <div className="space-y-3">
           {selectedEvents.length === 0 ? (
             <div className="text-muted-foreground">
-              No hay eventos para la fecha seleccionada.
+              {labels.noEvents}
             </div>
           ) : (
             selectedEvents.map((event) => (
