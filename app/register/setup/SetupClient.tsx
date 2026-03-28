@@ -148,7 +148,17 @@ export default function SetupClient() {
 
       if (updateUserError) throw updateUserError
 
-      localStorage.setItem("operaly_client_id", clientId)
+      const {
+        data: refreshData,
+        error: refreshError,
+      } = await supabase.auth.refreshSession()
+
+      if (refreshError) throw refreshError
+
+      const refreshedClientId =
+        refreshData.session?.user?.user_metadata?.client_id || clientId
+
+      localStorage.setItem("operaly_client_id", refreshedClientId)
       localStorage.setItem("operaly_account_type", "assistant")
       localStorage.setItem(
         "operaly_assistant_profile",
