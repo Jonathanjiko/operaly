@@ -1,69 +1,64 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 type CalendarEvent = {
   id: string
   title: string
-  start: Date
-  end: Date
+  dateKey: string
+  timeLabel?: string
   type?: "task" | "automation"
   sourceAt?: string
-  dateKey?: string
 }
 
 type CalendarViewProps = {
   events: CalendarEvent[]
   locale?: string
-  timeZone?: string
   selectedDate?: string
   onSelectDate?: (dateKey: string) => void
 }
 
 type ViewMode = "month" | "week" | "day" | "agenda"
 
-function getDateKeyInTimeZone(date: Date, timeZone: string): string {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-
-  return formatter.format(date)
-}
-
 function parseDateKey(dateKey: string): Date {
   const [year, month, day] = dateKey.split("-").map(Number)
-  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+  return new Date(year, month - 1, day)
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
 }
 
 function addDays(dateKey: string, days: number): string {
   const base = parseDateKey(dateKey)
-  base.setUTCDate(base.getUTCDate() + days)
-  return getDateKeyInTimeZone(base, "UTC")
+  base.setDate(base.getDate() + days)
+  return formatDateKey(base)
 }
 
 function buildMonthMatrix(monthKey: string): string[][] {
   const [year, month] = monthKey.split("-").map(Number)
 
-  const firstDay = new Date(Date.UTC(year, month - 1, 1, 12, 0, 0))
-  const lastDay = new Date(Date.UTC(year, month, 0, 12, 0, 0))
+  const firstDay = new Date(year, month - 1, 1)
+  const lastDay = new Date(year, month, 0)
 
-  const firstWeekDay = (firstDay.getUTCDay() + 6) % 7
+  const firstWeekDay = (firstDay.getDay() + 6) % 7
   const start = new Date(firstDay)
-  start.setUTCDate(start.getUTCDate() - firstWeekDay)
+  start.setDate(start.getDate() - firstWeekDay)
 
-  const lastWeekDay = (lastDay.getUTCDay() + 6) % 7
+  const lastWeekDay = (lastDay.getDay() + 6) % 7
   const end = new Date(lastDay)
-  end.setUTCDate(end.getUTCDate() + (6 - lastWeekDay))
+  end.setDate(end.getDate() + (6 - lastWeekDay))
 
   const allDays: string[] = []
   const cursor = new Date(start)
 
   while (cursor <= end) {
-    allDays.push(getDateKeyInTimeZone(cursor, "UTC"))
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
+    allDays.push(formatDateKey(cursor))
+    cursor.setDate(cursor.getDate() + 1)
   }
 
   const weeks: string[][] = []
@@ -85,55 +80,47 @@ function formatMonthTitle(monthKey: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     month: "long",
     year: "numeric",
-    timeZone: "UTC",
   }).format(date)
 }
 
 function formatDayNumber(dateKey: string): string {
-  return dateKey.slice(8, 10)
+  return String(Number(dateKey.slice(8, 10)))
 }
 
-function formatTime(date: Date, locale: string, timeZone: string) {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
+function isSameMonth(dateKey: string, monthKey: string): boolean {
+  return dateKey.startsWith(monthKey)
 }
 
 export default function CalendarView({
   events,
   locale = "es-PE",
-  timeZone = "America/Lima",
   selectedDate = "",
   onSelectDate,
 }: CalendarViewProps) {
-  const todayKey = getDateKeyInTimeZone(new Date(), timeZone)
-  const initialDateKey = selectedDate || todayKey
-
+  const todayKey = formatDateKey(new Date())
   const [view, setView] = useState<ViewMode>("month")
-  const [currentDateKey, setCurrentDateKey] = useState<string>(initialDateKey)
+  const [currentDateKey, setCurrentDateKey] = useState<string>(
+    selectedDate || todayKey
+  )
+
+  useEffect(() => {
+    if (selectedDate) {
+      setCurrentDateKey(selectedDate)
+    }
+  }, [selectedDate])
 
   const eventMap = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
 
     for (const event of events) {
-      const key =
-        event.dateKey ||
-        getDateKeyInTimeZone(event.start, timeZone)
-
+      const key = event.dateKey
       const current = map.get(key) || []
       current.push(event)
       map.set(key, current)
     }
 
-    for (const [key, value] of map.entries()) {
-      value.sort((a, b) => a.start.getTime() - b.start.getTime())
-      map.set(key, value)
-    }
-
     return map
-  }, [events, timeZone])
+  }, [events])
 
   const monthKey = getMonthKey(currentDateKey)
 
@@ -141,9 +128,11 @@ export default function CalendarView({
     return buildMonthMatrix(monthKey)
   }, [monthKey])
 
+  const effectiveSelectedDate = selectedDate || currentDateKey
+
   const selectedEvents = useMemo(() => {
-    return eventMap.get(selectedDate || currentDateKey) || []
-  }, [eventMap, selectedDate, currentDateKey])
+    return eventMap.get(effectiveSelectedDate) || []
+  }, [eventMap, effectiveSelectedDate])
 
   const goToday = () => {
     setCurrentDateKey(todayKey)
@@ -153,8 +142,8 @@ export default function CalendarView({
   const goPrev = () => {
     if (view === "month") {
       const [year, month] = monthKey.split("-").map(Number)
-      const prev = new Date(Date.UTC(year, month - 2, 1, 12, 0, 0))
-      setCurrentDateKey(getDateKeyInTimeZone(prev, "UTC"))
+      const prev = new Date(year, month - 2, 1)
+      setCurrentDateKey(formatDateKey(prev))
       return
     }
 
@@ -169,8 +158,8 @@ export default function CalendarView({
   const goNext = () => {
     if (view === "month") {
       const [year, month] = monthKey.split("-").map(Number)
-      const next = new Date(Date.UTC(year, month, 1, 12, 0, 0))
-      setCurrentDateKey(getDateKeyInTimeZone(next, "UTC"))
+      const next = new Date(year, month, 1)
+      setCurrentDateKey(formatDateKey(next))
       return
     }
 
@@ -181,8 +170,6 @@ export default function CalendarView({
 
     setCurrentDateKey(addDays(currentDateKey, 1))
   }
-
-  const effectiveSelectedDate = selectedDate || currentDateKey
 
   return (
     <div className="rounded-2xl border border-border p-4 bg-white">
@@ -280,7 +267,7 @@ export default function CalendarView({
                 {week.map((dateKey) => {
                   const items = eventMap.get(dateKey) || []
                   const isSelected = effectiveSelectedDate === dateKey
-                  const currentMonth = dateKey.startsWith(monthKey)
+                  const currentMonth = isSameMonth(dateKey, monthKey)
 
                   return (
                     <button
@@ -299,7 +286,7 @@ export default function CalendarView({
                       <div className="mt-2 space-y-2">
                         {items.slice(0, 3).map((item) => (
                           <div
-                            key={`${item.id}-${item.start.toISOString()}`}
+                            key={`${item.id}-${item.dateKey}`}
                             className="rounded-md bg-[#2B6CB0] px-2 py-1 text-xs text-white truncate"
                             title={item.title}
                           >
@@ -323,27 +310,19 @@ export default function CalendarView({
               No hay eventos registrados.
             </div>
           ) : (
-            events
-              .slice()
-              .sort((a, b) => a.start.getTime() - b.start.getTime())
-              .map((event) => {
-                const eventDateKey =
-                  event.dateKey ||
-                  getDateKeyInTimeZone(event.start, timeZone)
-
-                return (
-                  <button
-                    key={`${event.id}-${event.start.toISOString()}`}
-                    onClick={() => onSelectDate?.(eventDateKey)}
-                    className="w-full text-left rounded-xl border border-border p-4 hover:bg-slate-50"
-                  >
-                    <p className="font-medium text-[#0F1F63]">{event.title}</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {formatTime(event.start, locale, timeZone)}
-                    </p>
-                  </button>
-                )
-              })
+            events.map((event) => (
+              <button
+                key={`${event.id}-${event.dateKey}`}
+                onClick={() => onSelectDate?.(event.dateKey)}
+                className="w-full text-left rounded-xl border border-border p-4 hover:bg-slate-50"
+              >
+                <p className="font-medium text-[#0F1F63]">{event.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {event.dateKey}
+                  {event.timeLabel ? ` ${event.timeLabel}` : ""}
+                </p>
+              </button>
+            ))
           )}
         </div>
       )}
@@ -357,12 +336,13 @@ export default function CalendarView({
           ) : (
             selectedEvents.map((event) => (
               <div
-                key={`${event.id}-${event.start.toISOString()}`}
+                key={`${event.id}-${event.dateKey}`}
                 className="rounded-xl border border-border p-4"
               >
                 <p className="font-medium text-[#0F1F63]">{event.title}</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {formatTime(event.start, locale, timeZone)}
+                  {event.dateKey}
+                  {event.timeLabel ? ` ${event.timeLabel}` : ""}
                 </p>
               </div>
             ))
@@ -379,12 +359,13 @@ export default function CalendarView({
           ) : (
             selectedEvents.map((event) => (
               <div
-                key={`${event.id}-${event.start.toISOString()}`}
+                key={`${event.id}-${event.dateKey}`}
                 className="rounded-xl border border-border p-4"
               >
                 <p className="font-medium text-[#0F1F63]">{event.title}</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {formatTime(event.start, locale, timeZone)}
+                  {event.dateKey}
+                  {event.timeLabel ? ` ${event.timeLabel}` : ""}
                 </p>
               </div>
             ))
