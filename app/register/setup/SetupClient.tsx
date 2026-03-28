@@ -25,7 +25,9 @@ export default function SetupClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const initialPlan = (searchParams.get("plan") as OperalyPlanCode | null) || "trial"
+  const initialPlan =
+    (searchParams.get("plan") as OperalyPlanCode | null) || "trial"
+
   const [planCode, setPlanCode] = useState<OperalyPlanCode>(initialPlan)
 
   const [step, setStep] = useState(1)
@@ -38,7 +40,7 @@ export default function SetupClient() {
   const [phone, setPhone] = useState("")
   const [language, setLanguage] = useState("es")
   const [phoneError, setPhoneError] = useState("")
-  
+
   const [submitting, setSubmitting] = useState(false)
   const [authData, setAuthData] = useState<RegisterAuthData | null>(null)
 
@@ -47,16 +49,20 @@ export default function SetupClient() {
 
   useEffect(() => {
     const raw = localStorage.getItem("operaly_register_auth")
+
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as RegisterAuthData
         setAuthData(parsed)
-        if (parsed.planCode) setPlanCode(parsed.planCode)
+
+        if (parsed.planCode) {
+          setPlanCode(parsed.planCode)
+        }
       } catch {}
     }
   }, [])
 
-    const nextStep = () => {
+  const nextStep = () => {
     if (step === 4) {
       const normalized = normalizePhone(phone, countryCode)
 
@@ -70,12 +76,15 @@ export default function SetupClient() {
 
     setStep((s) => Math.min(totalSteps, s + 1))
   }
+
   const prevStep = () => setStep((s) => Math.max(1, s - 1))
 
   const canContinue =
     (step === 1 && fullName.trim().length >= 3) ||
     (step === 2 && profession.trim().length > 0) ||
-    (step === 3 && countryCode.trim().length > 0 && city.trim().length >= 2) ||
+    (step === 3 &&
+      countryCode.trim().length > 0 &&
+      city.trim().length >= 2) ||
     (step === 4 && phone.trim().length >= 7) ||
     (step === 5 && language.trim().length > 0)
 
@@ -90,6 +99,9 @@ export default function SetupClient() {
     setSubmitting(true)
 
     try {
+      const browserTimeZone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima"
+
       const { data: sessionData } = await supabase.auth.getUser()
       const user = sessionData.user
 
@@ -109,7 +121,9 @@ export default function SetupClient() {
         }
       )
 
-      if (provisionError) throw provisionError
+      if (provisionError) {
+        throw provisionError
+      }
 
       const provisionRow = Array.isArray(provisionData)
         ? provisionData[0]
@@ -118,7 +132,9 @@ export default function SetupClient() {
       if (!provisionRow?.client_id) {
         throw new Error("No se pudo provisionar el cliente.")
       }
+
       const clientId = provisionRow.client_id as string
+
       const { error: completeError } = await supabase.rpc(
         "operaly_complete_assistant_profile",
         {
@@ -126,10 +142,13 @@ export default function SetupClient() {
           p_city: city,
           p_preferred_language: language,
           p_phone_normalized: normalized.value,
+          p_timezone: browserTimeZone,
         }
       )
 
-      if (completeError) throw completeError
+      if (completeError) {
+        throw completeError
+      }
 
       const { error: updateUserError } = await supabase.auth.updateUser({
         data: {
@@ -143,17 +162,22 @@ export default function SetupClient() {
           account_type: "assistant",
           selected_plan: planCode,
           client_id: clientId,
+          timezone: browserTimeZone,
         },
       })
 
-      if (updateUserError) throw updateUserError
+      if (updateUserError) {
+        throw updateUserError
+      }
 
       const {
         data: refreshData,
         error: refreshError,
       } = await supabase.auth.refreshSession()
 
-      if (refreshError) throw refreshError
+      if (refreshError) {
+        throw refreshError
+      }
 
       const refreshedClientId =
         refreshData.session?.user?.user_metadata?.client_id || clientId
@@ -170,6 +194,7 @@ export default function SetupClient() {
           phone,
           phone_normalized: normalized.value,
           preferred_language: language,
+          timezone: browserTimeZone,
           planCode,
         })
       )
@@ -200,9 +225,12 @@ export default function SetupClient() {
 
         <div className="max-w-3xl mx-auto mb-8">
           <div className="flex items-center justify-between text-sm text-[#5F6B7A] mb-3">
-            <span>Paso {step} de {totalSteps}</span>
+            <span>
+              Paso {step} de {totalSteps}
+            </span>
             <span>{progress}%</span>
           </div>
+
           <div className="w-full h-2 rounded-full bg-[#DCE5F2] overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[#3B82F6] to-[#22C7E5] transition-all duration-300"
@@ -246,6 +274,7 @@ export default function SetupClient() {
               <div className="grid md:grid-cols-3 gap-4">
                 {ASSISTANT_PROFESSIONS.map((item) => {
                   const active = profession === item.code
+
                   return (
                     <button
                       key={item.code}
@@ -277,10 +306,14 @@ export default function SetupClient() {
               </div>
 
               <div className="mb-8">
-                <p className="text-sm font-medium text-[#132B73] mb-3">País</p>
+                <p className="text-sm font-medium text-[#132B73] mb-3">
+                  País
+                </p>
+
                 <div className="grid md:grid-cols-3 gap-4">
                   {ASSISTANT_COUNTRIES.map((item) => {
                     const active = countryCode === item.code
+
                     return (
                       <button
                         key={item.code}
@@ -300,7 +333,10 @@ export default function SetupClient() {
               </div>
 
               <div>
-                <p className="text-sm font-medium text-[#132B73] mb-3">Ciudad</p>
+                <p className="text-sm font-medium text-[#132B73] mb-3">
+                  Ciudad
+                </p>
+
                 <Input
                   placeholder="Ej: Lima, Ciudad de México, Bogotá"
                   value={city}
@@ -310,26 +346,26 @@ export default function SetupClient() {
               </div>
             </div>
           )}
-          
+
           {step === 4 && (
             <div>
               <div className="mb-8">
                 <h1 className="text-4xl font-bold text-[#132B73] mb-3">
                   Número de teléfono
                 </h1>
-          
+
                 <p className="text-[#5F6B7A] text-lg">
-                  Este será tu número principal. Puedes escribirlo con código país,
-                  por ejemplo: +51999999999.
+                  Este será tu número principal. Puedes escribirlo con código
+                  país, por ejemplo: +51999999999.
                 </p>
               </div>
-          
+
               <Input
                 placeholder="+51 999 999 999"
                 value={phone}
                 onChange={(e) => {
                   setPhone(e.target.value)
-          
+
                   if (phoneError) {
                     setPhoneError("")
                   }
@@ -338,13 +374,14 @@ export default function SetupClient() {
                   phoneError ? "border-red-400" : "border-[#D9E1EC]"
                 }`}
               />
-          
+
               {phoneError && (
                 <p className="text-sm text-red-500 mt-3">{phoneError}</p>
               )}
-          
+
               <p className="text-sm text-[#7A8493] mt-4">
-                Si no incluyes el +, intentaremos completarlo según el país elegido.
+                Si no incluyes el +, intentaremos completarlo según el país
+                elegido.
               </p>
             </div>
           )}
@@ -356,13 +393,15 @@ export default function SetupClient() {
                   Idioma de conversación
                 </h1>
                 <p className="text-[#5F6B7A] text-lg">
-                  Elige el idioma por defecto en el que deseas conversar con Operaly.
+                  Elige el idioma por defecto en el que deseas conversar con
+                  Operaly.
                 </p>
               </div>
 
               <div className="grid md:grid-cols-3 gap-4">
                 {ASSISTANT_LANGUAGES.map((item) => {
                   const active = language === item.code
+
                   return (
                     <button
                       key={item.code}
@@ -382,10 +421,14 @@ export default function SetupClient() {
 
               <div className="mt-8 rounded-2xl border border-[#D9E1EC] bg-[#F7FAFF] p-5">
                 <p className="text-sm text-[#5F6B7A]">
-                  Plan seleccionado: <strong>{selectedPlan?.name || planCode}</strong>
+                  Plan seleccionado:{" "}
+                  <strong>{selectedPlan?.name || planCode}</strong>
                 </p>
                 <p className="text-sm text-[#5F6B7A] mt-1">
-                  Método de acceso: <strong>{authData?.method === "email" ? "Email" : "OAuth"}</strong>
+                  Método de acceso:{" "}
+                  <strong>
+                    {authData?.method === "email" ? "Email" : "OAuth"}
+                  </strong>
                 </p>
               </div>
             </div>
@@ -396,7 +439,11 @@ export default function SetupClient() {
               type="button"
               variant="ghost"
               className="h-12 px-0 text-[#5F6B7A]"
-              onClick={step === 1 ? () => router.push(`/register?plan=${planCode}`) : prevStep}
+              onClick={
+                step === 1
+                  ? () => router.push(`/register?plan=${planCode}`)
+                  : prevStep
+              }
               disabled={submitting}
             >
               Atrás
