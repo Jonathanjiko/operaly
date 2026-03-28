@@ -16,34 +16,40 @@ type EventItem = {
 
 type ClientPrefs = {
   locale: string
+  timeZone: string
 }
 
-function extractDateKey(value: string | null | undefined): string {
+function safeDate(value: string | null | undefined): Date | null {
   if (!value) {
-    return ""
+    return null
   }
 
-  const raw = String(value).trim()
+  const parsed = new Date(String(value))
 
-  if (raw.length >= 10) {
-    return raw.slice(0, 10)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
   }
 
-  return ""
+  return parsed
 }
 
-function extractTimeLabel(value: string | null | undefined): string {
-  if (!value) {
-    return ""
-  }
+function getDateKeyInTimeZone(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
 
-  const raw = String(value).trim()
+  return formatter.format(date)
+}
 
-  if (raw.length >= 16) {
-    return raw.slice(11, 16)
-  }
-
-  return ""
+function getTimeLabelInTimeZone(date: Date, locale: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
 }
 
 function mapLanguageToLocale(language: string | null | undefined): string {
@@ -59,25 +65,24 @@ function mapLanguageToLocale(language: string | null | undefined): string {
 }
 
 function formatStoredDateTime(
-  dateKey: string,
-  timeLabel: string,
-  locale: string
+  value: string,
+  locale: string,
+  timeZone: string
 ): string {
-  const [year, month, day] = dateKey.split("-").map(Number)
+  const parsed = safeDate(value)
 
-  if (!year || !month || !day) {
-    return `${dateKey}${timeLabel ? ` ${timeLabel}` : ""}`
+  if (!parsed) {
+    return value
   }
 
-  const date = new Date(year, month - 1, day)
-
-  const dateText = new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(date)
-
-  return timeLabel ? `${dateText} ${timeLabel}` : dateText
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed)
 }
 
 export default function AgendaPage() {
@@ -86,6 +91,7 @@ export default function AgendaPage() {
   const [events, setEvents] = useState<EventItem[]>([])
   const [clientPrefs, setClientPrefs] = useState<ClientPrefs>({
     locale: "es-PE",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima",
   })
 
   useEffect(() => {
@@ -95,17 +101,9 @@ export default function AgendaPage() {
         const prefs = await loadClientPrefs(clientId)
 
         setClientPrefs(prefs)
+        setSelectedDate(getDateKeyInTimeZone(new Date(), prefs.timeZone))
 
-        const today = new Date()
-        const todayKey = [
-          today.getFullYear(),
-          String(today.getMonth() + 1).padStart(2, "0"),
-          String(today.getDate()).padStart(2, "0"),
-        ].join("-")
-
-        setSelectedDate(todayKey)
-
-        await loadEvents(clientId)
+        await loadEvents(clientId, prefs)
       } finally {
         setLoading(false)
       }
@@ -115,11 +113,23 @@ export default function AgendaPage() {
   }, [])
 
   const loadClientPrefs = async (clientId: string): Promise<ClientPrefs> => {
+    const browserTimeZone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima"
+
     const { data: clientRow } = await supabase
       .from("clients")
-      .select("preferred_language, language")
+      .select("timezone, timezone_auto, preferred_language, language")
       .eq("id", clientId)
       .maybeSingle()
+
+    const storedTimeZone = String(clientRow?.timezone || "").trim()
+    const autoTimeZone = String(clientRow?.timezone_auto || "").trim()
+
+    const resolvedTimeZone =
+      autoTimeZone ||
+      (storedTimeZone && storedTimeZone !== "America/Lima"
+        ? storedTimeZone
+        : browserTimeZone)
 
     const language =
       clientRow?.preferred_language ||
@@ -128,10 +138,11 @@ export default function AgendaPage() {
 
     return {
       locale: mapLanguageToLocale(language),
+      timeZone: resolvedTimeZone || "America/Lima",
     }
   }
 
-  const loadEvents = async (clientId: string) => {
+  const loadEvents = async (clientId: string, prefs: ClientPrefs) => {
     const { data: tasks, error: tasksError } = await supabase
       .from("tasks")
       .select("id, title, due_at, status")
@@ -152,27 +163,43 @@ export default function AgendaPage() {
 
     const mappedTasks: EventItem[] = (tasks || [])
       .filter((task: any) => task.due_at)
-      .map((task: any) => ({
-        id: task.id,
-        title: task.title || "Tarea",
-        dateKey: extractDateKey(task.due_at),
-        timeLabel: extractTimeLabel(task.due_at),
-        type: "task" as const,
-        sourceAt: task.due_at,
-      }))
-      .filter((item) => item.dateKey)
+      .map((task: any) => {
+        const parsed = safeDate(task.due_at)
+
+        if (!parsed) {
+          return null
+        }
+
+        return {
+          id: task.id,
+          title: task.title || "Tarea",
+          dateKey: getDateKeyInTimeZone(parsed, prefs.timeZone),
+          timeLabel: getTimeLabelInTimeZone(parsed, prefs.locale, prefs.timeZone),
+          type: "task" as const,
+          sourceAt: task.due_at,
+        }
+      })
+      .filter(Boolean) as EventItem[]
 
     const mappedAutomations: EventItem[] = (automations || [])
       .filter((item: any) => item.next_run)
-      .map((item: any) => ({
-        id: item.id,
-        title: item.title || "Automatización",
-        dateKey: extractDateKey(item.next_run),
-        timeLabel: extractTimeLabel(item.next_run),
-        type: "automation" as const,
-        sourceAt: item.next_run,
-      }))
-      .filter((item) => item.dateKey)
+      .map((item: any) => {
+        const parsed = safeDate(item.next_run)
+
+        if (!parsed) {
+          return null
+        }
+
+        return {
+          id: item.id,
+          title: item.title || "Automatización",
+          dateKey: getDateKeyInTimeZone(parsed, prefs.timeZone),
+          timeLabel: getTimeLabelInTimeZone(parsed, prefs.locale, prefs.timeZone),
+          type: "automation" as const,
+          sourceAt: item.next_run,
+        }
+      })
+      .filter(Boolean) as EventItem[]
 
     setEvents([...mappedTasks, ...mappedAutomations])
   }
@@ -248,9 +275,9 @@ export default function AgendaPage() {
                 <p className="text-sm text-muted-foreground">
                   Fecha:{" "}
                   {formatStoredDateTime(
-                    event.dateKey,
-                    event.timeLabel,
-                    clientPrefs.locale
+                    event.sourceAt,
+                    clientPrefs.locale,
+                    clientPrefs.timeZone
                   )}
                 </p>
               </div>
