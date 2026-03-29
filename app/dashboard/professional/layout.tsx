@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
+import NotificationBell from "@/components/dashboard/NotificationBell"
 import {
   LayoutDashboard,
   FileText,
@@ -17,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Bell,
   Search,
   Menu,
 } from "lucide-react"
@@ -50,6 +50,7 @@ export default function ProfessionalDashboardLayout({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [checkingAccess, setCheckingAccess] = useState(true)
@@ -114,8 +115,8 @@ export default function ProfessionalDashboardLayout({
         <p className="text-[#5F6B7A]">Validando tu acceso...</p>
       </div>
     )
-  }  
-  
+  }
+
   return (
     <div className="min-h-screen bg-secondary/30">
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 flex items-center justify-between px-4">
@@ -170,7 +171,10 @@ export default function ProfessionalDashboardLayout({
             )}
           </button>
 
-          <button onClick={() => setMobileOpen(false)} className="lg:hidden p-2">
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="lg:hidden p-2"
+          >
             <ChevronLeft className="w-5 h-5" />
           </button>
         </div>
@@ -264,10 +268,7 @@ export default function ProfessionalDashboardLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors">
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#EF4444] rounded-full" />
-            </button>
+            <NotificationBell />
 
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] flex items-center justify-center text-white font-semibold text-sm">
               {profile.initials}
