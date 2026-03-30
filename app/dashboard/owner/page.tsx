@@ -257,8 +257,17 @@ export default function OwnerDashboardPage() {
       setLoading(true)
     }
 
+    const withTimeout = async <T,>(promise: Promise<T>, ms = 12000): Promise<T> => {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          setTimeout(() => reject(new Error("timeout")), ms)
+        }),
+      ])
+    }
+
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser()
+      const { data: authData, error: authError } = await withTimeout(supabase.auth.getUser())
 
       if (authError) {
         throw authError
@@ -286,86 +295,59 @@ export default function OwnerDashboardPage() {
         email: String(user.email || ""),
       })
 
-      const [
-        summaryResponse,
-        paymentsResponse,
-        subscriptionsResponse,
-        clientsResponse,
-      ] = await Promise.all([
-        supabase.rpc("owner_dashboard_summary"),
-        supabase.rpc("owner_recent_payments", { p_limit: 50 }),
-        supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }),
-        supabase.rpc("owner_clients_list", { p_limit: 100 }),
-      ])
+      let nextSummary: SummaryRow | null = null
+      let nextPayments: PaymentRow[] = []
+      let nextSubscriptions: SubscriptionRow[] = []
+      let nextClients: ClientRow[] = []
 
-      if (summaryResponse.error) {
-        throw summaryResponse.error
-      }
-
-      if (paymentsResponse.error) {
-        throw paymentsResponse.error
-      }
-
-      if (subscriptionsResponse.error) {
-        throw subscriptionsResponse.error
-      }
-
-      if (clientsResponse.error) {
-        throw clientsResponse.error
-      }
-
-      let nextSummary = (summaryResponse.data || null) as SummaryRow | null
-      let nextPayments = (paymentsResponse.data || []) as PaymentRow[]
-      let nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
-      let nextClients = (clientsResponse.data || []) as ClientRow[]
-
-      // Fallback real si las RPCs vienen vacías
-      if (
-        nextClients.length === 0 &&
-        nextPayments.length === 0 &&
-        nextSubscriptions.length === 0
-      ) {
-        const [
-          directClientsResponse,
-          directPaymentsResponse,
-          directSubscriptionsResponse,
-        ] = await Promise.all([
-          supabase
-            .from("clients")
-            .select(
-              "id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at"
-            )
-            .order("created_at", { ascending: false })
-            .limit(100),
-
-          supabase
-            .from("billing_payments")
-            .select(
-              "id, client_id, status, amount_usd, currency_code, payment_method, payment_method_brand, order_id, transaction_id, created_at"
-            )
-            .order("created_at", { ascending: false })
-            .limit(100),
-
-          supabase
-            .from("billing_subscriptions")
-            .select(
-              "id, client_id, plan_code, status, amount_usd, currency_code, current_period_start, current_period_end, created_at"
-            )
-            .order("created_at", { ascending: false })
-            .limit(100),
+      try {
+        const [summaryResponse, paymentsResponse, subscriptionsResponse, clientsResponse] = await Promise.all([
+          withTimeout(supabase.rpc("owner_dashboard_summary"), 12000),
+          withTimeout(supabase.rpc("owner_recent_payments", { p_limit: 50 }), 12000),
+          withTimeout(supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }), 12000),
+          withTimeout(supabase.rpc("owner_clients_list", { p_limit: 100 }), 12000),
         ])
 
-        if (directClientsResponse.error) {
-          throw directClientsResponse.error
-        }
+        if (summaryResponse.error) throw summaryResponse.error
+        if (paymentsResponse.error) throw paymentsResponse.error
+        if (subscriptionsResponse.error) throw subscriptionsResponse.error
+        if (clientsResponse.error) throw clientsResponse.error
 
-        if (directPaymentsResponse.error) {
-          throw directPaymentsResponse.error
-        }
+        nextSummary = (summaryResponse.data || null) as SummaryRow | null
+        nextPayments = (paymentsResponse.data || []) as PaymentRow[]
+        nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
+        nextClients = (clientsResponse.data || []) as ClientRow[]
+      } catch {
+        const [directClientsResponse, directPaymentsResponse, directSubscriptionsResponse] = await Promise.all([
+          withTimeout(
+            supabase
+              .from("clients")
+              .select("id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            12000
+          ),
+          withTimeout(
+            supabase
+              .from("billing_payments")
+              .select("id, client_id, status, amount_usd, currency_code, payment_method, payment_method_brand, order_id, transaction_id, created_at")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            12000
+          ),
+          withTimeout(
+            supabase
+              .from("billing_subscriptions")
+              .select("id, client_id, plan_code, status, amount_usd, currency_code, current_period_start, current_period_end, created_at")
+              .order("created_at", { ascending: false })
+              .limit(100),
+            12000
+          ),
+        ])
 
-        if (directSubscriptionsResponse.error) {
-          throw directSubscriptionsResponse.error
-        }
+        if (directClientsResponse.error) throw directClientsResponse.error
+        if (directPaymentsResponse.error) throw directPaymentsResponse.error
+        if (directSubscriptionsResponse.error) throw directSubscriptionsResponse.error
 
         nextClients = ((directClientsResponse.data || []) as any[]).map((row) => ({
           id: String(row.id),
@@ -385,7 +367,6 @@ export default function OwnerDashboardPage() {
 
         nextPayments = ((directPaymentsResponse.data || []) as any[]).map((row) => {
           const client = clientMap.get(String(row.client_id))
-
           return {
             id: String(row.id),
             client_id: String(row.client_id),
@@ -405,107 +386,59 @@ export default function OwnerDashboardPage() {
           }
         })
 
-        nextSubscriptions = ((directSubscriptionsResponse.data || []) as any[]).map(
-          (row) => {
-            const client = clientMap.get(String(row.client_id))
-
-            return {
-              id: String(row.id),
-              client_id: String(row.client_id),
-              client_name: client?.name ?? null,
-              client_phone: client?.phone ?? null,
-              country_code: client?.country_code ?? null,
-              city: client?.city ?? null,
-              plan_code: String(row.plan_code || ""),
-              status: String(row.status || ""),
-              amount: Number(row.amount_usd || 0),
-              currency_code: String(row.currency_code || "USD"),
-              current_period_start: row.current_period_start ?? null,
-              current_period_end: row.current_period_end ?? null,
-              created_at: row.created_at,
-            }
+        nextSubscriptions = ((directSubscriptionsResponse.data || []) as any[]).map((row) => {
+          const client = clientMap.get(String(row.client_id))
+          return {
+            id: String(row.id),
+            client_id: String(row.client_id),
+            client_name: client?.name ?? null,
+            client_phone: client?.phone ?? null,
+            country_code: client?.country_code ?? null,
+            city: client?.city ?? null,
+            plan_code: String(row.plan_code || ""),
+            status: String(row.status || ""),
+            amount: Number(row.amount_usd || 0),
+            currency_code: String(row.currency_code || "USD"),
+            current_period_start: row.current_period_start ?? null,
+            current_period_end: row.current_period_end ?? null,
+            created_at: row.created_at,
           }
-        )
-
-        const activeClients = nextClients.filter(
-          (client) => String(client.status || "").toLowerCase() === "active"
-        ).length
-
-        const trialClients = nextClients.filter(
-          (client) => String(client.plan_code || "").toLowerCase() === "trial"
-        ).length
-
-        const paidClients = nextClients.filter((client) =>
-          ["core", "pro", "pro_plus"].includes(
-            String(client.plan_code || "").toLowerCase()
-          )
-        ).length
-
-        const proPlusClients = nextClients.filter(
-          (client) => String(client.plan_code || "").toLowerCase() === "pro_plus"
-        ).length
+        })
 
         const approvedPayments = nextPayments.filter((payment) =>
-          ["approved", "paid", "succeeded"].includes(
-            String(payment.status || "").toLowerCase()
-          )
+          ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
         )
-
         const pendingPayments = nextPayments.filter(
           (payment) => String(payment.status || "").toLowerCase() === "pending"
         )
-
         const failedPayments = nextPayments.filter((payment) =>
           ["failed", "declined"].includes(String(payment.status || "").toLowerCase())
         )
 
         const now = new Date()
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
         const weekStart = new Date(now)
         const day = now.getDay()
         const diff = day === 0 ? 6 : day - 1
         weekStart.setDate(now.getDate() - diff)
         weekStart.setHours(0, 0, 0, 0)
-
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
         nextSummary = {
           total_clients: nextClients.length,
-          active_clients: activeClients,
-          trial_clients: trialClients,
-          paid_clients: paidClients,
-          pro_plus_clients: proPlusClients,
-          payments_approved_total: approvedPayments.reduce(
-            (acc, item) => acc + Number(item.amount || 0),
-            0
-          ),
-          payments_pending_total: pendingPayments.reduce(
-            (acc, item) => acc + Number(item.amount || 0),
-            0
-          ),
-          payments_failed_total: failedPayments.reduce(
-            (acc, item) => acc + Number(item.amount || 0),
-            0
-          ),
-          payments_today_total: approvedPayments
-            .filter((item) => new Date(item.created_at) >= todayStart)
-            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_week_total: approvedPayments
-            .filter((item) => new Date(item.created_at) >= weekStart)
-            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_month_total: approvedPayments
-            .filter((item) => new Date(item.created_at) >= monthStart)
-            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          subscriptions_active: nextSubscriptions.filter(
-            (item) => String(item.status || "").toLowerCase() === "active"
-          ).length,
-          subscriptions_pending: nextSubscriptions.filter(
-            (item) => String(item.status || "").toLowerCase() === "pending"
-          ).length,
-          subscriptions_cancelled: nextSubscriptions.filter(
-            (item) => String(item.status || "").toLowerCase() === "cancelled"
-          ).length,
+          active_clients: nextClients.filter((client) => String(client.status || "").toLowerCase() === "active").length,
+          trial_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "trial").length,
+          paid_clients: nextClients.filter((client) => ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())).length,
+          pro_plus_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "pro_plus").length,
+          payments_approved_total: approvedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_pending_total: pendingPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_failed_total: failedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_today_total: approvedPayments.filter((item) => new Date(item.created_at) >= todayStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_week_total: approvedPayments.filter((item) => new Date(item.created_at) >= weekStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_month_total: approvedPayments.filter((item) => new Date(item.created_at) >= monthStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          subscriptions_active: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "active").length,
+          subscriptions_pending: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "pending").length,
+          subscriptions_cancelled: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length,
         }
       }
 
@@ -525,13 +458,22 @@ export default function OwnerDashboardPage() {
         setSelectedClientId("")
       }
     } catch (error: any) {
-      alert(error.message || "No se pudo cargar el panel owner.")
+      console.error("Owner dashboard load error:", error)
+      setSummary(null)
+      setPayments([])
+      setSubscriptions([])
+      setClients([])
+      setSelectedClientId("")
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }
-  
+
+  useEffect(() => {
+    loadOwnerDashboard()
+  }, [])
+
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
     const loadingKey = `plan:${clientId}:${planCode}`
     setActionLoadingKey(loadingKey)
