@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const backendUrl = String(process.env.OPERALY_BACKEND_URL || "").replace(/\/$/, "")
+  const backendUrl = String(
+    process.env.OPERALY_BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || ""
+  ).replace(/\/$/, "")
 
   if (!backendUrl) {
     return NextResponse.json(
@@ -58,6 +60,19 @@ export async function POST(req: NextRequest) {
         error: "missing_backend_url",
       },
       { status: 500 }
+    )
+  }
+
+  // En esta fase no rompemos nada: solo Izipay está operativo.
+  // Mercado Pago y Stripe quedan listos a nivel contrato, no implementados aún.
+  if (provider !== "izipay") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "provider_not_enabled_yet",
+        provider,
+      },
+      { status: 400 }
     )
   }
 
@@ -96,7 +111,6 @@ export async function POST(req: NextRequest) {
 
     const formToken = payload?.formToken || null
     const paymentUrl = payload?.payment_url || null
-
     const mode: CheckoutMode = formToken ? "embed" : "redirect"
 
     return NextResponse.json(
@@ -110,7 +124,7 @@ export async function POST(req: NextRequest) {
         order_id: payload?.order_id || null,
         deferred: Boolean(payload?.deferred),
 
-        // compatibilidad temporal con tu frontend actual
+        // compatibilidad temporal con frontend actual
         payment_url: paymentUrl,
         formToken,
       },
