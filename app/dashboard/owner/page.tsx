@@ -6,6 +6,7 @@ import {
   CreditCard,
   DollarSign,
   Layers3,
+  RefreshCcw,
   ShieldCheck,
   Users,
 } from "lucide-react"
@@ -86,8 +87,12 @@ const SECTIONS = [
   { id: "clients", label: "Clientes", icon: Users },
 ]
 
+const ADMIN_PLANS = ["trial", "core", "pro", "pro_plus"] as const
+type AdminPlan = (typeof ADMIN_PLANS)[number]
+
 export default function OwnerDashboardPage() {
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [activeSection, setActiveSection] = useState("overview")
   const [summary, setSummary] = useState<SummaryRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -95,6 +100,7 @@ export default function OwnerDashboardPage() {
   const [clients, setClients] = useState<ClientRow[]>([])
   const [ownerName, setOwnerName] = useState("Operaly Owner")
   const [ownerEmail, setOwnerEmail] = useState("")
+  const [actionLoadingKey, setActionLoadingKey] = useState("")
 
   const formatMoney = (amount: number | null | undefined) => {
     const numericAmount = Number(amount || 0)
@@ -157,90 +163,146 @@ export default function OwnerDashboardPage() {
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
-  useEffect(() => {
-    let cancelled = false
+  const clientStatusClass = (status: string | null | undefined) => {
+    const normalized = String(status || "").toLowerCase()
 
-    const loadOwnerDashboard = async () => {
+    if (normalized === "active") {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    }
+
+    if (normalized === "blocked") {
+      return "border-red-200 bg-red-50 text-red-700"
+    }
+
+    if (normalized === "inactive") {
+      return "border-slate-200 bg-slate-100 text-slate-700"
+    }
+
+    return "border-slate-200 bg-slate-100 text-slate-700"
+  }
+
+  const loadOwnerDashboard = async (useRefreshing = false) => {
+    if (useRefreshing) {
+      setRefreshing(true)
+    } else {
       setLoading(true)
+    }
 
-      try {
-        const { data: authData, error: authError } = await supabase.auth.getUser()
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser()
 
-        if (authError) {
-          throw authError
-        }
-
-        const user = authData.user
-
-        if (!user) {
-          throw new Error("No hay sesión activa.")
-        }
-
-        const metadata = user.user_metadata || {}
-        const appMetadata = user.app_metadata || {}
-        const isOwner =
-          Boolean(metadata.operaly_owner) ||
-          Boolean(metadata.owner_mode) ||
-          Boolean(appMetadata.operaly_owner)
-
-        if (!isOwner) {
-          throw new Error("No tienes permisos para ver este panel.")
-        }
-
-        setOwnerName(String(metadata.full_name || "Operaly Owner"))
-        setOwnerEmail(String(user.email || ""))
-
-        const [
-          summaryResponse,
-          paymentsResponse,
-          subscriptionsResponse,
-          clientsResponse,
-        ] = await Promise.all([
-          supabase.rpc("owner_dashboard_summary"),
-          supabase.rpc("owner_recent_payments", { p_limit: 20 }),
-          supabase.rpc("owner_recent_subscriptions", { p_limit: 20 }),
-          supabase.rpc("owner_clients_list", { p_limit: 50 }),
-        ])
-
-        if (summaryResponse.error) {
-          throw summaryResponse.error
-        }
-
-        if (paymentsResponse.error) {
-          throw paymentsResponse.error
-        }
-
-        if (subscriptionsResponse.error) {
-          throw subscriptionsResponse.error
-        }
-
-        if (clientsResponse.error) {
-          throw clientsResponse.error
-        }
-
-        if (!cancelled) {
-          setSummary((summaryResponse.data || null) as SummaryRow | null)
-          setPayments((paymentsResponse.data || []) as PaymentRow[])
-          setSubscriptions((subscriptionsResponse.data || []) as SubscriptionRow[])
-          setClients((clientsResponse.data || []) as ClientRow[])
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          alert(error.message || "No se pudo cargar el panel owner.")
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
+      if (authError) {
+        throw authError
       }
-    }
 
+      const user = authData.user
+
+      if (!user) {
+        throw new Error("No hay sesión activa.")
+      }
+
+      const metadata = user.user_metadata || {}
+      const appMetadata = user.app_metadata || {}
+      const isOwner =
+        Boolean(metadata.operaly_owner) ||
+        Boolean(metadata.owner_mode) ||
+        Boolean(appMetadata.operaly_owner)
+
+      if (!isOwner) {
+        throw new Error("No tienes permisos para ver este panel.")
+      }
+
+      setOwnerName(String(metadata.full_name || "Operaly Owner"))
+      setOwnerEmail(String(user.email || ""))
+
+      const [
+        summaryResponse,
+        paymentsResponse,
+        subscriptionsResponse,
+        clientsResponse,
+      ] = await Promise.all([
+        supabase.rpc("owner_dashboard_summary"),
+        supabase.rpc("owner_recent_payments", { p_limit: 20 }),
+        supabase.rpc("owner_recent_subscriptions", { p_limit: 20 }),
+        supabase.rpc("owner_clients_list", { p_limit: 50 }),
+      ])
+
+      if (summaryResponse.error) {
+        throw summaryResponse.error
+      }
+
+      if (paymentsResponse.error) {
+        throw paymentsResponse.error
+      }
+
+      if (subscriptionsResponse.error) {
+        throw subscriptionsResponse.error
+      }
+
+      if (clientsResponse.error) {
+        throw clientsResponse.error
+      }
+
+      setSummary((summaryResponse.data || null) as SummaryRow | null)
+      setPayments((paymentsResponse.data || []) as PaymentRow[])
+      setSubscriptions((subscriptionsResponse.data || []) as SubscriptionRow[])
+      setClients((clientsResponse.data || []) as ClientRow[])
+    } catch (error: any) {
+      alert(error.message || "No se pudo cargar el panel owner.")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
     loadOwnerDashboard()
-
-    return () => {
-      cancelled = true
-    }
   }, [])
+
+  const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
+    const loadingKey = `plan:${clientId}:${planCode}`
+    setActionLoadingKey(loadingKey)
+
+    try {
+      const { error } = await supabase.rpc("owner_set_client_plan", {
+        p_client_id: clientId,
+        p_plan_code: planCode,
+        p_plan_status: "active",
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await loadOwnerDashboard(true)
+    } catch (error: any) {
+      alert(error.message || "No se pudo actualizar el plan.")
+    } finally {
+      setActionLoadingKey("")
+    }
+  }
+
+  const runStatusChange = async (clientId: string, nextStatus: "active" | "blocked" | "inactive") => {
+    const loadingKey = `status:${clientId}:${nextStatus}`
+    setActionLoadingKey(loadingKey)
+
+    try {
+      const { error } = await supabase.rpc("owner_set_client_status", {
+        p_client_id: clientId,
+        p_status: nextStatus,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await loadOwnerDashboard(true)
+    } catch (error: any) {
+      alert(error.message || "No se pudo actualizar el estado del cliente.")
+    } finally {
+      setActionLoadingKey("")
+    }
+  }
 
   const overviewCards = useMemo(() => {
     if (!summary) {
@@ -302,9 +364,21 @@ export default function OwnerDashboardPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card px-4 py-3">
-          <p className="text-sm font-medium text-[#0F1F63]">{ownerName}</p>
-          <p className="text-xs text-muted-foreground">{ownerEmail}</p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl border border-border bg-card px-4 py-3">
+            <p className="text-sm font-medium text-[#0F1F63]">{ownerName}</p>
+            <p className="text-xs text-muted-foreground">{ownerEmail}</p>
+          </div>
+
+          <Button
+            variant="outline"
+            className="rounded-xl"
+            onClick={() => loadOwnerDashboard(true)}
+            disabled={refreshing}
+          >
+            <RefreshCcw className="w-4 h-4 mr-2" />
+            {refreshing ? "Actualizando..." : "Actualizar"}
+          </Button>
         </div>
       </div>
 
@@ -511,7 +585,7 @@ export default function OwnerDashboardPage() {
           {activeSection === "clients" ? (
             <div className="bg-card rounded-2xl border border-border p-6">
               <h2 className="text-xl font-semibold text-[#0F1F63] mb-6">
-                Clientes recientes
+                Clientes y control manual
               </h2>
 
               <div className="space-y-4">
@@ -520,33 +594,97 @@ export default function OwnerDashboardPage() {
                     key={client.id}
                     className="rounded-2xl border border-border p-4"
                   >
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                      <div>
-                        <p className="font-medium text-[#0F1F63]">
-                          {client.name || "Cliente sin nombre"}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {client.email || "Sin email"} · {client.phone || "Sin teléfono"}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {client.country_code || "—"} · {client.city || "—"} ·{" "}
-                          {client.timezone || "—"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Alta: {formatDateTime(client.created_at)}
-                        </p>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div>
+                          <p className="font-medium text-[#0F1F63]">
+                            {client.name || "Cliente sin nombre"}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {client.email || "Sin email"} · {client.phone || "Sin teléfono"}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {client.country_code || "—"} · {client.city || "—"} ·{" "}
+                            {client.timezone || "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Alta: {formatDateTime(client.created_at)}
+                          </p>
+                        </div>
+
+                        <div className="text-left xl:text-right">
+                          <p className="text-sm font-medium text-[#0F1F63]">
+                            Plan: {client.plan_code || "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Estado plan: {client.plan_status || "—"}
+                          </p>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${clientStatusClass(
+                              client.status
+                            )}`}
+                          >
+                            {client.status || "—"}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="text-left xl:text-right">
-                        <p className="text-sm font-medium text-[#0F1F63]">
-                          Plan: {client.plan_code || "—"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Estado plan: {client.plan_status || "—"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Estado cuenta: {client.status || "—"}
-                        </p>
+                      <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
+                        <div className="flex flex-wrap gap-2">
+                          {ADMIN_PLANS.map((planCode) => {
+                            const loadingKey = `plan:${client.id}:${planCode}`
+                            const isCurrent = client.plan_code === planCode
+
+                            return (
+                              <Button
+                                key={planCode}
+                                variant={isCurrent ? "secondary" : "outline"}
+                                className="rounded-xl"
+                                disabled={Boolean(actionLoadingKey) || isCurrent}
+                                onClick={() => runPlanChange(client.id, planCode)}
+                              >
+                                {actionLoadingKey === loadingKey
+                                  ? "Actualizando..."
+                                  : `Plan ${planCode}`}
+                              </Button>
+                            )
+                          })}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            disabled={Boolean(actionLoadingKey) || client.status === "active"}
+                            onClick={() => runStatusChange(client.id, "active")}
+                          >
+                            {actionLoadingKey === `status:${client.id}:active`
+                              ? "Actualizando..."
+                              : "Activar"}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            disabled={Boolean(actionLoadingKey) || client.status === "blocked"}
+                            onClick={() => runStatusChange(client.id, "blocked")}
+                          >
+                            {actionLoadingKey === `status:${client.id}:blocked`
+                              ? "Actualizando..."
+                              : "Bloquear"}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            disabled={Boolean(actionLoadingKey) || client.status === "inactive"}
+                            onClick={() => runStatusChange(client.id, "inactive")}
+                          >
+                            {actionLoadingKey === `status:${client.id}:inactive`
+                              ? "Actualizando..."
+                              : "Dar de baja"}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
