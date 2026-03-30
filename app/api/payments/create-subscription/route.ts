@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
         {
           ok: false,
           error: payload?.detail || payload?.error || "checkout_failed",
+          detail: payload?.detail || payload?.error || "checkout_failed",
         },
         { status: response.status }
       )
