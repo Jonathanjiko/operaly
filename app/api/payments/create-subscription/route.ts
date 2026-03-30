@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-type PaymentProvider = "izipay" | "mercadopago" | "stripe"
-type CheckoutMode = "redirect" | "embed"
+type PaymentProvider = "mercadopago" | "stripe"
 
 type CheckoutRequestBody = {
   clientId?: string
@@ -26,8 +25,8 @@ export async function POST(req: NextRequest) {
 
   const clientId = String(body.clientId || "").trim()
   const planCode = String(body.planCode || "").trim().toLowerCase()
-  const provider = (String(body.provider || "izipay").trim().toLowerCase() ||
-    "izipay") as PaymentProvider
+  const provider = (String(body.provider || "mercadopago").trim().toLowerCase() ||
+    "mercadopago") as PaymentProvider
 
   if (!clientId) {
     return NextResponse.json(
@@ -63,19 +62,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // En esta fase no rompemos nada: solo Izipay está operativo.
-  // Mercado Pago y Stripe quedan listos a nivel contrato, no implementados aún.
-  if (provider !== "izipay") {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "provider_not_enabled_yet",
-        provider,
-      },
-      { status: 400 }
-    )
-  }
-
   try {
     const response = await fetch(`${backendUrl}/billing/checkout`, {
       method: "POST",
@@ -86,6 +72,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         client_id: clientId,
         item_code: planCode,
+        provider,
       }),
       cache: "no-store",
     })
@@ -109,24 +96,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const formToken = payload?.formToken || null
-    const paymentUrl = payload?.payment_url || null
-    const mode: CheckoutMode = formToken ? "embed" : "redirect"
-
     return NextResponse.json(
       {
         ok: true,
-        provider,
-        mode,
-        checkout_url: paymentUrl,
-        embed_token: formToken,
-        public_key: payload?.publicKey || null,
+        provider: payload?.provider || provider,
+        mode: payload?.mode || null,
+        checkout_url: payload?.checkout_url || null,
+        init_point: payload?.init_point || null,
+        subscription_id: payload?.subscription_id || null,
+        preapproval_plan_id: payload?.preapproval_plan_id || null,
         order_id: payload?.order_id || null,
-        deferred: Boolean(payload?.deferred),
-
-        // compatibilidad temporal con frontend actual
-        payment_url: paymentUrl,
-        formToken,
+        payment_url: payload?.payment_url || null,
       },
       { status: 200 }
     )
