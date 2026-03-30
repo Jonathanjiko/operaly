@@ -10,6 +10,7 @@ import {
   DollarSign,
   Layers3,
   RefreshCcw,
+  ShieldCheck,
   TrendingUp,
   XCircle,
 } from "lucide-react"
