@@ -43,13 +43,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const backendUrl = (process.env.OPERALY_BACKEND_URL || "").replace(/\/$/, "")
+  const backendUrl = String(process.env.OPERALY_BACKEND_URL || "").replace(/\/$/, "")
 
   if (!backendUrl) {
     return NextResponse.json(
       {
         ok: false,
-        error: "OPERALY_BACKEND_URL is not configured",
+        error: "missing_backend_url",
       },
       { status: 500 }
     )
@@ -95,9 +95,6 @@ export async function POST(req: NextRequest) {
         formToken: payload?.formToken || null,
         order_id: payload?.order_id || null,
         deferred: Boolean(payload?.deferred),
-        item_code: payload?.item_code || planCode,
-        client_id: payload?.client_id || clientId,
-        amount_usd: payload?.amount_usd ?? null,
       },
       { status: 200 }
     )
@@ -105,7 +102,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: error?.message || "unexpected_proxy_error",
+        error: error?.message || "unexpected_checkout_proxy_error",
       },
       { status: 500 }
     )
