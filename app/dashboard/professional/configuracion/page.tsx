@@ -9,7 +9,6 @@ import {
   Phone,
   RefreshCcw,
   ShieldCheck,
-  Sparkles,
   User,
   Wallet,
 } from "lucide-react"
@@ -20,19 +19,19 @@ import { supabase } from "@/lib/supabase"
 type ClientRow = {
   id: string
   phone: string
+  phone_normalized: string | null
   name: string | null
   timezone: string | null
+  timezone_auto: string | null
+  timezone_source: string | null
   created_at: string | null
   profession_code: string | null
   country_code: string | null
-  timezone_auto: string | null
-  timezone_source: string | null
   currency_code: string | null
   email: string | null
   language: string | null
   city: string | null
   preferred_language: string | null
-  phone_normalized: string | null
   phone_verified_at: string | null
   phone_verification_status: string | null
   phone_verification_requested_at: string | null
@@ -95,6 +94,8 @@ type AuthMetadata = {
   selected_plan?: string
 }
 
+const BILLING_CURRENCY_CODE = "USD"
+
 const PLAN_LABELS: Record<string, string> = {
   trial: "Trial",
   core: "Core",
@@ -120,7 +121,6 @@ const PAID_PLANS = [
 export default function ProfessionalSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [startingCheckout, setStartingCheckout] = useState(false)
 
   const [clientId, setClientId] = useState("")
   const [email, setEmail] = useState("")
@@ -131,7 +131,7 @@ export default function ProfessionalSettingsPage() {
   const [profession, setProfession] = useState("")
   const [countryCode, setCountryCode] = useState("")
   const [city, setCity] = useState("")
-  const [currencyCode, setCurrencyCode] = useState("PEN")
+  const [profileCurrencyCode, setProfileCurrencyCode] = useState("PEN")
   const [language, setLanguage] = useState("es")
   const [preferredLanguage, setPreferredLanguage] = useState("es")
   const [timezone, setTimezone] = useState("America/Lima")
@@ -142,9 +142,6 @@ export default function ProfessionalSettingsPage() {
   const [phoneVerificationRequestedAt, setPhoneVerificationRequestedAt] = useState<string | null>(null)
   const [clientPlanCode, setClientPlanCode] = useState("trial")
   const [clientPlanStatus, setClientPlanStatus] = useState("trialing")
-
-  const [tone, setTone] = useState("profesional")
-  const [instructions, setInstructions] = useState("")
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -164,15 +161,7 @@ export default function ProfessionalSettingsPage() {
 
   const effectivePlanCode = subscription?.plan_code || clientPlanCode || "trial"
   const effectivePlanStatus = subscription?.status || clientPlanStatus || "trialing"
-
   const currentPlanLabel = PLAN_LABELS[effectivePlanCode] || effectivePlanCode
-
-  const toneOptions = [
-    { code: "profesional", label: "Profesional" },
-    { code: "amigable", label: "Amigable" },
-    { code: "formal", label: "Formal" },
-    { code: "cercano", label: "Cercano" },
-  ]
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -190,11 +179,11 @@ export default function ProfessionalSettingsPage() {
     code: string | null | undefined,
     amount: number | string | null | undefined
   ) => {
-    const safeCode = String(code || currencyCode || "PEN").toUpperCase()
+    const safeCode = String(code || BILLING_CURRENCY_CODE).toUpperCase()
     const numericAmount = Number(amount || 0)
 
     try {
-      return new Intl.NumberFormat("es-PE", {
+      return new Intl.NumberFormat("en-US", {
         style: "currency",
         currency: safeCode,
       }).format(numericAmount)
@@ -265,6 +254,14 @@ export default function ProfessionalSettingsPage() {
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
+  const normalizePhoneForStorage = (value: string) => {
+    return value.replace(/[^\d+]/g, "").trim()
+  }
+
+  const validateNormalizedPhone = (value: string) => {
+    return /^\+\d{7,15}$/.test(value)
+  }
+
   const loadData = async () => {
     setLoading(true)
 
@@ -297,19 +294,19 @@ export default function ProfessionalSettingsPage() {
           `
             id,
             phone,
+            phone_normalized,
             name,
             timezone,
+            timezone_auto,
+            timezone_source,
             created_at,
             profession_code,
             country_code,
-            timezone_auto,
-            timezone_source,
             currency_code,
             email,
             language,
             city,
             preferred_language,
-            phone_normalized,
             phone_verified_at,
             phone_verification_status,
             phone_verification_requested_at,
@@ -328,11 +325,13 @@ export default function ProfessionalSettingsPage() {
 
       setFullName(String(client.name || metadata.full_name || ""))
       setPhone(String(client.phone || metadata.phone || ""))
-      setPhoneNormalized(String(client.phone_normalized || metadata.phone_normalized || client.phone || ""))
+      setPhoneNormalized(
+        String(client.phone_normalized || metadata.phone_normalized || client.phone || "")
+      )
       setProfession(String(client.profession_code || metadata.profession_code || ""))
       setCountryCode(String(client.country_code || metadata.country_code || ""))
       setCity(String(client.city || metadata.city || ""))
-      setCurrencyCode(String(client.currency_code || "PEN"))
+      setProfileCurrencyCode(String(client.currency_code || "PEN"))
       setLanguage(String(client.language || metadata.preferred_language || "es"))
       setPreferredLanguage(String(client.preferred_language || metadata.preferred_language || "es"))
       setTimezone(String(client.timezone || metadata.timezone || "America/Lima"))
@@ -343,24 +342,6 @@ export default function ProfessionalSettingsPage() {
       setPhoneVerificationRequestedAt(client.phone_verification_requested_at || null)
       setClientPlanCode(String(client.plan_code || metadata.selected_plan || "trial"))
       setClientPlanStatus(String(client.plan_status || "trialing"))
-
-      const { data: prefsData, error: prefsError } = await supabase
-        .from("client_preferences")
-        .select("pref_key, pref_value")
-        .eq("client_id", resolvedClientId)
-
-      if (prefsError) {
-        throw prefsError
-      }
-
-      const prefs = (prefsData || []) as PreferenceRow[]
-      const tonePref = prefs.find((row) => row.pref_key === "assistant_tone")
-      const instructionsPref = prefs.find(
-        (row) => row.pref_key === "assistant_instructions"
-      )
-
-      setTone(tonePref?.pref_value || "profesional")
-      setInstructions(instructionsPref?.pref_value || "")
 
       const { data: subscriptionData, error: subscriptionError } = await supabase
         .from("billing_subscriptions")
@@ -436,14 +417,6 @@ export default function ProfessionalSettingsPage() {
     loadData()
   }, [])
 
-  const normalizePhoneForStorage = (value: string) => {
-    return value.replace(/[^\d+]/g, "").trim()
-  }
-
-  const validateNormalizedPhone = (value: string) => {
-    return /^\+\d{7,15}$/.test(value)
-  }
-
   const upsertPreference = async (key: string, value: string) => {
     const { error } = await supabase.from("client_preferences").upsert(
       {
@@ -483,7 +456,7 @@ export default function ProfessionalSettingsPage() {
       const normalizedProfession = profession.trim()
       const normalizedCountryCode = countryCode.trim().toUpperCase()
       const normalizedCity = city.trim()
-      const normalizedCurrencyCode = currencyCode.trim().toUpperCase() || "PEN"
+      const normalizedProfileCurrencyCode = profileCurrencyCode.trim().toUpperCase() || "PEN"
       const normalizedLanguage = language.trim().toLowerCase() || "es"
       const normalizedPreferredLanguage = preferredLanguage.trim().toLowerCase() || normalizedLanguage
       const normalizedTimezone = timezone.trim() || "America/Lima"
@@ -497,7 +470,7 @@ export default function ProfessionalSettingsPage() {
           profession_code: normalizedProfession || null,
           country_code: normalizedCountryCode || null,
           city: normalizedCity || null,
-          currency_code: normalizedCurrencyCode,
+          currency_code: normalizedProfileCurrencyCode,
           language: normalizedLanguage,
           preferred_language: normalizedPreferredLanguage,
           timezone: normalizedTimezone,
@@ -509,9 +482,6 @@ export default function ProfessionalSettingsPage() {
       if (clientError) {
         throw clientError
       }
-
-      await upsertPreference("assistant_tone", tone)
-      await upsertPreference("assistant_instructions", instructions.trim())
 
       const { error: authUpdateError } = await supabase.auth.updateUser({
         data: {
@@ -530,6 +500,8 @@ export default function ProfessionalSettingsPage() {
         throw authUpdateError
       }
 
+      await upsertPreference("assistant_tone", "profesional")
+
       alert("Configuración guardada correctamente.")
       await loadData()
     } catch (error: any) {
@@ -539,47 +511,13 @@ export default function ProfessionalSettingsPage() {
     }
   }
 
-  const handleStartCheckout = async (planCode: string) => {
-    if (planCode === "trial") {
-      alert("El plan Trial no requiere pago.")
-      return
-    }
-
+  const handleChangePlan = (planCode: string) => {
     if (!clientId) {
       alert("No encontramos el cliente de esta cuenta.")
       return
     }
 
-    setStartingCheckout(true)
-
-    try {
-      const response = await fetch("/api/payments/create-subscription", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clientId,
-          planCode,
-        }),
-      })
-
-      const payload = await response.json()
-
-      if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "checkout_failed")
-      }
-
-      if (!payload?.payment_url) {
-        throw new Error("missing_payment_url")
-      }
-
-      window.location.href = payload.payment_url
-    } catch (error: any) {
-      alert(error.message || "No se pudo iniciar el checkout.")
-    } finally {
-      setStartingCheckout(false)
-    }
+    window.location.href = `/iniciar-pago?plan=${planCode}&cid=${clientId}`
   }
 
   if (loading) {
@@ -703,11 +641,11 @@ export default function ProfessionalSettingsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[#0F1F63] mb-2">
-                  Moneda
+                  Moneda base del usuario
                 </label>
                 <Input
-                  value={currencyCode}
-                  onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())}
+                  value={profileCurrencyCode}
+                  onChange={(e) => setProfileCurrencyCode(e.target.value.toUpperCase())}
                   className="h-12 rounded-xl"
                   placeholder="PEN"
                 />
@@ -812,159 +750,6 @@ export default function ProfessionalSettingsPage() {
 
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
-              <Sparkles className="w-5 h-5 text-[#7C3AED]" />
-              <h2 className="text-xl font-semibold text-[#0F1F63]">
-                Configuración de Operaly
-              </h2>
-            </div>
-
-            <div className="rounded-2xl border border-[#CBB8FF] bg-[#F7F4FF] p-4 mb-6">
-              <p className="font-medium text-[#0F1F63]">Operaly activa</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Tu idioma base, timezone y estilo de respuesta quedan alineados a tu perfil.
-              </p>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-[#0F1F63] mb-3">
-                Tono de comunicación
-              </label>
-
-              <div className="flex flex-wrap gap-3">
-                {toneOptions.map((option) => {
-                  const isActive = tone === option.code
-
-                  return (
-                    <button
-                      key={option.code}
-                      type="button"
-                      onClick={() => setTone(option.code)}
-                      className={`px-4 py-2 rounded-full border transition-colors ${
-                        isActive
-                          ? "bg-[#3B82F6] text-white border-[#3B82F6]"
-                          : "bg-secondary/30 text-foreground border-border hover:bg-secondary/50"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#0F1F63] mb-3">
-                Instrucciones personalizadas
-              </label>
-
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                className="w-full min-h-[130px] rounded-2xl border border-border bg-secondary/20 p-4 outline-none focus:ring-2 focus:ring-[#3B82F6]/20"
-                placeholder="Escribe cómo quieres que Operaly trabaje contigo..."
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <div className="bg-card rounded-2xl border border-border p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Wallet className="w-5 h-5 text-[#0EA5E9]" />
-              <h2 className="text-xl font-semibold text-[#0F1F63]">
-                Plan y facturación
-              </h2>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-secondary/20 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Plan actual</p>
-                  <p className="text-2xl font-semibold text-[#0F1F63]">
-                    {currentPlanLabel}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Código: {effectivePlanCode}
-                  </p>
-                </div>
-
-                <span
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPlanStatusBadgeClass(
-                    effectivePlanStatus
-                  )}`}
-                >
-                  {effectivePlanStatus}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Importe
-                  </p>
-                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {subscription
-                      ? formatMoney(subscription.currency_code, subscription.amount)
-                      : formatMoney(currencyCode, 0)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Periodicidad
-                  </p>
-                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {subscription
-                      ? `${subscription.interval_count} ${subscription.interval_unit}`
-                      : "mensual"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Inicio
-                  </p>
-                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {formatDateTime(subscription?.starts_at || subscription?.created_at || null)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Próxima renovación
-                  </p>
-                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {formatDateTime(subscription?.current_period_end || null)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-3">
-                {(!subscription || subscription.status === "pending") && effectivePlanCode !== "trial" ? (
-                  <Button
-                    className="rounded-xl bg-[#0F1F63] hover:bg-[#132672] text-white"
-                    onClick={() => handleStartCheckout(effectivePlanCode)}
-                    disabled={startingCheckout}
-                  >
-                    {startingCheckout ? "Abriendo checkout..." : "Pagar plan actual"}
-                  </Button>
-                ) : null}
-
-                <Button
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={() => handleStartCheckout("pro")}
-                  disabled={startingCheckout}
-                >
-                  <RefreshCcw className="w-4 h-4 mr-2" />
-                  {startingCheckout ? "Procesando..." : "Cambiar plan"}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-2xl border border-border p-6">
-            <div className="flex items-center gap-2 mb-6">
               <ShieldCheck className="w-5 h-5 text-[#10B981]" />
               <h2 className="text-xl font-semibold text-[#0F1F63]">
                 Resumen operativo
@@ -1008,8 +793,94 @@ export default function ProfessionalSettingsPage() {
                   <p className="text-sm font-medium text-[#0F1F63]">Moneda de cobro</p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {currencyCode || "PEN"}
+                  {BILLING_CURRENCY_CODE}
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <div className="bg-card rounded-2xl border border-border p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <Wallet className="w-5 h-5 text-[#0EA5E9]" />
+              <h2 className="text-xl font-semibold text-[#0F1F63]">
+                Plan y facturación
+              </h2>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-secondary/20 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Plan actual</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">
+                    {currentPlanLabel}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Código: {effectivePlanCode}
+                  </p>
+                </div>
+
+                <span
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPlanStatusBadgeClass(
+                    effectivePlanStatus
+                  )}`}
+                >
+                  {effectivePlanStatus}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Importe
+                  </p>
+                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
+                    {subscription
+                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.amount)
+                      : formatMoney(BILLING_CURRENCY_CODE, 0)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Periodicidad
+                  </p>
+                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
+                    {subscription
+                      ? `${subscription.interval_count} ${subscription.interval_unit}`
+                      : "mensual"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Inicio
+                  </p>
+                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
+                    {formatDateTime(subscription?.starts_at || subscription?.created_at || null)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Próxima renovación
+                  </p>
+                  <p className="text-sm font-medium text-[#0F1F63] mt-1">
+                    {formatDateTime(subscription?.current_period_end || null)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3">
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => handleChangePlan("pro")}
+                >
+                  <RefreshCcw className="w-4 h-4 mr-2" />
+                  Cambiar plan
+                </Button>
               </div>
             </div>
           </div>
@@ -1036,7 +907,7 @@ export default function ProfessionalSettingsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
-                          {formatMoney(payment.currency_code, payment.amount)}
+                          {formatMoney(BILLING_CURRENCY_CODE, payment.amount)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
                           {payment.payment_method_brand
@@ -1092,13 +963,16 @@ export default function ProfessionalSettingsPage() {
                         <p className="text-sm text-muted-foreground mt-1">
                           Código del plan: {plan.code}
                         </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Cobro mensual en {BILLING_CURRENCY_CODE}
+                        </p>
                       </div>
 
                       <Button
                         variant={isCurrent ? "secondary" : "outline"}
                         className="rounded-xl"
-                        onClick={() => handleStartCheckout(plan.code)}
-                        disabled={startingCheckout || isCurrent}
+                        onClick={() => handleChangePlan(plan.code)}
+                        disabled={isCurrent}
                       >
                         {isCurrent ? "Plan actual" : "Elegir"}
                       </Button>
