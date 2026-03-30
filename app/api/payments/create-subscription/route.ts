@@ -1,7 +1,113 @@
-export async function POST(req: Request) {
-  const body = await req.json()
+import { NextRequest, NextResponse } from "next/server"
 
-  return Response.json({
-    url: "https://payment-link-demo",
-  })
+type CheckoutRequestBody = {
+  clientId?: string
+  planCode?: string
+}
+
+export async function POST(req: NextRequest) {
+  let body: CheckoutRequestBody
+
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "invalid_json",
+      },
+      { status: 400 }
+    )
+  }
+
+  const clientId = String(body.clientId || "").trim()
+  const planCode = String(body.planCode || "").trim().toLowerCase()
+
+  if (!clientId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "missing_client_id",
+      },
+      { status: 400 }
+    )
+  }
+
+  if (!planCode) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "missing_plan_code",
+      },
+      { status: 400 }
+    )
+  }
+
+  const backendUrl = (process.env.OPERALY_BACKEND_URL || "").replace(/\/$/, "")
+
+  if (!backendUrl) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "OPERALY_BACKEND_URL is not configured",
+      },
+      { status: 500 }
+    )
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}/billing/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        item_code: planCode,
+      }),
+      cache: "no-store",
+    })
+
+    const contentType = response.headers.get("content-type") || ""
+
+    const payload = contentType.includes("application/json")
+      ? await response.json()
+      : {
+          ok: false,
+          error: await response.text(),
+        }
+
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: payload?.detail || payload?.error || "checkout_failed",
+        },
+        { status: response.status }
+      )
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        payment_url: payload?.payment_url || null,
+        formToken: payload?.formToken || null,
+        order_id: payload?.order_id || null,
+        deferred: Boolean(payload?.deferred),
+        item_code: payload?.item_code || planCode,
+        client_id: payload?.client_id || clientId,
+        amount_usd: payload?.amount_usd ?? null,
+      },
+      { status: 200 }
+    )
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error?.message || "unexpected_proxy_error",
+      },
+      { status: 500 }
+    )
+  }
 }
