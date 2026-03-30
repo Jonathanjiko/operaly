@@ -162,7 +162,7 @@ export default function OwnerPaymentsMetricsPanel() {
     setError("")
 
     try {
-      const res = await fetch(`/owner/metrics/payments-funnel?days=${targetDays}`, {
+      const res = await fetch(`/api/owner/metrics/payments-funnel?days=${targetDays}`, {
         method: "GET",
         cache: "no-store",
       })
