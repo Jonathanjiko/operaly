@@ -101,15 +101,15 @@ export default function IniciarPagoClient() {
       setCheckoutError("Selecciona un plan de pago válido.")
       return
     }
-
+  
     if (!clientId) {
       setCheckoutError("Falta el identificador del cliente para iniciar el cobro.")
       return
     }
-
+  
     setCheckoutError("")
     setSubmitting(true)
-
+  
     try {
       const response = await fetch("/api/payments/create-subscription", {
         method: "POST",
@@ -121,18 +121,49 @@ export default function IniciarPagoClient() {
           planCode: selectedPlan.code,
         }),
       })
-
+  
       const payload = await response.json()
-
+  
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "checkout_failed")
       }
-
-      if (!payload?.payment_url) {
+  
+      const paymentUrl = String(payload?.payment_url || "").trim()
+      const formToken = String(payload?.formToken || "").trim()
+      const isDeferred = Boolean(payload?.deferred)
+  
+      // Caso 1: el backend sí devolvió token, pero el frontend aún no lo renderiza.
+      if (formToken) {
+        setCheckoutError(
+          "Operaly recibió el token de pago, pero este frontend todavía no está renderizando el checkout real de Izipay. No voy a redirigirte a una URL incorrecta."
+        )
+        return
+      }
+  
+      // Caso 2: URL vacía
+      if (!paymentUrl) {
         throw new Error("missing_payment_url")
       }
-
-      window.location.href = payload.payment_url
+  
+      // Caso 3: evitar loop / falsa redirección al mismo checkout
+      const currentUrl =
+        typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""
+  
+      const normalizedPaymentUrl = paymentUrl.split("?")[0]
+  
+      if (
+        normalizedPaymentUrl.endsWith("/iniciar-pago") ||
+        normalizedPaymentUrl === currentUrl
+      ) {
+        setCheckoutError(
+          isDeferred
+            ? "Izipay no devolvió un checkout renderizable en este intento. El backend quedó en modo diferido y no voy a enviarte otra vez a la misma pantalla."
+            : "El backend devolvió una URL interna de Operaly en lugar de abrir el checkout real. Debemos conectar el formToken con el SDK de Izipay."
+        )
+        return
+      }
+  
+      window.location.href = paymentUrl
     } catch (error: any) {
       setCheckoutError(
         error?.message || "No se pudo iniciar el checkout con Izipay."
