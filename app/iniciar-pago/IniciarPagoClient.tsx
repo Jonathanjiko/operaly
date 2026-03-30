@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { getPlanByCode } from "@/lib/plans"
 
@@ -19,12 +19,14 @@ type PendingSignup = {
 }
 
 export default function IniciarPagoClient() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const planCode = searchParams.get("plan")
+  const clientId = searchParams.get("cid")
 
   const [pendingSignup, setPendingSignup] = useState<PendingSignup | null>(null)
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [checkoutError, setCheckoutError] = useState("")
 
   const plan = useMemo(() => getPlanByCode(planCode), [planCode])
 
@@ -40,8 +42,48 @@ export default function IniciarPagoClient() {
     setLoading(false)
   }, [])
 
-  const handleContinue = () => {
-    router.push("/onboarding?payment=ready")
+  const handleContinue = async () => {
+    if (!plan || plan.code === "trial") {
+      setCheckoutError("Plan inválido para checkout.")
+      return
+    }
+
+    if (!clientId) {
+      setCheckoutError("Falta el identificador del cliente para iniciar el pago.")
+      return
+    }
+
+    setCheckoutError("")
+    setSubmitting(true)
+
+    try {
+      const response = await fetch("/api/payments/create-subscription", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clientId,
+          planCode: plan.code,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "checkout_failed")
+      }
+
+      if (!payload?.payment_url) {
+        throw new Error("missing_payment_url")
+      }
+
+      window.location.href = payload.payment_url
+    } catch (error: any) {
+      setCheckoutError(error?.message || "No se pudo iniciar el checkout.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) {
@@ -79,7 +121,7 @@ export default function IniciarPagoClient() {
           </h1>
 
           <p className="text-muted-foreground mb-8">
-            Esta página reemplaza la ruta faltante <strong>/iniciar-pago</strong>.
+            Estás a un paso de activar tu plan de Operaly.
           </p>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
@@ -106,7 +148,7 @@ export default function IniciarPagoClient() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No se encontraron datos del registro en el navegador.
+                  No se encontraron datos adicionales del registro en el navegador.
                 </p>
               )}
             </div>
@@ -114,16 +156,24 @@ export default function IniciarPagoClient() {
 
           <div className="rounded-2xl bg-secondary/20 border border-border p-5 mb-8">
             <p className="text-sm text-muted-foreground">
-              En el siguiente bloque conectaremos esta página al backend real e Izipay.
+              Vas a iniciar el checkout real de Operaly con Izipay. Cuando el pago se confirme,
+              tu plan quedará activado automáticamente.
             </p>
           </div>
+
+          {checkoutError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 mb-8">
+              <p className="text-sm text-red-700">{checkoutError}</p>
+            </div>
+          ) : null}
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
               onClick={handleContinue}
+              disabled={submitting}
               className="h-12 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] hover:opacity-90 text-white"
             >
-              Continuar
+              {submitting ? "Conectando con Izipay..." : `Pagar ${plan.currency} ${plan.price}`}
             </Button>
 
             <Link href="/precios">
