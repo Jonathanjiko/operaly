@@ -12,6 +12,10 @@ import {
   ShieldCheck,
   Sparkles,
   Wallet,
+  AlertCircle,
+  ArrowRight,
+  CircleHelp,
+  Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
@@ -57,7 +61,7 @@ const PAYMENT_PROVIDERS: Array<{
   {
     code: "mercadopago",
     name: "Mercado Pago",
-    description: "Pasarela principal para suscripciones recurrentes en LATAM.",
+    description: "Proveedor principal para suscripciones y cobros recurrentes en esta fase.",
     enabled: true,
     badge: "Principal",
   },
@@ -80,6 +84,36 @@ function formatMoney(amount: number, currency = BILLING_CURRENCY_CODE) {
     }).format(amount)
   } catch {
     return `${currency} ${amount}`
+  }
+}
+
+function normalizeCheckoutError(message: string) {
+  const value = String(message || "").trim()
+
+  if (!value) {
+    return "No se pudo iniciar el checkout en este momento."
+  }
+
+  switch (value) {
+    case "missing_client_id":
+      return "No se encontró el identificador del cliente para iniciar el pago."
+    case "missing_plan_code":
+      return "No se recibió el plan que se desea cobrar."
+    case "missing_backend_url":
+      return "La configuración del backend de pagos no está disponible."
+    case "provider_not_enabled":
+    case "provider_not_enabled_yet":
+      return "La pasarela seleccionada todavía no está habilitada."
+    case "missing_client_email_for_subscription":
+      return "Este checkout requiere que el cliente tenga un email registrado para crear la suscripción."
+    case "missing_mercadopago_access_token":
+      return "Mercado Pago todavía no tiene credenciales activas en este entorno. La arquitectura ya quedó lista, pero falta la habilitación final."
+    case "missing_checkout_url":
+      return "La pasarela respondió, pero no devolvió una URL válida de checkout."
+    case "checkout_failed":
+      return "No se pudo crear la sesión de checkout."
+    default:
+      return value
   }
 }
 
@@ -109,6 +143,15 @@ export default function IniciarPagoClient() {
   const selectedProviderConfig = useMemo(() => {
     return PAYMENT_PROVIDERS.find((item) => item.code === selectedProvider) || null
   }, [selectedProvider])
+
+  const customerDisplayName = useMemo(() => {
+    if (!pendingSignup) return null
+    return `${pendingSignup.firstName} ${pendingSignup.lastName}`.trim()
+  }, [pendingSignup])
+
+  const customerEmail = useMemo(() => {
+    return pendingSignup?.email?.trim() || null
+  }, [pendingSignup])
 
   useEffect(() => {
     const raw = localStorage.getItem("operaly_pending_signup")
@@ -150,7 +193,7 @@ export default function IniciarPagoClient() {
     }
 
     if (!clientId) {
-      setCheckoutError("Falta el identificador del cliente para iniciar el cobro.")
+      setCheckoutError("No se encontró el identificador del cliente para iniciar el checkout.")
       return
     }
 
@@ -183,10 +226,10 @@ export default function IniciarPagoClient() {
         }),
       })
 
-      const payload: CheckoutResponse = await response.json()
+      const payload: CheckoutResponse & { detail?: string } = await response.json()
 
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "checkout_failed")
+        throw new Error(payload?.error || payload?.detail || "checkout_failed")
       }
 
       const resolvedCheckoutUrl = String(
@@ -219,7 +262,9 @@ export default function IniciarPagoClient() {
       window.location.href = resolvedCheckoutUrl
     } catch (error: any) {
       setCheckoutError(
-        error?.message || "No se pudo iniciar el checkout del proveedor seleccionado."
+        normalizeCheckoutError(
+          error?.message || "No se pudo iniciar el checkout del proveedor seleccionado."
+        )
       )
     } finally {
       setSubmitting(false)
@@ -276,12 +321,12 @@ export default function IniciarPagoClient() {
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span className="inline-flex items-center gap-1.5">
               <Wallet className="h-3.5 w-3.5 text-slate-500" />
-              Cobro en USD
+              Facturación en USD
             </span>
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-6 xl:grid-cols-[1.16fr_0.84fr]">
           <div className="space-y-6">
             <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#0F1F63_0%,#162C8A_65%,#2440BF_100%)] px-6 py-8 md:px-8">
@@ -290,14 +335,14 @@ export default function IniciarPagoClient() {
                   Suscripción mensual Operaly
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr] md:items-end">
+                <div className="grid gap-6 md:grid-cols-[1.06fr_0.94fr] md:items-end">
                   <div>
                     <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
                       Activa tu plan en una sola vista
                     </h1>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 md:text-[15px]">
                       Selecciona tu plan, revisa el resumen y continúa con una experiencia
-                      de checkout preparada para suscripciones reales. Mercado Pago será la
+                      de checkout orientada a suscripciones reales. Mercado Pago es la
                       pasarela principal en esta fase de Operaly.
                     </p>
                   </div>
@@ -333,7 +378,7 @@ export default function IniciarPagoClient() {
                     <span className="text-sm font-medium">Suscripción real</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    Esta experiencia queda orientada a billing recurrente, no a cobros manuales aislados.
+                    Preparado para billing recurrente, no para cobros manuales aislados.
                   </p>
                 </div>
 
@@ -350,10 +395,10 @@ export default function IniciarPagoClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <div className="mb-2 flex items-center gap-2 text-slate-900">
                     <BadgeCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Escalable</span>
+                    <span className="text-sm font-medium">Arquitectura escalable</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    Stripe podrá enchufarse después sin rehacer este checkout.
+                    Stripe podrá entrar después sin rehacer esta experiencia.
                   </p>
                 </div>
               </div>
@@ -383,20 +428,26 @@ export default function IniciarPagoClient() {
                           } ${provider.enabled ? "hover:border-slate-300" : "opacity-70 cursor-not-allowed"}`}
                         >
                           <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-base font-semibold text-slate-950">
-                                  {provider.name}
-                                </p>
-                                {provider.badge ? (
-                                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                                    {provider.badge}
-                                  </span>
-                                ) : null}
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-[#FFF159] text-[11px] font-semibold text-slate-900">
+                                {provider.code === "mercadopago" ? "MP" : "ST"}
                               </div>
-                              <p className="text-sm text-slate-600 mt-1">
-                                {provider.description}
-                              </p>
+
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-base font-semibold text-slate-950">
+                                    {provider.name}
+                                  </p>
+                                  {provider.badge ? (
+                                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                      {provider.badge}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-sm text-slate-600 mt-1">
+                                  {provider.description}
+                                </p>
+                              </div>
                             </div>
 
                             {isActive ? (
@@ -580,16 +631,62 @@ export default function IniciarPagoClient() {
                 </div>
 
                 <div className="rounded-3xl border border-slate-200 p-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-slate-700" />
+                    <p className="text-sm font-semibold text-slate-900">
+                      Identidad de facturación
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                        Nombre
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">
+                        {customerDisplayName || "Se resolverá desde la cuenta del cliente"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                        Email
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-900 break-all">
+                        {customerEmail || "No disponible en este navegador"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {!customerEmail ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-700 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-900">
+                          El email del cliente es importante para la suscripción
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-amber-800">
+                          Si este cliente no tiene email registrado en backend, el checkout
+                          de suscripción puede ser rechazado por la pasarela.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-3xl border border-slate-200 p-5">
                   <p className="text-sm font-semibold text-slate-900">
                     Lo que ocurrirá después
                   </p>
 
                   <div className="mt-4 space-y-3">
                     {[
-                      "Mercado Pago iniciará el flujo de suscripción.",
-                      "Operaly registrará la referencia de checkout.",
-                      "Cuando conectemos el webhook, la activación será automática.",
-                      "Stripe podrá entrar después sin rehacer esta pantalla.",
+                      "Se abrirá el checkout seguro de Mercado Pago.",
+                      "El intento de pago quedará trazado en billing_intents.",
+                      "Cuando el webhook confirme el cobro, Operaly podrá activar el plan automáticamente.",
+                      "La misma arquitectura permitirá add-ons y cobros desde WhatsApp.",
                     ].map((item) => (
                       <div key={item} className="flex items-start gap-3">
                         <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
@@ -601,74 +698,52 @@ export default function IniciarPagoClient() {
                   </div>
                 </div>
 
-                {pendingSignup ? (
-                  <div className="rounded-3xl border border-slate-200 p-5">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <CircleHelp className="h-4 w-4 text-slate-700" />
                     <p className="text-sm font-semibold text-slate-900">
-                      Datos de activación
+                      Señales de confianza
                     </p>
+                  </div>
 
-                    <div className="mt-4 space-y-3">
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                          Nombre
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-slate-900">
-                          {pendingSignup.firstName} {pendingSignup.lastName}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                          Email
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-slate-900 break-all">
-                          {pendingSignup.email}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                          Teléfono
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-slate-900">
-                          {pendingSignup.phone || "No indicado"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                          Perfil
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-slate-900">
-                          {pendingSignup.businessType}
-                        </p>
-                      </div>
+                  <div className="grid gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                      Mercado Pago como proveedor principal de checkout
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                      Seguimiento operativo con billing intents y métricas internas
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                      Cobros preparados para web, suscripción y add-ons
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-sm text-slate-600 leading-7">
-                      No se encontraron datos adicionales del registro en este navegador.
-                      Puedes continuar con el pago si el cliente ya fue creado correctamente.
-                    </p>
-                  </div>
-                )}
+                </div>
 
                 {checkoutUrl ? (
-                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-sm font-semibold text-slate-900">
-                      Estado técnico de la sesión
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Checkout generado
                     </p>
-
-                    <div className="mt-4 text-sm text-slate-700">
-                      Checkout inicial generado correctamente.
-                    </div>
+                    <p className="mt-2 text-sm leading-6 text-emerald-800">
+                      La URL del checkout fue creada correctamente y el navegador será
+                      redirigido al proveedor.
+                    </p>
                   </div>
                 ) : null}
 
                 {checkoutError ? (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-                    <p className="text-sm text-red-700">{checkoutError}</p>
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-red-700 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-red-900">
+                          No se pudo continuar con el checkout
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-red-800">
+                          {checkoutError}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 
@@ -678,9 +753,14 @@ export default function IniciarPagoClient() {
                     disabled={submitting}
                     className="h-14 w-full rounded-2xl bg-[#0F1F63] px-6 text-base font-medium text-white hover:bg-[#12297f]"
                   >
-                    {submitting
-                      ? "Preparando checkout..."
-                      : `Continuar con ${selectedProviderConfig?.name || "la pasarela"} • ${formatMoney(selectedPlan.price)}`}
+                    {submitting ? (
+                      <span className="inline-flex items-center gap-2">
+                        Preparando checkout...
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    ) : (
+                      `Continuar con ${selectedProviderConfig?.name || "la pasarela"} • ${formatMoney(selectedPlan.price)}`
+                    )}
                   </Button>
 
                   <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
