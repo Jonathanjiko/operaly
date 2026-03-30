@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
+import { useRouter } from "next/navigation"
 import {
   BarChart3,
   CreditCard,
@@ -8,7 +10,12 @@ import {
   Layers3,
   RefreshCcw,
   ShieldCheck,
+  Sparkles,
   Users,
+  Wallet,
+  Settings,
+  ArrowRight,
+  Lock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
@@ -78,28 +85,38 @@ type ClientRow = {
   created_at: string
 }
 
+type OwnerProfile = {
+  fullName: string
+  email: string
+}
+
 const BILLING_CURRENCY_CODE = "USD"
 
 const SECTIONS = [
+  { id: "workspace", label: "Mi Operaly", icon: Sparkles },
   { id: "overview", label: "Resumen", icon: BarChart3 },
   { id: "payments", label: "Pagos", icon: CreditCard },
   { id: "subscriptions", label: "Suscripciones", icon: Layers3 },
   { id: "clients", label: "Clientes", icon: Users },
-]
+] as const
 
 const ADMIN_PLANS = ["trial", "core", "pro", "pro_plus"] as const
 type AdminPlan = (typeof ADMIN_PLANS)[number]
 
 export default function OwnerDashboardPage() {
+  const router = useRouter()
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeSection, setActiveSection] = useState("overview")
+  const [activeSection, setActiveSection] = useState<(typeof SECTIONS)[number]["id"]>("workspace")
   const [summary, setSummary] = useState<SummaryRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([])
   const [clients, setClients] = useState<ClientRow[]>([])
-  const [ownerName, setOwnerName] = useState("Operaly Owner")
-  const [ownerEmail, setOwnerEmail] = useState("")
+  const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
+    fullName: "Operaly Owner",
+    email: "",
+  })
   const [actionLoadingKey, setActionLoadingKey] = useState("")
 
   const formatMoney = (amount: number | null | undefined) => {
@@ -212,8 +229,10 @@ export default function OwnerDashboardPage() {
         throw new Error("No tienes permisos para ver este panel.")
       }
 
-      setOwnerName(String(metadata.full_name || "Operaly Owner"))
-      setOwnerEmail(String(user.email || ""))
+      setOwnerProfile({
+        fullName: String(metadata.full_name || "Operaly Owner"),
+        email: String(user.email || ""),
+      })
 
       const [
         summaryResponse,
@@ -282,7 +301,10 @@ export default function OwnerDashboardPage() {
     }
   }
 
-  const runStatusChange = async (clientId: string, nextStatus: "active" | "blocked" | "inactive") => {
+  const runStatusChange = async (
+    clientId: string,
+    nextStatus: "active" | "blocked" | "inactive"
+  ) => {
     const loadingKey = `status:${clientId}:${nextStatus}`
     setActionLoadingKey(loadingKey)
 
@@ -353,37 +375,74 @@ export default function OwnerDashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-sm font-medium text-[#3B82F6]">Operaly Owner Console</p>
-          <h1 className="text-3xl font-bold text-[#0F1F63] mt-1">
-            Panel privado del negocio
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Visualiza ventas, suscripciones, clientes y comportamiento comercial de Operaly.
-          </p>
+      <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-[#0F1F63] via-[#1E3A8A] to-[#06B6D4] px-6 py-8 md:px-8">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-white/10 border border-white/20 p-3">
+                <Image
+                  src="/images/operaly-logo.png"
+                  alt="Operaly"
+                  width={72}
+                  height={72}
+                  priority
+                />
+              </div>
+
+              <div className="text-white">
+                <p className="text-sm font-medium text-white/80">
+                  Operaly Owner Console
+                </p>
+                <h1 className="text-3xl md:text-4xl font-semibold mt-1">
+                  Tu centro de control
+                </h1>
+                <p className="text-sm md:text-base text-white/80 mt-2 max-w-2xl">
+                  Usa Operaly como usuario premium ilimitado y administra el negocio
+                  desde un mismo lugar, sin salir de la experiencia principal.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-white/10 border border-white/20 px-4 py-3 text-white">
+                <p className="text-sm font-medium">{ownerProfile.fullName}</p>
+                <p className="text-xs text-white/80">{ownerProfile.email}</p>
+              </div>
+
+              <Button
+                variant="secondary"
+                className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                onClick={() => loadOwnerDashboard(true)}
+                disabled={refreshing}
+              >
+                <RefreshCcw className="w-4 h-4 mr-2" />
+                {refreshing ? "Actualizando..." : "Actualizar"}
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-border bg-card px-4 py-3">
-            <p className="text-sm font-medium text-[#0F1F63]">{ownerName}</p>
-            <p className="text-xs text-muted-foreground">{ownerEmail}</p>
+        <div className="px-6 py-5 md:px-8 bg-[#F8FAFF] border-t border-slate-200">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+              <Lock className="w-3.5 h-3.5" />
+              Owner mode activo
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+              Beneficios ilimitados
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+              Billing exento
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+              Cobro del negocio en {BILLING_CURRENCY_CODE}
+            </span>
           </div>
-
-          <Button
-            variant="outline"
-            className="rounded-xl"
-            onClick={() => loadOwnerDashboard(true)}
-            disabled={refreshing}
-          >
-            <RefreshCcw className="w-4 h-4 mr-2" />
-            {refreshing ? "Actualizando..." : "Actualizar"}
-          </Button>
         </div>
       </div>
 
       <div className="grid gap-8 xl:grid-cols-[280px_1fr]">
-        <aside className="bg-card rounded-2xl border border-border p-4 h-fit">
+        <aside className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 h-fit">
           <div className="space-y-2">
             {SECTIONS.map((section) => {
               const Icon = section.icon
@@ -397,7 +456,7 @@ export default function OwnerDashboardPage() {
                   className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors ${
                     isActive
                       ? "bg-[#0F1F63] text-white"
-                      : "bg-secondary/20 text-foreground hover:bg-secondary/40"
+                      : "bg-[#F7F9FC] text-slate-800 hover:bg-slate-100"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -409,8 +468,95 @@ export default function OwnerDashboardPage() {
         </aside>
 
         <main className="space-y-8">
+          {activeSection === "workspace" ? (
+            <div className="space-y-8">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles className="w-5 h-5 text-[#7C3AED]" />
+                  <h2 className="text-xl font-semibold text-[#0F1F63]">
+                    Mi Operaly premium
+                  </h2>
+                </div>
+
+                <p className="text-slate-600 leading-7 mb-6">
+                  Desde aquí entras a tu experiencia normal de Operaly como usuario,
+                  pero con beneficios internos activos y sin flujo de cobro para tu cuenta.
+                </p>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-5">
+                    <p className="text-lg font-semibold text-[#0F1F63] mb-2">
+                      Dashboard Operaly
+                    </p>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Entra a tu workspace principal para usar agenda, tareas, documentos y más.
+                    </p>
+                    <Button
+                      className="rounded-xl bg-[#0F1F63] hover:bg-[#132672] text-white"
+                      onClick={() => router.push("/dashboard/professional")}
+                    >
+                      Abrir mi Operaly
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-5">
+                    <p className="text-lg font-semibold text-[#0F1F63] mb-2">
+                      Configuración
+                    </p>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Ajusta timezone, idioma, perfil y preferencias de tu cuenta personal.
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => router.push("/dashboard/professional/configuracion")}
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Ir a configuración
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-5">
+                    <p className="text-lg font-semibold text-[#0F1F63] mb-2">
+                      Estado de owner
+                    </p>
+                    <p className="text-sm text-slate-600 mb-4">
+                      Tu cuenta está marcada como owner, con plan Pro Plus interno activo.
+                    </p>
+                    <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                      Owner activo
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <p className="text-sm text-slate-500 mb-2">Tu plan interno</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">Pro Plus</p>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <p className="text-sm text-slate-500 mb-2">Cobro propio</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">Exento</p>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <p className="text-sm text-slate-500 mb-2">Acceso</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">Ilimitado</p>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <p className="text-sm text-slate-500 mb-2">Módulos owner</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">Activos</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {activeSection === "overview" ? (
-            <>
+            <div className="space-y-8">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {overviewCards.map((card) => {
                   const Icon = card.icon
@@ -418,13 +564,13 @@ export default function OwnerDashboardPage() {
                   return (
                     <div
                       key={card.title}
-                      className="bg-card rounded-2xl border border-border p-5"
+                      className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm text-muted-foreground">{card.title}</p>
+                        <p className="text-sm text-slate-500">{card.title}</p>
                         <Icon className="w-5 h-5 text-[#3B82F6]" />
                       </div>
-                      <p className="text-2xl font-semibold text-[#0F1F63]">
+                      <p className="text-3xl font-semibold text-[#0F1F63]">
                         {card.value}
                       </p>
                     </div>
@@ -434,67 +580,70 @@ export default function OwnerDashboardPage() {
 
               {summary ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="bg-card rounded-2xl border border-border p-5">
-                    <p className="text-sm text-muted-foreground mb-2">Trials</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Trials</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
                       {summary.trial_clients}
                     </p>
                   </div>
 
-                  <div className="bg-card rounded-2xl border border-border p-5">
-                    <p className="text-sm text-muted-foreground mb-2">Pro Plus</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Pro Plus</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
                       {summary.pro_plus_clients}
                     </p>
                   </div>
 
-                  <div className="bg-card rounded-2xl border border-border p-5">
-                    <p className="text-sm text-muted-foreground mb-2">Pagos pendientes</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Pagos pendientes</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
                       {formatMoney(summary.payments_pending_total)}
                     </p>
                   </div>
 
-                  <div className="bg-card rounded-2xl border border-border p-5">
-                    <p className="text-sm text-muted-foreground mb-2">Pagos fallidos</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Pagos fallidos</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
                       {formatMoney(summary.payments_failed_total)}
                     </p>
                   </div>
                 </div>
               ) : null}
-            </>
+            </div>
           ) : null}
 
           {activeSection === "payments" ? (
-            <div className="bg-card rounded-2xl border border-border p-6">
-              <h2 className="text-xl font-semibold text-[#0F1F63] mb-6">
-                Pagos recientes
-              </h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <CreditCard className="w-5 h-5 text-[#3B82F6]" />
+                <h2 className="text-xl font-semibold text-[#0F1F63]">
+                  Pagos recientes
+                </h2>
+              </div>
 
               <div className="space-y-4">
                 {payments.map((payment) => (
                   <div
                     key={payment.id}
-                    className="rounded-2xl border border-border p-4"
+                    className="rounded-2xl border border-slate-200 p-4"
                   >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
                           {payment.client_name || "Cliente sin nombre"}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-slate-500 mt-1">
                           {payment.client_phone || "Sin teléfono"} ·{" "}
                           {payment.country_code || "—"} · {payment.city || "—"}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-slate-500 mt-1">
                           Plan: {payment.plan_code || "—"}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-2">
+                        <p className="text-xs text-slate-500 mt-2">
                           Orden: {payment.order_number || "—"} · TX:{" "}
                           {payment.transaction_id || "—"}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-slate-500">
                           Fecha: {formatDateTime(payment.created_at)}
                         </p>
                       </div>
@@ -503,8 +652,10 @@ export default function OwnerDashboardPage() {
                         <p className="text-xl font-semibold text-[#0F1F63]">
                           {formatMoney(payment.amount)}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {payment.payment_method_brand || payment.payment_method || "Método no informado"}
+                        <p className="text-sm text-slate-500 mt-1">
+                          {payment.payment_method_brand ||
+                            payment.payment_method ||
+                            "Método no informado"}
                         </p>
                         <span
                           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${paymentStatusClass(
@@ -519,7 +670,7 @@ export default function OwnerDashboardPage() {
                 ))}
 
                 {payments.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
                     No hay pagos registrados todavía.
                   </div>
                 ) : null}
@@ -528,30 +679,33 @@ export default function OwnerDashboardPage() {
           ) : null}
 
           {activeSection === "subscriptions" ? (
-            <div className="bg-card rounded-2xl border border-border p-6">
-              <h2 className="text-xl font-semibold text-[#0F1F63] mb-6">
-                Suscripciones recientes
-              </h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <Layers3 className="w-5 h-5 text-[#06B6D4]" />
+                <h2 className="text-xl font-semibold text-[#0F1F63]">
+                  Suscripciones recientes
+                </h2>
+              </div>
 
               <div className="space-y-4">
                 {subscriptions.map((subscription) => (
                   <div
                     key={subscription.id}
-                    className="rounded-2xl border border-border p-4"
+                    className="rounded-2xl border border-slate-200 p-4"
                   >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
                           {subscription.client_name || "Cliente sin nombre"}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-slate-500 mt-1">
                           {subscription.client_phone || "Sin teléfono"} ·{" "}
                           {subscription.country_code || "—"} · {subscription.city || "—"}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-slate-500 mt-1">
                           Plan: {subscription.plan_code}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-2">
+                        <p className="text-xs text-slate-500 mt-2">
                           Periodo: {formatDateTime(subscription.current_period_start)} →{" "}
                           {formatDateTime(subscription.current_period_end)}
                         </p>
@@ -574,7 +728,7 @@ export default function OwnerDashboardPage() {
                 ))}
 
                 {subscriptions.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
                     No hay suscripciones registradas todavía.
                   </div>
                 ) : null}
@@ -583,16 +737,19 @@ export default function OwnerDashboardPage() {
           ) : null}
 
           {activeSection === "clients" ? (
-            <div className="bg-card rounded-2xl border border-border p-6">
-              <h2 className="text-xl font-semibold text-[#0F1F63] mb-6">
-                Clientes y control manual
-              </h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <Users className="w-5 h-5 text-[#3B82F6]" />
+                <h2 className="text-xl font-semibold text-[#0F1F63]">
+                  Clientes y control manual
+                </h2>
+              </div>
 
               <div className="space-y-4">
                 {clients.map((client) => (
                   <div
                     key={client.id}
-                    className="rounded-2xl border border-border p-4"
+                    className="rounded-2xl border border-slate-200 p-4"
                   >
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -600,14 +757,14 @@ export default function OwnerDashboardPage() {
                           <p className="font-medium text-[#0F1F63]">
                             {client.name || "Cliente sin nombre"}
                           </p>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-sm text-slate-500 mt-1">
                             {client.email || "Sin email"} · {client.phone || "Sin teléfono"}
                           </p>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="text-sm text-slate-500 mt-1">
                             {client.country_code || "—"} · {client.city || "—"} ·{" "}
                             {client.timezone || "—"}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-2">
+                          <p className="text-xs text-slate-500 mt-2">
                             Alta: {formatDateTime(client.created_at)}
                           </p>
                         </div>
@@ -616,7 +773,7 @@ export default function OwnerDashboardPage() {
                           <p className="text-sm font-medium text-[#0F1F63]">
                             Plan: {client.plan_code || "—"}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-xs text-slate-500 mt-1">
                             Estado plan: {client.plan_status || "—"}
                           </p>
                           <span
@@ -691,7 +848,7 @@ export default function OwnerDashboardPage() {
                 ))}
 
                 {clients.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
                     No hay clientes todavía.
                   </div>
                 ) : null}
