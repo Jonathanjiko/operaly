@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 
+type PaymentProvider = "izipay" | "mercadopago" | "stripe"
+type CheckoutMode = "redirect" | "embed"
+
 type CheckoutRequestBody = {
   clientId?: string
   planCode?: string
+  provider?: PaymentProvider
 }
 
 export async function POST(req: NextRequest) {
@@ -22,6 +26,8 @@ export async function POST(req: NextRequest) {
 
   const clientId = String(body.clientId || "").trim()
   const planCode = String(body.planCode || "").trim().toLowerCase()
+  const provider = (String(body.provider || "izipay").trim().toLowerCase() ||
+    "izipay") as PaymentProvider
 
   if (!clientId) {
     return NextResponse.json(
@@ -88,13 +94,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const formToken = payload?.formToken || null
+    const paymentUrl = payload?.payment_url || null
+
+    const mode: CheckoutMode = formToken ? "embed" : "redirect"
+
     return NextResponse.json(
       {
         ok: true,
-        payment_url: payload?.payment_url || null,
-        formToken: payload?.formToken || null,
+        provider,
+        mode,
+        checkout_url: paymentUrl,
+        embed_token: formToken,
+        public_key: payload?.publicKey || null,
         order_id: payload?.order_id || null,
         deferred: Boolean(payload?.deferred),
+
+        // compatibilidad temporal con tu frontend actual
+        payment_url: paymentUrl,
+        formToken,
       },
       { status: 200 }
     )
