@@ -314,15 +314,215 @@ export default function OwnerDashboardPage() {
         throw clientsResponse.error
       }
 
-      const nextClients = (clientsResponse.data || []) as ClientRow[]
+      let nextSummary = (summaryResponse.data || null) as SummaryRow | null
+      let nextPayments = (paymentsResponse.data || []) as PaymentRow[]
+      let nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
+      let nextClients = (clientsResponse.data || []) as ClientRow[]
 
-      setSummary((summaryResponse.data || null) as SummaryRow | null)
-      setPayments((paymentsResponse.data || []) as PaymentRow[])
-      setSubscriptions((subscriptionsResponse.data || []) as SubscriptionRow[])
+      // Fallback real si las RPCs vienen vacías
+      if (
+        nextClients.length === 0 &&
+        nextPayments.length === 0 &&
+        nextSubscriptions.length === 0
+      ) {
+        const [
+          directClientsResponse,
+          directPaymentsResponse,
+          directSubscriptionsResponse,
+        ] = await Promise.all([
+          supabase
+            .from("clients")
+            .select(
+              "id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(100),
+
+          supabase
+            .from("billing_payments")
+            .select(
+              "id, client_id, status, amount_usd, currency_code, payment_method, payment_method_brand, order_id, transaction_id, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(100),
+
+          supabase
+            .from("billing_subscriptions")
+            .select(
+              "id, client_id, plan_code, status, amount_usd, currency_code, current_period_start, current_period_end, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(100),
+        ])
+
+        if (directClientsResponse.error) {
+          throw directClientsResponse.error
+        }
+
+        if (directPaymentsResponse.error) {
+          throw directPaymentsResponse.error
+        }
+
+        if (directSubscriptionsResponse.error) {
+          throw directSubscriptionsResponse.error
+        }
+
+        nextClients = ((directClientsResponse.data || []) as any[]).map((row) => ({
+          id: String(row.id),
+          name: row.name ?? null,
+          email: row.email ?? null,
+          phone: row.phone ?? null,
+          country_code: row.country_code ?? null,
+          city: row.city ?? null,
+          timezone: row.timezone ?? null,
+          plan_code: row.plan_code ?? null,
+          plan_status: row.plan_status ?? null,
+          status: row.status ?? null,
+          created_at: row.created_at,
+        }))
+
+        const clientMap = new Map(nextClients.map((client) => [client.id, client]))
+
+        nextPayments = ((directPaymentsResponse.data || []) as any[]).map((row) => {
+          const client = clientMap.get(String(row.client_id))
+
+          return {
+            id: String(row.id),
+            client_id: String(row.client_id),
+            client_name: client?.name ?? null,
+            client_phone: client?.phone ?? null,
+            country_code: client?.country_code ?? null,
+            city: client?.city ?? null,
+            plan_code: client?.plan_code ?? null,
+            status: String(row.status || ""),
+            amount: Number(row.amount_usd || 0),
+            currency_code: String(row.currency_code || "USD"),
+            payment_method: row.payment_method ?? null,
+            payment_method_brand: row.payment_method_brand ?? null,
+            order_number: row.order_id ?? null,
+            transaction_id: row.transaction_id ?? null,
+            created_at: row.created_at,
+          }
+        })
+
+        nextSubscriptions = ((directSubscriptionsResponse.data || []) as any[]).map(
+          (row) => {
+            const client = clientMap.get(String(row.client_id))
+
+            return {
+              id: String(row.id),
+              client_id: String(row.client_id),
+              client_name: client?.name ?? null,
+              client_phone: client?.phone ?? null,
+              country_code: client?.country_code ?? null,
+              city: client?.city ?? null,
+              plan_code: String(row.plan_code || ""),
+              status: String(row.status || ""),
+              amount: Number(row.amount_usd || 0),
+              currency_code: String(row.currency_code || "USD"),
+              current_period_start: row.current_period_start ?? null,
+              current_period_end: row.current_period_end ?? null,
+              created_at: row.created_at,
+            }
+          }
+        )
+
+        const activeClients = nextClients.filter(
+          (client) => String(client.status || "").toLowerCase() === "active"
+        ).length
+
+        const trialClients = nextClients.filter(
+          (client) => String(client.plan_code || "").toLowerCase() === "trial"
+        ).length
+
+        const paidClients = nextClients.filter((client) =>
+          ["core", "pro", "pro_plus"].includes(
+            String(client.plan_code || "").toLowerCase()
+          )
+        ).length
+
+        const proPlusClients = nextClients.filter(
+          (client) => String(client.plan_code || "").toLowerCase() === "pro_plus"
+        ).length
+
+        const approvedPayments = nextPayments.filter((payment) =>
+          ["approved", "paid", "succeeded"].includes(
+            String(payment.status || "").toLowerCase()
+          )
+        )
+
+        const pendingPayments = nextPayments.filter(
+          (payment) => String(payment.status || "").toLowerCase() === "pending"
+        )
+
+        const failedPayments = nextPayments.filter((payment) =>
+          ["failed", "declined"].includes(String(payment.status || "").toLowerCase())
+        )
+
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+        const weekStart = new Date(now)
+        const day = now.getDay()
+        const diff = day === 0 ? 6 : day - 1
+        weekStart.setDate(now.getDate() - diff)
+        weekStart.setHours(0, 0, 0, 0)
+
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+        nextSummary = {
+          total_clients: nextClients.length,
+          active_clients: activeClients,
+          trial_clients: trialClients,
+          paid_clients: paidClients,
+          pro_plus_clients: proPlusClients,
+          payments_approved_total: approvedPayments.reduce(
+            (acc, item) => acc + Number(item.amount || 0),
+            0
+          ),
+          payments_pending_total: pendingPayments.reduce(
+            (acc, item) => acc + Number(item.amount || 0),
+            0
+          ),
+          payments_failed_total: failedPayments.reduce(
+            (acc, item) => acc + Number(item.amount || 0),
+            0
+          ),
+          payments_today_total: approvedPayments
+            .filter((item) => new Date(item.created_at) >= todayStart)
+            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_week_total: approvedPayments
+            .filter((item) => new Date(item.created_at) >= weekStart)
+            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          payments_month_total: approvedPayments
+            .filter((item) => new Date(item.created_at) >= monthStart)
+            .reduce((acc, item) => acc + Number(item.amount || 0), 0),
+          subscriptions_active: nextSubscriptions.filter(
+            (item) => String(item.status || "").toLowerCase() === "active"
+          ).length,
+          subscriptions_pending: nextSubscriptions.filter(
+            (item) => String(item.status || "").toLowerCase() === "pending"
+          ).length,
+          subscriptions_cancelled: nextSubscriptions.filter(
+            (item) => String(item.status || "").toLowerCase() === "cancelled"
+          ).length,
+        }
+      }
+
+      setSummary(nextSummary)
+      setPayments(nextPayments)
+      setSubscriptions(nextSubscriptions)
       setClients(nextClients)
 
-      if (!selectedClientId && nextClients.length > 0) {
-        setSelectedClientId(nextClients[0].id)
+      if (nextClients.length > 0) {
+        setSelectedClientId((current) => {
+          if (current && nextClients.some((client) => client.id === current)) {
+            return current
+          }
+          return nextClients[0].id
+        })
+      } else {
+        setSelectedClientId("")
       }
     } catch (error: any) {
       alert(error.message || "No se pudo cargar el panel owner.")
@@ -331,11 +531,7 @@ export default function OwnerDashboardPage() {
       setRefreshing(false)
     }
   }
-
-  useEffect(() => {
-    loadOwnerDashboard()
-  }, [])
-
+  
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
     const loadingKey = `plan:${clientId}:${planCode}`
     setActionLoadingKey(loadingKey)
