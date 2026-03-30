@@ -28,20 +28,19 @@ type PendingSignup = {
   planCode: "trial" | "core" | "pro" | "pro_plus"
 }
 
-type PaymentProvider = "izipay" | "mercadopago" | "stripe"
-type CheckoutMode = "redirect" | "embed"
+type PaymentProvider = "mercadopago" | "stripe"
+type CheckoutMode = "redirect" | "hosted" | "embed"
 
 type CheckoutResponse = {
   ok: boolean
   provider?: PaymentProvider
-  mode?: CheckoutMode
+  mode?: CheckoutMode | null
   checkout_url?: string | null
-  embed_token?: string | null
-  public_key?: string | null
+  init_point?: string | null
+  subscription_id?: string | null
+  preapproval_plan_id?: string | null
   order_id?: string | null
-  deferred?: boolean
   payment_url?: string | null
-  formToken?: string | null
   error?: string
 }
 
@@ -58,23 +57,16 @@ const PAYMENT_PROVIDERS: Array<{
   {
     code: "mercadopago",
     name: "Mercado Pago",
-    description: "Preparado para suscripciones recurrentes en LATAM.",
-    enabled: false,
-    badge: "Próximamente",
+    description: "Pasarela principal para suscripciones recurrentes en LATAM.",
+    enabled: true,
+    badge: "Principal",
   },
   {
     code: "stripe",
     name: "Stripe",
-    description: "Preparado para expansión global cuando la cuenta esté habilitada.",
+    description: "Preparado para expansión internacional cuando la cuenta esté habilitada.",
     enabled: false,
     badge: "Próximamente",
-  },
-  {
-    code: "izipay",
-    name: "Izipay",
-    description: "Disponible para flujo actual, pero no como suscripción automática principal.",
-    enabled: true,
-    badge: "Disponible",
   },
 ]
 
@@ -109,8 +101,6 @@ export default function IniciarPagoClient() {
   const [checkoutError, setCheckoutError] = useState("")
   const [checkoutMode, setCheckoutMode] = useState<CheckoutMode | null>(null)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
-  const [embedToken, setEmbedToken] = useState<string | null>(null)
-  const [publicKey, setPublicKey] = useState<string | null>(null)
 
   const selectedPlan = useMemo(() => {
     return getPlanByCode(selectedPlanCode)
@@ -170,7 +160,7 @@ export default function IniciarPagoClient() {
 
     if (!providerConfig?.enabled) {
       setCheckoutError(
-        `${providerConfig?.name || "Esta pasarela"} todavía no está habilitada. La arquitectura ya quedó preparada, pero falta su integración real en backend.`
+        `${providerConfig?.name || "Esta pasarela"} todavía no está habilitada en esta versión.`
       )
       return
     }
@@ -178,8 +168,6 @@ export default function IniciarPagoClient() {
     setCheckoutError("")
     setCheckoutMode(null)
     setCheckoutUrl(null)
-    setEmbedToken(null)
-    setPublicKey(null)
     setSubmitting(true)
 
     try {
@@ -201,48 +189,34 @@ export default function IniciarPagoClient() {
         throw new Error(payload?.error || "checkout_failed")
       }
 
+      const resolvedCheckoutUrl = String(
+        payload.checkout_url || payload.init_point || payload.payment_url || ""
+      ).trim()
+
       setCheckoutMode(payload.mode || null)
-      setCheckoutUrl(payload.checkout_url || payload.payment_url || null)
-      setEmbedToken(payload.embed_token || payload.formToken || null)
-      setPublicKey(payload.public_key || null)
+      setCheckoutUrl(resolvedCheckoutUrl || null)
 
-      if (payload.mode === "redirect") {
-        const redirectUrl = String(
-          payload.checkout_url || payload.payment_url || ""
-        ).trim()
-
-        if (!redirectUrl) {
-          throw new Error("missing_checkout_url")
-        }
-
-        const currentPath =
-          typeof window !== "undefined"
-            ? `${window.location.origin}${window.location.pathname}`
-            : ""
-
-        const normalizedRedirect = redirectUrl.split("?")[0]
-
-        if (
-          normalizedRedirect === currentPath ||
-          normalizedRedirect.endsWith("/iniciar-pago")
-        ) {
-          throw new Error(
-            "El backend devolvió una URL interna de Operaly en lugar del checkout final del proveedor."
-          )
-        }
-
-        window.location.href = redirectUrl
-        return
+      if (!resolvedCheckoutUrl) {
+        throw new Error("missing_checkout_url")
       }
 
-      if (payload.mode === "embed") {
-        setCheckoutError(
-          "El provider activo devolvió un token embebido. La siguiente fase es renderizar el checkout embebido del proveedor directamente en esta pantalla."
+      const currentPath =
+        typeof window !== "undefined"
+          ? `${window.location.origin}${window.location.pathname}`
+          : ""
+
+      const normalizedRedirect = resolvedCheckoutUrl.split("?")[0]
+
+      if (
+        normalizedRedirect === currentPath ||
+        normalizedRedirect.endsWith("/iniciar-pago")
+      ) {
+        throw new Error(
+          "El backend devolvió una URL interna de Operaly en lugar del checkout final del proveedor."
         )
-        return
       }
 
-      throw new Error("unsupported_checkout_mode")
+      window.location.href = resolvedCheckoutUrl
     } catch (error: any) {
       setCheckoutError(
         error?.message || "No se pudo iniciar el checkout del proveedor seleccionado."
@@ -297,7 +271,7 @@ export default function IniciarPagoClient() {
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-              Arquitectura multipasarela
+              Suscripción recurrente
             </span>
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span className="inline-flex items-center gap-1.5">
@@ -322,9 +296,9 @@ export default function IniciarPagoClient() {
                       Activa tu plan en una sola vista
                     </h1>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 md:text-[15px]">
-                      Selecciona tu plan, elige la pasarela disponible y continúa con un
-                      checkout profesional. Operaly queda listo para trabajar con más de un
-                      proveedor sin rehacer esta experiencia.
+                      Selecciona tu plan, revisa el resumen y continúa con una experiencia
+                      de checkout preparada para suscripciones reales. Mercado Pago será la
+                      pasarela principal en esta fase de Operaly.
                     </p>
                   </div>
 
@@ -356,10 +330,10 @@ export default function IniciarPagoClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <div className="mb-2 flex items-center gap-2 text-slate-900">
                     <ShieldCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Escalable</span>
+                    <span className="text-sm font-medium">Suscripción real</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    El checkout ya queda preparado para más de un proveedor.
+                    Esta experiencia queda orientada a billing recurrente, no a cobros manuales aislados.
                   </p>
                 </div>
 
@@ -376,10 +350,10 @@ export default function IniciarPagoClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <div className="mb-2 flex items-center gap-2 text-slate-900">
                     <BadgeCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Roadmap real</span>
+                    <span className="text-sm font-medium">Escalable</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    Izipay queda operativo; Mercado Pago y Stripe se enchufan después.
+                    Stripe podrá enchufarse después sin rehacer este checkout.
                   </p>
                 </div>
               </div>
@@ -400,12 +374,13 @@ export default function IniciarPagoClient() {
                         <button
                           key={provider.code}
                           type="button"
-                          onClick={() => setSelectedProvider(provider.code)}
+                          onClick={() => provider.enabled && setSelectedProvider(provider.code)}
+                          disabled={!provider.enabled}
                           className={`w-full text-left rounded-2xl border p-4 transition-all ${
                             isActive
                               ? "border-[#0F1F63] bg-[#0F1F63]/5 shadow-sm"
-                              : "border-slate-200 bg-white hover:border-slate-300"
-                          }`}
+                              : "border-slate-200 bg-white"
+                          } ${provider.enabled ? "hover:border-slate-300" : "opacity-70 cursor-not-allowed"}`}
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div>
@@ -610,33 +585,19 @@ export default function IniciarPagoClient() {
                   </p>
 
                   <div className="mt-4 space-y-3">
-                    {selectedProvider === "izipay"
-                      ? [
-                          "Izipay procesará el pago del flujo actual.",
-                          "Operaly registrará el evento de compra.",
-                          "El modelo de suscripción automática no quedará resuelto con Izipay.",
-                          "Mercado Pago será el siguiente provider a integrar para recurrencia real.",
-                        ].map((item) => (
-                          <div key={item} className="flex items-start gap-3">
-                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
-                              <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
-                            </div>
-                            <p className="text-sm text-slate-700">{item}</p>
-                          </div>
-                        ))
-                      : [
-                          "La pasarela elegida queda preparada a nivel de arquitectura.",
-                          "En esta fase todavía no está integrada en backend.",
-                          "No será posible cobrar hasta completar su engine real.",
-                          "La UI ya no tendrá que rehacerse cuando la habilitemos.",
-                        ].map((item) => (
-                          <div key={item} className="flex items-start gap-3">
-                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
-                              <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
-                            </div>
-                            <p className="text-sm text-slate-700">{item}</p>
-                          </div>
-                        ))}
+                    {[
+                      "Mercado Pago iniciará el flujo de suscripción.",
+                      "Operaly registrará la referencia de checkout.",
+                      "Cuando conectemos el webhook, la activación será automática.",
+                      "Stripe podrá entrar después sin rehacer esta pantalla.",
+                    ].map((item) => (
+                      <div key={item} className="flex items-start gap-3">
+                        <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
+                          <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
+                        </div>
+                        <p className="text-sm text-slate-700">{item}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -693,34 +654,17 @@ export default function IniciarPagoClient() {
                   </div>
                 )}
 
-                {(checkoutUrl || embedToken || publicKey) && (
+                {checkoutUrl ? (
                   <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                     <p className="text-sm font-semibold text-slate-900">
                       Estado técnico de la sesión
                     </p>
 
-                    <div className="mt-4 space-y-3 text-sm text-slate-700">
-                      <div className="flex items-center justify-between gap-4">
-                        <span>Checkout URL</span>
-                        <span className="font-medium text-slate-900">
-                          {checkoutUrl ? "Disponible" : "No"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span>Embed token</span>
-                        <span className="font-medium text-slate-900">
-                          {embedToken ? "Disponible" : "No"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span>Public key</span>
-                        <span className="font-medium text-slate-900">
-                          {publicKey ? "Disponible" : "No"}
-                        </span>
-                      </div>
+                    <div className="mt-4 text-sm text-slate-700">
+                      Checkout inicial generado correctamente.
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {checkoutError ? (
                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
