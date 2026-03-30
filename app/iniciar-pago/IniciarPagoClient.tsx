@@ -28,8 +28,55 @@ type PendingSignup = {
   planCode: "trial" | "core" | "pro" | "pro_plus"
 }
 
+type PaymentProvider = "izipay" | "mercadopago" | "stripe"
+type CheckoutMode = "redirect" | "embed"
+
+type CheckoutResponse = {
+  ok: boolean
+  provider?: PaymentProvider
+  mode?: CheckoutMode
+  checkout_url?: string | null
+  embed_token?: string | null
+  public_key?: string | null
+  order_id?: string | null
+  deferred?: boolean
+  payment_url?: string | null
+  formToken?: string | null
+  error?: string
+}
+
 const BILLING_CURRENCY_CODE = "USD"
 const PAID_PLANS: OperalyPlanCode[] = ["core", "pro", "pro_plus"]
+
+const PAYMENT_PROVIDERS: Array<{
+  code: PaymentProvider
+  name: string
+  description: string
+  enabled: boolean
+  badge?: string
+}> = [
+  {
+    code: "mercadopago",
+    name: "Mercado Pago",
+    description: "Preparado para suscripciones recurrentes en LATAM.",
+    enabled: false,
+    badge: "Próximamente",
+  },
+  {
+    code: "stripe",
+    name: "Stripe",
+    description: "Preparado para expansión global cuando la cuenta esté habilitada.",
+    enabled: false,
+    badge: "Próximamente",
+  },
+  {
+    code: "izipay",
+    name: "Izipay",
+    description: "Disponible para flujo actual, pero no como suscripción automática principal.",
+    enabled: true,
+    badge: "Disponible",
+  },
+]
 
 function formatMoney(amount: number, currency = BILLING_CURRENCY_CODE) {
   try {
@@ -54,14 +101,24 @@ export default function IniciarPagoClient() {
   const [selectedPlanCode, setSelectedPlanCode] = useState<OperalyPlanCode>(
     initialPlan === "trial" ? "pro" : initialPlan
   )
+  const [selectedProvider, setSelectedProvider] =
+    useState<PaymentProvider>("mercadopago")
   const [pendingSignup, setPendingSignup] = useState<PendingSignup | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [checkoutError, setCheckoutError] = useState("")
+  const [checkoutMode, setCheckoutMode] = useState<CheckoutMode | null>(null)
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
+  const [embedToken, setEmbedToken] = useState<string | null>(null)
+  const [publicKey, setPublicKey] = useState<string | null>(null)
 
   const selectedPlan = useMemo(() => {
     return getPlanByCode(selectedPlanCode)
   }, [selectedPlanCode])
+
+  const selectedProviderConfig = useMemo(() => {
+    return PAYMENT_PROVIDERS.find((item) => item.code === selectedProvider) || null
+  }, [selectedProvider])
 
   useEffect(() => {
     const raw = localStorage.getItem("operaly_pending_signup")
@@ -101,15 +158,30 @@ export default function IniciarPagoClient() {
       setCheckoutError("Selecciona un plan de pago válido.")
       return
     }
-  
+
     if (!clientId) {
       setCheckoutError("Falta el identificador del cliente para iniciar el cobro.")
       return
     }
-  
+
+    const providerConfig = PAYMENT_PROVIDERS.find(
+      (item) => item.code === selectedProvider
+    )
+
+    if (!providerConfig?.enabled) {
+      setCheckoutError(
+        `${providerConfig?.name || "Esta pasarela"} todavía no está habilitada. La arquitectura ya quedó preparada, pero falta su integración real en backend.`
+      )
+      return
+    }
+
     setCheckoutError("")
+    setCheckoutMode(null)
+    setCheckoutUrl(null)
+    setEmbedToken(null)
+    setPublicKey(null)
     setSubmitting(true)
-  
+
     try {
       const response = await fetch("/api/payments/create-subscription", {
         method: "POST",
@@ -119,54 +191,61 @@ export default function IniciarPagoClient() {
         body: JSON.stringify({
           clientId,
           planCode: selectedPlan.code,
+          provider: selectedProvider,
         }),
       })
-  
-      const payload = await response.json()
-  
+
+      const payload: CheckoutResponse = await response.json()
+
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "checkout_failed")
       }
-  
-      const paymentUrl = String(payload?.payment_url || "").trim()
-      const formToken = String(payload?.formToken || "").trim()
-      const isDeferred = Boolean(payload?.deferred)
-  
-      // Caso 1: el backend sí devolvió token, pero el frontend aún no lo renderiza.
-      if (formToken) {
+
+      setCheckoutMode(payload.mode || null)
+      setCheckoutUrl(payload.checkout_url || payload.payment_url || null)
+      setEmbedToken(payload.embed_token || payload.formToken || null)
+      setPublicKey(payload.public_key || null)
+
+      if (payload.mode === "redirect") {
+        const redirectUrl = String(
+          payload.checkout_url || payload.payment_url || ""
+        ).trim()
+
+        if (!redirectUrl) {
+          throw new Error("missing_checkout_url")
+        }
+
+        const currentPath =
+          typeof window !== "undefined"
+            ? `${window.location.origin}${window.location.pathname}`
+            : ""
+
+        const normalizedRedirect = redirectUrl.split("?")[0]
+
+        if (
+          normalizedRedirect === currentPath ||
+          normalizedRedirect.endsWith("/iniciar-pago")
+        ) {
+          throw new Error(
+            "El backend devolvió una URL interna de Operaly en lugar del checkout final del proveedor."
+          )
+        }
+
+        window.location.href = redirectUrl
+        return
+      }
+
+      if (payload.mode === "embed") {
         setCheckoutError(
-          "Operaly recibió el token de pago, pero este frontend todavía no está renderizando el checkout real de Izipay. No voy a redirigirte a una URL incorrecta."
+          "El provider activo devolvió un token embebido. La siguiente fase es renderizar el checkout embebido del proveedor directamente en esta pantalla."
         )
         return
       }
-  
-      // Caso 2: URL vacía
-      if (!paymentUrl) {
-        throw new Error("missing_payment_url")
-      }
-  
-      // Caso 3: evitar loop / falsa redirección al mismo checkout
-      const currentUrl =
-        typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""
-  
-      const normalizedPaymentUrl = paymentUrl.split("?")[0]
-  
-      if (
-        normalizedPaymentUrl.endsWith("/iniciar-pago") ||
-        normalizedPaymentUrl === currentUrl
-      ) {
-        setCheckoutError(
-          isDeferred
-            ? "Izipay no devolvió un checkout renderizable en este intento. El backend quedó en modo diferido y no voy a enviarte otra vez a la misma pantalla."
-            : "El backend devolvió una URL interna de Operaly en lugar de abrir el checkout real. Debemos conectar el formToken con el SDK de Izipay."
-        )
-        return
-      }
-  
-      window.location.href = paymentUrl
+
+      throw new Error("unsupported_checkout_mode")
     } catch (error: any) {
       setCheckoutError(
-        error?.message || "No se pudo iniciar el checkout con Izipay."
+        error?.message || "No se pudo iniciar el checkout del proveedor seleccionado."
       )
     } finally {
       setSubmitting(false)
@@ -218,7 +297,7 @@ export default function IniciarPagoClient() {
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-              Operado por Izipay
+              Arquitectura multipasarela
             </span>
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span className="inline-flex items-center gap-1.5">
@@ -243,9 +322,9 @@ export default function IniciarPagoClient() {
                       Activa tu plan en una sola vista
                     </h1>
                     <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 md:text-[15px]">
-                      Selecciona tu plan, revisa el resumen y continúa con un checkout
-                      seguro. Cuando Izipay confirme el pago, Operaly activará tu cuenta
-                      y aplicará los beneficios del plan automáticamente.
+                      Selecciona tu plan, elige la pasarela disponible y continúa con un
+                      checkout profesional. Operaly queda listo para trabajar con más de un
+                      proveedor sin rehacer esta experiencia.
                     </p>
                   </div>
 
@@ -277,10 +356,10 @@ export default function IniciarPagoClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <div className="mb-2 flex items-center gap-2 text-slate-900">
                     <ShieldCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Seguridad</span>
+                    <span className="text-sm font-medium">Escalable</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    Izipay procesa el pago con validación segura y flujo protegido.
+                    El checkout ya queda preparado para más de un proveedor.
                   </p>
                 </div>
 
@@ -297,15 +376,67 @@ export default function IniciarPagoClient() {
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <div className="mb-2 flex items-center gap-2 text-slate-900">
                     <BadgeCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Activación</span>
+                    <span className="text-sm font-medium">Roadmap real</span>
                   </div>
                   <p className="text-xs leading-6 text-slate-600">
-                    Tu suscripción se activa al confirmarse el pago exitosamente.
+                    Izipay queda operativo; Mercado Pago y Stripe se enchufan después.
                   </p>
                 </div>
               </div>
 
               <div className="px-6 py-6 md:px-8 md:py-8">
+                <div className="rounded-3xl border border-slate-200 overflow-hidden mb-8">
+                  <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      Pasarela de pago
+                    </h2>
+                  </div>
+
+                  <div className="p-5 md:p-6 grid gap-3">
+                    {PAYMENT_PROVIDERS.map((provider) => {
+                      const isActive = selectedProvider === provider.code
+
+                      return (
+                        <button
+                          key={provider.code}
+                          type="button"
+                          onClick={() => setSelectedProvider(provider.code)}
+                          className={`w-full text-left rounded-2xl border p-4 transition-all ${
+                            isActive
+                              ? "border-[#0F1F63] bg-[#0F1F63]/5 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-base font-semibold text-slate-950">
+                                  {provider.name}
+                                </p>
+                                {provider.badge ? (
+                                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                    {provider.badge}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-sm text-slate-600 mt-1">
+                                {provider.description}
+                              </p>
+                            </div>
+
+                            {isActive ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#0F1F63]/15 bg-[#0F1F63]/10 px-2.5 py-1 text-[11px] font-medium text-[#0F1F63]">
+                                <Check className="h-3.5 w-3.5" />
+                                Seleccionado
+                              </span>
+                            ) : null}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="mb-5 flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-950">
@@ -448,7 +579,15 @@ export default function IniciarPagoClient() {
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-slate-500">Pasarela</span>
-                      <span className="font-medium text-slate-900">Izipay</span>
+                      <span className="font-medium text-slate-900">
+                        {selectedProviderConfig?.name || "No definida"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-500">Modo técnico</span>
+                      <span className="font-medium text-slate-900">
+                        {checkoutMode || "Se define al iniciar el cobro"}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-slate-500">Referencia</span>
@@ -471,19 +610,33 @@ export default function IniciarPagoClient() {
                   </p>
 
                   <div className="mt-4 space-y-3">
-                    {[
-                      "Izipay procesará tu pago de forma segura.",
-                      "Operaly registrará tu suscripción mensual.",
-                      "Tu plan se activará automáticamente.",
-                      "Los beneficios del plan se aplicarán a dashboard y WhatsApp.",
-                    ].map((item) => (
-                      <div key={item} className="flex items-start gap-3">
-                        <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
-                          <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
-                        </div>
-                        <p className="text-sm text-slate-700">{item}</p>
-                      </div>
-                    ))}
+                    {selectedProvider === "izipay"
+                      ? [
+                          "Izipay procesará el pago del flujo actual.",
+                          "Operaly registrará el evento de compra.",
+                          "El modelo de suscripción automática no quedará resuelto con Izipay.",
+                          "Mercado Pago será el siguiente provider a integrar para recurrencia real.",
+                        ].map((item) => (
+                          <div key={item} className="flex items-start gap-3">
+                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
+                              <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
+                            </div>
+                            <p className="text-sm text-slate-700">{item}</p>
+                          </div>
+                        ))
+                      : [
+                          "La pasarela elegida queda preparada a nivel de arquitectura.",
+                          "En esta fase todavía no está integrada en backend.",
+                          "No será posible cobrar hasta completar su engine real.",
+                          "La UI ya no tendrá que rehacerse cuando la habilitemos.",
+                        ].map((item) => (
+                          <div key={item} className="flex items-start gap-3">
+                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
+                              <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
+                            </div>
+                            <p className="text-sm text-slate-700">{item}</p>
+                          </div>
+                        ))}
                   </div>
                 </div>
 
@@ -540,6 +693,35 @@ export default function IniciarPagoClient() {
                   </div>
                 )}
 
+                {(checkoutUrl || embedToken || publicKey) && (
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Estado técnico de la sesión
+                    </p>
+
+                    <div className="mt-4 space-y-3 text-sm text-slate-700">
+                      <div className="flex items-center justify-between gap-4">
+                        <span>Checkout URL</span>
+                        <span className="font-medium text-slate-900">
+                          {checkoutUrl ? "Disponible" : "No"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span>Embed token</span>
+                        <span className="font-medium text-slate-900">
+                          {embedToken ? "Disponible" : "No"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span>Public key</span>
+                        <span className="font-medium text-slate-900">
+                          {publicKey ? "Disponible" : "No"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {checkoutError ? (
                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
                     <p className="text-sm text-red-700">{checkoutError}</p>
@@ -553,8 +735,8 @@ export default function IniciarPagoClient() {
                     className="h-14 w-full rounded-2xl bg-[#0F1F63] px-6 text-base font-medium text-white hover:bg-[#12297f]"
                   >
                     {submitting
-                      ? "Conectando con Izipay..."
-                      : `Continuar al pago • ${formatMoney(selectedPlan.price)}`}
+                      ? "Preparando checkout..."
+                      : `Continuar con ${selectedProviderConfig?.name || "la pasarela"} • ${formatMoney(selectedPlan.price)}`}
                   </Button>
 
                   <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
@@ -563,7 +745,7 @@ export default function IniciarPagoClient() {
                       Conexión segura
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
-                      Izipay
+                      {selectedProviderConfig?.name || "Pasarela"}
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
                       Visa
