@@ -5,7 +5,6 @@ import {
   FileText,
   Users,
   Calendar,
-  CheckSquare,
   Plus,
   ArrowRight,
   Clock,
@@ -28,6 +27,11 @@ type DashboardProfile = {
   preferredLanguage: string
 }
 
+function getUsagePercent(used: number, limit: number) {
+  if (!limit || limit <= 0) return 0
+  return Math.min((used / limit) * 100, 100)
+}
+
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
@@ -39,7 +43,7 @@ export default function ProfessionalDashboardPage() {
     automationsUsed: 0,
     automationsLimit: 0,
   })
-  
+
   const [greeting] = useState(() => {
     const hour = new Date().getHours()
     if (hour < 12) return "Buenos días"
@@ -62,19 +66,27 @@ export default function ProfessionalDashboardPage() {
         let client: any = null
 
         if (clientId) {
-          const { data: clientData } = await supabase
+          localStorage.setItem("operaly_client_id", clientId)
+
+          const { data: clientData, error: clientError } = await supabase
             .from("clients")
-            .select("id, name, phone, phone_normalized, profession_code, country_code, city, preferred_language")
+            .select(
+              "id, name, phone, phone_normalized, profession_code, country_code, city, preferred_language, plan_code"
+            )
             .eq("id", clientId)
             .single()
 
-          client = clientData
+          if (clientError) {
+            console.error("Error cargando client:", clientError)
+          } else {
+            client = clientData
+          }
         }
 
         setProfile({
           fullName: client?.name || meta.full_name || "Tu cuenta",
           profession: client?.profession_code || meta.profession_code || "No definido",
-          planCode: meta.selected_plan || "trial",
+          planCode: client?.plan_code || meta.selected_plan || "trial",
           countryCode: client?.country_code || meta.country_code || "No definido",
           city: client?.city || meta.city || "No definida",
           phone: client?.phone || meta.phone || "No definido",
@@ -82,6 +94,40 @@ export default function ProfessionalDashboardPage() {
           preferredLanguage:
             client?.preferred_language || meta.preferred_language || "es",
         })
+
+        if (clientId) {
+          const periodMonth = new Date().toISOString().slice(0, 7)
+
+          const usageResp = await supabase
+            .from("usage_monthly")
+            .select("messages_used, audio_minutes_used, automations_used")
+            .eq("client_id", clientId)
+            .eq("period_month", periodMonth)
+            .maybeSingle()
+
+          const limitsResp = await supabase
+            .from("tenant_effective_limits")
+            .select("max_messages_month, max_audio_minutes, max_automations")
+            .eq("client_id", clientId)
+            .maybeSingle()
+
+          if (usageResp.error) {
+            console.error("Error cargando usage_monthly:", usageResp.error)
+          }
+
+          if (limitsResp.error) {
+            console.error("Error cargando tenant_effective_limits:", limitsResp.error)
+          }
+
+          setUsageSummary({
+            messagesUsed: Number(usageResp.data?.messages_used ?? 0),
+            messagesLimit: Number(limitsResp.data?.max_messages_month ?? 0),
+            audioUsed: Number(usageResp.data?.audio_minutes_used ?? 0),
+            audioLimit: Number(limitsResp.data?.max_audio_minutes ?? 0),
+            automationsUsed: Number(usageResp.data?.automations_used ?? 0),
+            automationsLimit: Number(limitsResp.data?.max_automations ?? 0),
+          })
+        }
       } catch (err) {
         console.error(err)
       } finally {
@@ -185,6 +231,75 @@ export default function ProfessionalDashboardPage() {
             <p className="text-xs text-[#34D399] mt-2">{stat.change}</p>
           </div>
         ))}
+      </div>
+
+      <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+        <div className="mb-4">
+          <p className="text-sm font-medium text-muted-foreground">Uso del plan</p>
+          <h3 className="text-lg font-semibold text-[#0F1F63]">Consumo mensual</h3>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span>Mensajes</span>
+              <span>
+                {usageSummary.messagesUsed} / {usageSummary.messagesLimit || "∞"}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-secondary/40">
+              <div
+                className="h-2 rounded-full bg-[#3B82F6] transition-all"
+                style={{
+                  width: `${getUsagePercent(
+                    usageSummary.messagesUsed,
+                    usageSummary.messagesLimit
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span>Audio</span>
+              <span>
+                {usageSummary.audioUsed} / {usageSummary.audioLimit || "∞"}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-secondary/40">
+              <div
+                className="h-2 rounded-full bg-[#06B6D4] transition-all"
+                style={{
+                  width: `${getUsagePercent(
+                    usageSummary.audioUsed,
+                    usageSummary.audioLimit
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span>Automatizaciones</span>
+              <span>
+                {usageSummary.automationsUsed} / {usageSummary.automationsLimit || "∞"}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-secondary/40">
+              <div
+                className="h-2 rounded-full bg-[#7C3AED] transition-all"
+                style={{
+                  width: `${getUsagePercent(
+                    usageSummary.automationsUsed,
+                    usageSummary.automationsLimit
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-gradient-to-r from-[#7C3AED]/5 via-[#3B82F6]/5 to-[#06B6D4]/5 rounded-2xl border border-[#7C3AED]/20 p-6">
@@ -328,9 +443,11 @@ export default function ProfessionalDashboardPage() {
         </div>
 
         <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-10 text-center">
-          <p className="text-[#0F1F63] font-medium">Todavía no hemos conectado tus documentos reales aquí.</p>
+          <p className="text-[#0F1F63] font-medium">
+            Todavía no hemos conectado tus documentos reales aquí.
+          </p>
           <p className="text-sm text-muted-foreground mt-2">
-            El diseño ya queda sobre la línea professional de v0. En el siguiente bloque conectamos las tablas reales de documentos, agenda y tareas.
+            El diseño ya queda sobre la línea professional. En el siguiente bloque conectamos las tablas reales de documentos, agenda y tareas.
           </p>
         </div>
       </div>
