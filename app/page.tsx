@@ -4,7 +4,7 @@ import { LogoCloud } from "@/components/landing/logo-cloud"
 import { TrustIndicators } from "@/components/landing/trust-indicators"
 import { Solutions } from "@/components/landing/solutions"
 import { HowItWorks } from "@/components/landing/how-it-works"
-import { Operaly } from "@/components/landing/operaly"
+import { Sofia } from "@/components/landing/sofia"
 import { Features } from "@/components/landing/features"
 import { Integrations } from "@/components/landing/integrations"
 import { Dashboard } from "@/components/landing/dashboard"
@@ -22,7 +22,7 @@ export default function Home() {
       <TrustIndicators />
       <Solutions />
       <HowItWorks />
-      <Operaly />
+      <Sofia />
       <Features />
       <Integrations />
       <Dashboard />
