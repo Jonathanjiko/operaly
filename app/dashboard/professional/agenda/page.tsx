@@ -3,288 +3,397 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import CalendarView from "@/components/CalendarView"
+import {
+  ChevronLeft, ChevronRight, Plus, RefreshCw,
+  Zap, CheckSquare, Clock, CalendarDays,
+} from "lucide-react"
 
 type EventItem = {
   id: string
   title: string
   dateKey: string
   timeLabel: string
+  hour: number
+  minute: number
   type: "task" | "automation"
   sourceAt: string
+  status?: string
 }
 
-type ClientPrefs = {
-  locale: string
-  timeZone: string
+type ViewMode = "month" | "week" | "day" | "agenda"
+
+function safeDate(v: string | null | undefined): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  return isNaN(d.getTime()) ? null : d
 }
 
-function safeDate(value: string | null | undefined): Date | null {
-  if (!value) {
-    return null
-  }
-
-  const parsed = new Date(String(value))
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null
-  }
-
-  return parsed
+function dateKey(d: Date, tz: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d)
 }
 
-function getDateKeyInTimeZone(date: Date, timeZone: string): string {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-
-  return formatter.format(date)
+function timeLabel(d: Date, locale: string, tz: string) {
+  return new Intl.DateTimeFormat(locale, { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(d)
 }
 
-function getTimeLabelInTimeZone(date: Date, locale: string, timeZone: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
+function hourOf(d: Date, tz: string) {
+  return parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false }).format(d)) % 24
 }
 
-function mapLanguageToLocale(language: string | null | undefined): string {
-  const value = String(language || "").trim().toLowerCase()
-
-  if (value === "en") return "en-US"
-  if (value === "pt") return "pt-BR"
-  if (value === "fr") return "fr-FR"
-  if (value === "de") return "de-DE"
-  if (value === "it") return "it-IT"
-
-  return "es-PE"
+function minuteOf(d: Date, tz: string) {
+  return parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, minute: "2-digit" }).format(d))
 }
 
-function formatStoredDateTime(
-  value: string,
-  locale: string,
-  timeZone: string
-): string {
-  const parsed = safeDate(value)
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+const DAYS_SHORT = ["lun","mar","mié","jue","vie","sáb","dom"]
+const DAYS_FULL  = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+const HOURS_RANGE = Array.from({ length: 24 }, (_, i) => i)
 
-  if (!parsed) {
-    return value
-  }
+function getWeekDates(from: Date) {
+  const d = new Date(from)
+  const dow = d.getDay()
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+  return Array.from({ length: 7 }, (_, i) => { const x = new Date(monday); x.setDate(monday.getDate() + i); return x })
+}
 
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(parsed)
+function getMonthGrid(date: Date) {
+  const year = date.getFullYear(), month = date.getMonth()
+  const first = new Date(year, month, 1)
+  const last  = new Date(year, month + 1, 0)
+  const startOffset = first.getDay() === 0 ? 6 : first.getDay() - 1
+  const cells: (Date | null)[] = []
+  for (let i = 0; i < startOffset; i++) cells.push(null)
+  for (let d = 1; d <= last.getDate(); d++) cells.push(new Date(year, month, d))
+  while (cells.length % 7 !== 0) cells.push(null)
+  return cells
+}
+
+const EVENT_COLORS = {
+  task:       { bg: "bg-[#3B82F6]", light: "bg-[#EFF6FF]", text: "text-[#1D4ED8]", border: "border-[#BFDBFE]" },
+  automation: { bg: "bg-[#7C3AED]", light: "bg-[#F5F3FF]", text: "text-[#5B21B6]", border: "border-[#DDD6FE]" },
 }
 
 export default function AgendaPage() {
-  const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState<string>("")
-  const [events, setEvents] = useState<EventItem[]>([])
-  const [clientPrefs, setClientPrefs] = useState<ClientPrefs>({
-    locale: "es-PE",
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima",
-  })
+  const [loading, setLoading]       = useState(true)
+  const [events, setEvents]         = useState<EventItem[]>([])
+  const [view, setView]             = useState<ViewMode>("week")
+  const [current, setCurrent]       = useState(new Date())
+  const [selectedDK, setSelectedDK] = useState("")
+  const [tz, setTz]                 = useState("America/Lima")
+  const [locale, setLocale]         = useState("es-PE")
 
   useEffect(() => {
     const init = async () => {
       try {
-        const clientId = await getCurrentClientId()
-        const prefs = await loadClientPrefs(clientId)
+        const cid = await getCurrentClientId()
+        const { data: cl } = await supabase.from("clients")
+          .select("timezone, timezone_auto, preferred_language, language")
+          .eq("id", cid).maybeSingle()
+        const resolvedTz = cl?.timezone_auto || cl?.timezone ||
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima"
+        const lang = cl?.preferred_language || cl?.language || "es"
+        const resolvedLocale = lang === "en" ? "en-US" : lang === "pt" ? "pt-BR" : "es-PE"
+        setTz(resolvedTz); setLocale(resolvedLocale)
+        const now = new Date()
+        setSelectedDK(dateKey(now, resolvedTz))
 
-        setClientPrefs(prefs)
-        setSelectedDate(getDateKeyInTimeZone(new Date(), prefs.timeZone))
+        const [{ data: tasks }, { data: automations }] = await Promise.all([
+          supabase.from("tasks").select("id,title,due_at,status").eq("client_id", cid).not("due_at","is",null),
+          supabase.from("recurring_tasks").select("id,title,next_run,status").eq("client_id", cid).not("next_run","is",null),
+        ])
 
-        await loadEvents(clientId, prefs)
-      } finally {
-        setLoading(false)
-      }
+        const mapped: EventItem[] = [
+          ...(tasks || []).map((t: any) => {
+            const d = safeDate(t.due_at); if (!d) return null
+            return { id: t.id, title: t.title || "Tarea", dateKey: dateKey(d, resolvedTz),
+              timeLabel: timeLabel(d, resolvedLocale, resolvedTz), hour: hourOf(d, resolvedTz),
+              minute: minuteOf(d, resolvedTz), type: "task" as const, sourceAt: t.due_at, status: t.status }
+          }).filter(Boolean) as EventItem[],
+          ...(automations || []).map((a: any) => {
+            const d = safeDate(a.next_run); if (!d) return null
+            return { id: a.id, title: a.title || "Automatización", dateKey: dateKey(d, resolvedTz),
+              timeLabel: timeLabel(d, resolvedLocale, resolvedTz), hour: hourOf(d, resolvedTz),
+              minute: minuteOf(d, resolvedTz), type: "automation" as const, sourceAt: a.next_run, status: a.status }
+          }).filter(Boolean) as EventItem[],
+        ]
+        setEvents(mapped)
+      } finally { setLoading(false) }
     }
-
     init()
   }, [])
 
-  const loadClientPrefs = async (clientId: string): Promise<ClientPrefs> => {
-    const browserTimeZone =
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima"
+  const weekDates  = useMemo(() => getWeekDates(current), [current])
+  const monthCells = useMemo(() => getMonthGrid(current), [current])
 
-    const { data: clientRow } = await supabase
-      .from("clients")
-      .select("timezone, timezone_auto, preferred_language, language")
-      .eq("id", clientId)
-      .maybeSingle()
+  const eventsForDK = (dk: string) => events.filter(e => e.dateKey === dk)
+  const todayDK = dateKey(new Date(), tz)
 
-    const storedTimeZone = String(clientRow?.timezone || "").trim()
-    const autoTimeZone = String(clientRow?.timezone_auto || "").trim()
-
-    const resolvedTimeZone =
-      autoTimeZone ||
-      (storedTimeZone && storedTimeZone !== "America/Lima"
-        ? storedTimeZone
-        : browserTimeZone)
-
-    const language =
-      clientRow?.preferred_language ||
-      clientRow?.language ||
-      "es"
-
-    return {
-      locale: mapLanguageToLocale(language),
-      timeZone: resolvedTimeZone || "America/Lima",
-    }
+  function navigate(dir: number) {
+    const d = new Date(current)
+    if (view === "month") d.setMonth(d.getMonth() + dir)
+    else if (view === "week") d.setDate(d.getDate() + dir * 7)
+    else d.setDate(d.getDate() + dir)
+    setCurrent(d)
   }
 
-  const loadEvents = async (clientId: string, prefs: ClientPrefs) => {
-    const { data: tasks, error: tasksError } = await supabase
-      .from("tasks")
-      .select("id, title, due_at, status")
-      .eq("client_id", clientId)
-
-    if (tasksError) {
-      throw tasksError
+  function navTitle() {
+    if (view === "month") return `${MONTHS[current.getMonth()]} ${current.getFullYear()}`
+    if (view === "week") {
+      const first = weekDates[0], last = weekDates[6]
+      if (first.getMonth() === last.getMonth())
+        return `${first.getDate()} – ${last.getDate()} ${MONTHS[first.getMonth()]} ${first.getFullYear()}`
+      return `${first.getDate()} ${MONTHS[first.getMonth()]} – ${last.getDate()} ${MONTHS[last.getMonth()]} ${first.getFullYear()}`
     }
-
-    const { data: automations, error: automationsError } = await supabase
-      .from("recurring_tasks")
-      .select("id, title, next_run, status")
-      .eq("client_id", clientId)
-
-    if (automationsError) {
-      throw automationsError
-    }
-
-    const mappedTasks: EventItem[] = (tasks || [])
-      .filter((task: any) => task.due_at)
-      .map((task: any) => {
-        const parsed = safeDate(task.due_at)
-
-        if (!parsed) {
-          return null
-        }
-
-        return {
-          id: task.id,
-          title: task.title || "Tarea",
-          dateKey: getDateKeyInTimeZone(parsed, prefs.timeZone),
-          timeLabel: getTimeLabelInTimeZone(parsed, prefs.locale, prefs.timeZone),
-          type: "task" as const,
-          sourceAt: task.due_at,
-        }
-      })
-      .filter(Boolean) as EventItem[]
-
-    const mappedAutomations: EventItem[] = (automations || [])
-      .filter((item: any) => item.next_run)
-      .map((item: any) => {
-        const parsed = safeDate(item.next_run)
-
-        if (!parsed) {
-          return null
-        }
-
-        return {
-          id: item.id,
-          title: item.title || "Automatización",
-          dateKey: getDateKeyInTimeZone(parsed, prefs.timeZone),
-          timeLabel: getTimeLabelInTimeZone(parsed, prefs.locale, prefs.timeZone),
-          type: "automation" as const,
-          sourceAt: item.next_run,
-        }
-      })
-      .filter(Boolean) as EventItem[]
-
-    setEvents([...mappedTasks, ...mappedAutomations])
+    return new Intl.DateTimeFormat(locale, { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone: tz }).format(current)
   }
 
-  const filteredEvents = useMemo(() => {
-    return events.filter((event) => event.dateKey === selectedDate)
-  }, [events, selectedDate])
+  const dayEventsForAgenda = useMemo(() => {
+    const map = new Map<string, EventItem[]>()
+    events.forEach(e => { if (!map.has(e.dateKey)) map.set(e.dateKey, []); map.get(e.dateKey)!.push(e) })
+    return Array.from(map.entries()).sort(([a],[b]) => a.localeCompare(b))
+      .filter(([dk]) => dk >= dateKey(new Date(), tz))
+      .slice(0, 14)
+  }, [events, tz])
 
-  const calendarEvents = useMemo(() => {
-    return events.map((event) => ({
-      id: event.id,
-      title: event.title,
-      dateKey: event.dateKey,
-      timeLabel: event.timeLabel,
-      type: event.type,
-      sourceAt: event.sourceAt,
-    }))
-  }, [events])
+  const EventChip = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {
+    const c = EVENT_COLORS[event.type]
+    return (
+      <div className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium cursor-pointer transition-all hover:opacity-80 ${c.light} ${c.text} border ${c.border}`}>
+        {event.type === "task" ? <CheckSquare className="w-3 h-3 flex-shrink-0" /> : <Zap className="w-3 h-3 flex-shrink-0" />}
+        <span className="truncate">{compact ? event.title.slice(0,18) + (event.title.length > 18 ? "…" : "") : event.title}</span>
+        {!compact && <span className="ml-auto text-[10px] opacity-70">{event.timeLabel}</span>}
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-[#0F1F63]">Agenda</h1>
-        <p className="text-muted-foreground mt-1">
-          Visualiza tareas y automatizaciones en calendario.
-        </p>
-      </div>
-
-      <div className="bg-card rounded-2xl border border-border p-6">
-        {loading ? (
-          <p className="text-muted-foreground">Cargando agenda...</p>
-        ) : (
-          <CalendarView
-            events={calendarEvents as any[]}
-            locale={clientPrefs.locale}
-            selectedDate={selectedDate}
-            onSelectDate={(dateKey) => setSelectedDate(dateKey)}
-          />
-        )}
-      </div>
-
-      <div className="bg-card rounded-2xl border border-border p-6">
-        <div className="flex items-center justify-between mb-4 gap-4">
-          <h2 className="text-lg font-semibold text-[#0F1F63]">
-            Eventos del día
-          </h2>
-
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="border rounded-lg px-3 py-2"
-          />
-        </div>
-
-        {filteredEvents.length === 0 ? (
-          <p className="text-muted-foreground">
-            No hay eventos para la fecha seleccionada.
+    <div className="flex flex-col gap-0 h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-border">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0F1F63]">Agenda</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {events.length} evento{events.length !== 1 ? "s" : ""} en total
           </p>
-        ) : (
-          <div className="space-y-3">
-            {filteredEvents.map((event) => (
-              <div
-                key={`${event.type}-${event.id}-${event.sourceAt}`}
-                className="rounded-xl border border-border p-4"
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setCurrent(new Date()); setSelectedDK(dateKey(new Date(), tz)) }}
+            className="h-9 px-4 rounded-xl border border-border bg-white text-sm font-medium text-[#0F1F63] hover:bg-secondary transition-colors"
+          >
+            Hoy
+          </button>
+          {/* View selector */}
+          <div className="flex rounded-xl border border-border bg-secondary/30 p-1 gap-0.5">
+            {(["month","week","day","agenda"] as ViewMode[]).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`h-7 px-3 rounded-lg text-xs font-medium transition-all capitalize ${
+                  view === v ? "bg-white shadow-sm text-[#0F1F63]" : "text-muted-foreground hover:text-foreground"
+                }`}
               >
-                <p className="font-medium text-[#0F1F63]">{event.title}</p>
+                {v === "month" ? "Mes" : v === "week" ? "Semana" : v === "day" ? "Día" : "Agenda"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
-                <p className="text-sm text-muted-foreground">
-                  Tipo: {event.type === "task" ? "Tarea" : "Automatización"}
-                </p>
+      {/* Nav bar */}
+      <div className="flex items-center gap-3 py-3">
+        <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary transition-colors">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary transition-colors">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        <h2 className="text-base font-semibold text-[#0F1F63] capitalize">{navTitle()}</h2>
+        {loading && <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin ml-auto" />}
+      </div>
 
-                <p className="text-sm text-muted-foreground">
-                  Fecha:{" "}
-                  {formatStoredDateTime(
-                    event.sourceAt,
-                    clientPrefs.locale,
-                    clientPrefs.timeZone
-                  )}
-                </p>
+      {/* ── MONTH VIEW ─────────────────────────────────────────────── */}
+      {view === "month" && (
+        <div className="flex-1 overflow-auto">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 border-b border-border">
+            {DAYS_SHORT.map(d => (
+              <div key={d} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {d}
               </div>
             ))}
           </div>
-        )}
-      </div>
+          {/* Cells */}
+          <div className="grid grid-cols-7 border-l border-border">
+            {monthCells.map((cell, i) => {
+              const dk = cell ? dateKey(cell, tz) : ""
+              const dayEvents = cell ? eventsForDK(dk) : []
+              const isToday = dk === todayDK
+              const isSelected = dk === selectedDK
+              return (
+                <div
+                  key={i}
+                  onClick={() => cell && setSelectedDK(dk)}
+                  className={`min-h-[96px] border-r border-b border-border p-1.5 cursor-pointer transition-colors ${
+                    !cell ? "bg-secondary/20" : isSelected ? "bg-[#EFF6FF]" : "hover:bg-secondary/30"
+                  }`}
+                >
+                  {cell && (
+                    <>
+                      <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold mb-1 ${
+                        isToday ? "bg-[#3B82F6] text-white" : "text-[#0F1F63]"
+                      }`}>
+                        {cell.getDate()}
+                      </div>
+                      <div className="space-y-0.5">
+                        {dayEvents.slice(0, 3).map(e => (
+                          <EventChip key={e.id} event={e} compact />
+                        ))}
+                        {dayEvents.length > 3 && (
+                          <div className="text-[10px] text-muted-foreground pl-1">+{dayEvents.length - 3} más</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── WEEK VIEW ─────────────────────────────────────────────── */}
+      {view === "week" && (
+        <div className="flex-1 overflow-auto">
+          {/* Day headers */}
+          <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b border-border sticky top-0 bg-card z-10">
+            <div className="border-r border-border" />
+            {weekDates.map((d, i) => {
+              const dk = dateKey(d, tz)
+              const isToday = dk === todayDK
+              const isSelected = dk === selectedDK
+              return (
+                <div
+                  key={i}
+                  onClick={() => setSelectedDK(dk)}
+                  className={`py-2 px-1 text-center cursor-pointer transition-colors border-r border-border ${isSelected ? "bg-[#EFF6FF]" : "hover:bg-secondary/30"}`}
+                >
+                  <div className="text-xs text-muted-foreground font-medium uppercase">{DAYS_SHORT[i]}</div>
+                  <div className={`mt-1 w-7 h-7 mx-auto flex items-center justify-center rounded-full text-sm font-bold ${
+                    isToday ? "bg-[#3B82F6] text-white" : "text-[#0F1F63]"
+                  }`}>
+                    {d.getDate()}
+                  </div>
+                  {/* Event count badge */}
+                  {eventsForDK(dk).length > 0 && (
+                    <div className="mt-1 text-[10px] text-[#3B82F6] font-semibold">{eventsForDK(dk).length}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Time grid */}
+          <div className="grid grid-cols-[64px_repeat(7,1fr)]">
+            {HOURS_RANGE.map(hour => (
+              <>
+                <div key={`h-${hour}`} className="border-r border-b border-border px-2 py-1 text-right">
+                  <span className="text-[10px] text-muted-foreground">
+                    {hour.toString().padStart(2,"0")}:00
+                  </span>
+                </div>
+                {weekDates.map((d, di) => {
+                  const dk = dateKey(d, tz)
+                  const hourEvents = eventsForDK(dk).filter(e => e.hour === hour)
+                  return (
+                    <div key={`${hour}-${di}`} className={`border-r border-b border-border px-1 py-0.5 min-h-[40px] ${
+                      dk === selectedDK ? "bg-[#EFF6FF]/50" : ""
+                    }`}>
+                      <div className="space-y-0.5">
+                        {hourEvents.map(e => <EventChip key={e.id} event={e} />)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── DAY VIEW ─────────────────────────────────────────────── */}
+      {view === "day" && (
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-[64px_1fr]">
+            {HOURS_RANGE.map(hour => {
+              const hourEvents = eventsForDK(selectedDK).filter(e => e.hour === hour)
+              return (
+                <>
+                  <div key={`lh-${hour}`} className="border-r border-b border-border px-2 py-2 text-right">
+                    <span className="text-xs text-muted-foreground">{hour.toString().padStart(2,"0")}:00</span>
+                  </div>
+                  <div key={`ev-${hour}`} className="border-b border-border p-1.5 min-h-[56px]">
+                    <div className="space-y-1">
+                      {hourEvents.map(e => (
+                        <div key={e.id} className={`rounded-xl p-3 border ${EVENT_COLORS[e.type].light} ${EVENT_COLORS[e.type].border}`}>
+                          <div className="flex items-center gap-2">
+                            {e.type === "task" ? <CheckSquare className={`w-4 h-4 ${EVENT_COLORS[e.type].text}`} /> : <Zap className={`w-4 h-4 ${EVENT_COLORS[e.type].text}`} />}
+                            <p className={`text-sm font-semibold ${EVENT_COLORS[e.type].text}`}>{e.title}</p>
+                            <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />{e.timeLabel}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── AGENDA VIEW ─────────────────────────────────────────────── */}
+      {view === "agenda" && (
+        <div className="flex-1 overflow-auto space-y-1 py-2">
+          {dayEventsForAgenda.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No hay eventos próximos</p>
+              <p className="text-sm mt-1">Tus tareas aparecerán aquí cuando tengan fecha</p>
+            </div>
+          ) : dayEventsForAgenda.map(([dk, dayEvts]) => {
+            const d = new Date(dk + "T12:00:00")
+            const isToday = dk === todayDK
+            return (
+              <div key={dk} className="flex gap-4 py-3 border-b border-border last:border-0">
+                <div className={`w-16 flex-shrink-0 text-right pt-0.5 ${isToday ? "text-[#3B82F6]" : "text-muted-foreground"}`}>
+                  <div className="text-xs font-semibold uppercase">
+                    {new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: tz }).format(d)}
+                  </div>
+                  <div className={`text-2xl font-bold leading-none mt-0.5 ${isToday ? "text-[#3B82F6]" : "text-[#0F1F63]"}`}>
+                    {d.getDate()}
+                  </div>
+                  {isToday && <div className="text-[10px] font-medium text-[#3B82F6] mt-0.5">Hoy</div>}
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  {dayEvts.sort((a,b) => a.hour*60+a.minute - (b.hour*60+b.minute)).map(e => (
+                    <div key={e.id} className={`rounded-xl px-4 py-3 border ${EVENT_COLORS[e.type].light} ${EVENT_COLORS[e.type].border} flex items-center gap-3`}>
+                      {e.type === "task" ? <CheckSquare className={`w-4 h-4 flex-shrink-0 ${EVENT_COLORS[e.type].text}`} /> : <Zap className={`w-4 h-4 flex-shrink-0 ${EVENT_COLORS[e.type].text}`} />}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold truncate ${EVENT_COLORS[e.type].text}`}>{e.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {e.type === "task" ? "Tarea" : "Automatización"} · {e.timeLabel}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
