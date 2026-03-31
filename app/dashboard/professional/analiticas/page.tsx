@@ -113,10 +113,39 @@ export default function ProfessionalAnalyticsPage() {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      // Effective limits (plan + add-ons + usage via RPC)
-      const { data: limitsData } = await supabase
-        .rpc("get_client_effective_limits", { p_client_id: cid })
-      if (limitsData) setLimits(limitsData as EffectiveLimits)
+      // Effective limits — RPC con fallback a tenant_effective_limits directo
+      try {
+        const { data: limitsData, error: limitsError } = await supabase
+          .rpc("get_client_effective_limits", { p_client_id: cid })
+        if (!limitsError && limitsData) {
+          setLimits(limitsData as EffectiveLimits)
+        } else {
+          // Fallback: leer directamente de tenant_effective_limits
+          const { data: telData } = await supabase
+            .from("tenant_effective_limits")
+            .select("*")
+            .eq("client_id", cid)
+            .limit(1)
+          if (telData?.[0]) {
+            const tel = telData[0]
+            setLimits({
+              plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
+              addons: {},
+              usage: {},
+              limits: {
+                calls_minutes_total: (tel.max_audio_minutes || 0),
+                storage_gb_total:    (tel.max_storage_mb || 0) / 1024,
+                ia_limit_total:      (tel.max_messages_month || 0),
+                voice_enabled:       tel.voice_enabled || false,
+                google_enabled:      tel.google_enabled || false,
+              },
+              period: new Date().toISOString().slice(0,7).replace("-",""),
+            } as EffectiveLimits)
+          }
+        }
+      } catch (limitsErr) {
+        console.warn("Error cargando límites:", limitsErr)
+      }
 
       // Active add-ons
       const { data: addonsData } = await supabase
