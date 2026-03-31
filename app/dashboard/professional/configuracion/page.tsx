@@ -6,6 +6,7 @@ import {
   Globe,
   Lock,
   MapPin,
+  Mic,
   Phone,
   RefreshCcw,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
+import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
 
 type ClientRow = {
   id: string
@@ -145,6 +147,11 @@ export default function ProfessionalSettingsPage() {
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
+
+  // Voice settings state
+  const [voiceSettings, setVoiceSettings] = useState<any>(null)
+  const [voiceMinutesUsed, setVoiceMinutesUsed] = useState(0)
+  const [voiceMinutesLimit, setVoiceMinutesLimit] = useState(0)
 
   const initials = useMemo(() => {
     if (!fullName.trim()) {
@@ -406,6 +413,34 @@ export default function ProfessionalSettingsPage() {
       }
 
       setPayments((paymentsData || []) as PaymentRow[])
+
+      // Load voice settings
+      try {
+        const { data: vsData } = await supabase
+          .rpc("get_voice_settings", { p_client_id: resolvedClientId })
+        if (vsData) setVoiceSettings(vsData)
+      } catch (_) {}
+
+      // Load voice minutes usage
+      try {
+        const period = new Date().toISOString().slice(0, 7).replace("-", "")
+        const { data: usageData } = await supabase
+          .from("usage_monthly")
+          .select("audio_minutes_used")
+          .eq("client_id", resolvedClientId)
+          .eq("period_yyyymm", period)
+          .limit(1)
+        if (usageData?.[0]) {
+          setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
+        }
+        // Get limit from plan
+        const planLimits: Record<string, number> = {
+          trial: 0, core: 0, pro: 20, pro_plus: 60
+        }
+        const planCode = subscription?.plan_code || clientPlanCode || "trial"
+        setVoiceMinutesLimit(planLimits[planCode] || 0)
+      } catch (_) {}
+
     } catch (error: any) {
       alert(error.message || "No se pudo cargar la configuración.")
     } finally {
@@ -983,6 +1018,17 @@ export default function ProfessionalSettingsPage() {
             </div>
           </div>
         </div>
+
+        {/* Voice Settings Section */}
+        <VoiceSettingsSection
+          clientId={clientId}
+          planCode={effectivePlanCode}
+          voiceSettings={voiceSettings}
+          minutesUsed={voiceMinutesUsed}
+          minutesLimit={voiceMinutesLimit}
+          onSaved={loadData}
+        />
+
       </div>
     </div>
   )
