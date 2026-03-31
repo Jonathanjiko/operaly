@@ -8,6 +8,7 @@ import {
   CreditCard,
   DollarSign,
   Layers3,
+  Receipt,
   RefreshCcw,
   Search,
   ShieldCheck,
@@ -97,12 +98,23 @@ type OwnerProfile = {
 
 const BILLING_CURRENCY_CODE = "USD"
 
+const PROVIDER_COSTS = [
+  { name: "OpenAI (GPT-4o)",    category: "IA",         cost_usd: 10, billing: "variable", url: "https://platform.openai.com/usage",    notes: "Variable según uso. ~$0.005/1k tokens." },
+  { name: "ElevenLabs",         category: "Voz",        cost_usd: 5,  billing: "mensual",  url: "https://elevenlabs.io/subscription",   notes: "Starter: 30k chars/mes." },
+  { name: "Telnyx",             category: "Telefonía",  cost_usd: 1,  billing: "variable", url: "https://portal.telnyx.com",            notes: "Número + por minuto de llamada." },
+  { name: "Vapi",               category: "IA calls",   cost_usd: 0,  billing: "variable", url: "https://app.vapi.ai/billing",          notes: "Free: 10 min/mes. Luego $0.05/min." },
+  { name: "Supabase",           category: "Base datos", cost_usd: 25, billing: "mensual",  url: "https://supabase.com/dashboard",       notes: "Pro plan: 8 GB DB, 100 GB storage." },
+  { name: "Vercel",             category: "Frontend",   cost_usd: 0,  billing: "mensual",  url: "https://vercel.com/dashboard",         notes: "Free tier. Pro si escala: $20/mes." },
+  { name: "Hetzner (servidor)", category: "Backend",    cost_usd: 15, billing: "mensual",  url: "https://console.hetzner.cloud",        notes: "VPS backend Python + Docker." },
+]
+
 const SECTIONS = [
-  { id: "workspace", label: "Mi Operaly", icon: Sparkles },
-  { id: "overview", label: "Resumen", icon: BarChart3 },
-  { id: "payments", label: "Pagos", icon: CreditCard },
-  { id: "subscriptions", label: "Suscripciones", icon: Layers3 },
-  { id: "clients", label: "Clientes", icon: Users },
+  { id: "workspace",     label: "Mi Operaly",    icon: Sparkles },
+  { id: "overview",      label: "Resumen",        icon: BarChart3 },
+  { id: "payments",      label: "Pagos",          icon: CreditCard },
+  { id: "subscriptions", label: "Suscripciones",  icon: Layers3 },
+  { id: "clients",       label: "Clientes",       icon: Users },
+  { id: "costos",        label: "Costos Operaly", icon: Receipt },
 ] as const
 
 const ADMIN_PLANS = ["trial", "core", "pro", "pro_plus"] as const
@@ -1362,6 +1374,86 @@ export default function OwnerDashboardPage() {
               </div>
             </div>
           ) : null}
+          {activeSection === "costos" ? (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold text-[#0F1F63]">Costos operativos de Operaly</h2>
+                <p className="text-slate-500 mt-1 text-sm">
+                  Pagos mensuales a los proveedores. Mantenlos al día para no perder continuidad.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                  <p className="text-sm text-slate-500">Fijo mensual</p>
+                  <p className="text-3xl font-bold text-[#0F1F63] mt-1">
+                    ${PROVIDER_COSTS.filter(p => p.billing === "mensual").reduce((a, b) => a + b.cost_usd, 0)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">USD garantizados</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                  <p className="text-sm text-slate-500">Variable estimado</p>
+                  <p className="text-3xl font-bold text-[#0F1F63] mt-1">
+                    ~${PROVIDER_COSTS.filter(p => p.billing === "variable").reduce((a, b) => a + b.cost_usd, 0)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">USD según uso</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                  <p className="text-sm text-slate-500">Total estimado</p>
+                  <p className="text-3xl font-bold text-[#7C3AED] mt-1">
+                    ~${PROVIDER_COSTS.reduce((a, b) => a + b.cost_usd, 0)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">USD/mes</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h3 className="font-semibold text-[#0F1F63]">Proveedores activos</h3>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {PROVIDER_COSTS.map((provider) => (
+                    <div key={provider.name} className="px-6 py-4 flex items-center justify-between gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                          <Receipt className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm text-[#0F1F63]">{provider.name}</p>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{provider.category}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${provider.billing === "mensual" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"}`}>
+                              {provider.billing}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">{provider.notes}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                          <p className="font-bold text-[#0F1F63]">{provider.cost_usd === 0 ? "Free" : `$${provider.cost_usd}`}</p>
+                          <p className="text-xs text-slate-400">USD/mes</p>
+                        </div>
+                        <a href={provider.url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                          Ver panel
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <p className="text-sm font-medium text-amber-800">💡 Recordatorio</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Los costos variables dependen del uso real de tus clientes.
+                  Revisa mensualmente y ajusta los precios de los planes si el uso escala.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           <OwnerPaymentsMetricsPanel />
         </main>
       </div>
