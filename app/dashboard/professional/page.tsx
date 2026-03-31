@@ -32,6 +32,63 @@ function getUsagePercent(used: number, limit: number) {
   return Math.min((used / limit) * 100, 100)
 }
 
+function getUsageLevel(used: number, limit: number) {
+  if (!limit || limit <= 0) {
+    return {
+      level: "normal",
+      percent: 0,
+      title: "Uso dentro del plan",
+      message: "Tu consumo está bajo control.",
+      toneClass: "border-[#D9E1EC] bg-white",
+      badgeClass: "bg-[#E8F1FF] text-[#2563EB]",
+    }
+  }
+
+  const percent = (used / limit) * 100
+
+  if (percent >= 100) {
+    return {
+      level: "blocked",
+      percent,
+      title: "Límite alcanzado",
+      message: "Ya consumiste el 100% de este recurso.",
+      toneClass: "border-[#FCA5A5] bg-[#FEF2F2]",
+      badgeClass: "bg-[#FEE2E2] text-[#DC2626]",
+    }
+  }
+
+  if (percent >= 90) {
+    return {
+      level: "critical",
+      percent,
+      title: "Uso crítico",
+      message: "Estás por llegar al límite de tu plan.",
+      toneClass: "border-[#FCD34D] bg-[#FFFBEB]",
+      badgeClass: "bg-[#FEF3C7] text-[#D97706]",
+    }
+  }
+
+  if (percent >= 70) {
+    return {
+      level: "warning",
+      percent,
+      title: "Atención",
+      message: "Ya consumiste una parte importante de tu plan.",
+      toneClass: "border-[#BFDBFE] bg-[#EFF6FF]",
+      badgeClass: "bg-[#DBEAFE] text-[#2563EB]",
+    }
+  }
+
+  return {
+    level: "normal",
+    percent,
+    title: "Uso dentro del plan",
+    message: "Tu consumo está bajo control.",
+    toneClass: "border-[#D9E1EC] bg-white",
+    badgeClass: "bg-[#E8F1FF] text-[#2563EB]",
+  }
+}
+
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
@@ -170,7 +227,19 @@ export default function ProfessionalDashboardPage() {
       },
     ]
   }, [profile])
+  
+  const messagesUsageState = useMemo(() => {
+    return getUsageLevel(usageSummary.messagesUsed, usageSummary.messagesLimit)
+  }, [usageSummary.messagesUsed, usageSummary.messagesLimit])
 
+  const audioUsageState = useMemo(() => {
+    return getUsageLevel(usageSummary.audioUsed, usageSummary.audioLimit)
+  }, [usageSummary.audioUsed, usageSummary.audioLimit])
+
+  const automationsUsageState = useMemo(() => {
+    return getUsageLevel(usageSummary.automationsUsed, usageSummary.automationsLimit)
+  }, [usageSummary.automationsUsed, usageSummary.automationsLimit])
+  
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -301,7 +370,61 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
       </div>
+      {(messagesUsageState.level !== "normal" ||
+        audioUsageState.level !== "normal" ||
+        automationsUsageState.level !== "normal") && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {[
+            {
+              label: "Mensajes",
+              state: messagesUsageState,
+              used: usageSummary.messagesUsed,
+              limit: usageSummary.messagesLimit,
+            },
+            {
+              label: "Audio",
+              state: audioUsageState,
+              used: usageSummary.audioUsed,
+              limit: usageSummary.audioLimit,
+            },
+            {
+              label: "Automatizaciones",
+              state: automationsUsageState,
+              used: usageSummary.automationsUsed,
+              limit: usageSummary.automationsLimit,
+            },
+          ]
+            .filter((item) => item.state.level !== "normal")
+            .map((item) => (
+              <div
+                key={item.label}
+                className={`rounded-2xl border p-5 shadow-sm ${item.state.toneClass}`}
+              >
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#0F1F63]">
+                    {item.label}
+                  </p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.state.badgeClass}`}
+                  >
+                    {Math.min(Math.round(item.state.percent), 999)}%
+                  </span>
+                </div>
 
+                <p className="text-sm font-medium text-[#0F1F63]">
+                  {item.state.title}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {item.state.message}
+                </p>
+
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Consumo actual: {item.used} / {item.limit || "∞"}
+                </p>
+              </div>
+            ))}
+        </div>
+      )}
       <div className="bg-gradient-to-r from-[#7C3AED]/5 via-[#3B82F6]/5 to-[#06B6D4]/5 rounded-2xl border border-[#7C3AED]/20 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
