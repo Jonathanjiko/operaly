@@ -23,10 +23,7 @@ type NotificationRow = {
 
 function formatRelativeDate(value: string, locale = "es-PE") {
   const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
+  if (Number.isNaN(date.getTime())) return value
 
   return new Intl.DateTimeFormat(locale, {
     year: "numeric",
@@ -38,18 +35,9 @@ function formatRelativeDate(value: string, locale = "es-PE") {
 }
 
 function severityClasses(severity: string) {
-  if (severity === "success") {
-    return "bg-emerald-50 border-emerald-200"
-  }
-
-  if (severity === "warning") {
-    return "bg-amber-50 border-amber-200"
-  }
-
-  if (severity === "error") {
-    return "bg-red-50 border-red-200"
-  }
-
+  if (severity === "success") return "bg-emerald-50 border-emerald-200"
+  if (severity === "warning") return "bg-amber-50 border-amber-200"
+  if (severity === "error") return "bg-red-50 border-red-200"
   return "bg-white border-slate-200"
 }
 
@@ -58,18 +46,25 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<NotificationRow[]>([])
   const [clientId, setClientId] = useState<string | null>(null)
+
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const channelRef = useRef<any>(null)
 
   const unreadCount = useMemo(() => {
     return notifications.filter((item) => !item.is_read).length
   }, [notifications])
 
+  // ---------------------------
+  // INIT
+  // ---------------------------
   useEffect(() => {
     const init = async () => {
       try {
         const currentClientId = await getCurrentClientId()
         setClientId(currentClientId)
         await loadNotifications(currentClientId)
+      } catch (err) {
+        console.error("Error init notifications:", err)
       } finally {
         setLoading(false)
       }
@@ -78,38 +73,51 @@ export default function NotificationBell() {
     init()
   }, [])
 
+  // ---------------------------
+  // REALTIME (FIX CRÍTICO)
+  // ---------------------------
   useEffect(() => {
-    if (!clientId) {
-      return
+    if (!clientId) return
+
+    // 🔥 LIMPIAR SI YA EXISTE
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
     }
 
-    const channel = supabase
-      .channel(`notifications:${clientId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `client_id=eq.${clientId}`,
-        },
-        () => {
-          loadNotifications(clientId)
-        }
-      )
-      .subscribe()
+    const channel = supabase.channel(`notifications-${clientId}`)
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => {
+        loadNotifications(clientId)
+      }
+    )
+
+    channel.subscribe()
+
+    channelRef.current = channel
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [clientId])
 
+  // ---------------------------
+  // CLICK OUTSIDE
+  // ---------------------------
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!panelRef.current) {
-        return
-      }
-
+      if (!panelRef.current) return
       if (!panelRef.current.contains(event.target as Node)) {
         setOpen(false)
       }
@@ -122,59 +130,71 @@ export default function NotificationBell() {
     }
   }, [])
 
+  // ---------------------------
+  // DATA
+  // ---------------------------
   const loadNotifications = async (currentClientId: string) => {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("client_id", currentClientId)
-      .order("created_at", { ascending: false })
-      .limit(25)
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("client_id", currentClientId)
+        .order("created_at", { ascending: false })
+        .limit(25)
 
-    if (error) {
-      throw error
+      if (error) throw error
+
+      setNotifications((data || []) as NotificationRow[])
+    } catch (err) {
+      console.error("Error loading notifications:", err)
     }
-
-    setNotifications((data || []) as NotificationRow[])
   }
 
   const markOneRead = async (notificationId: string) => {
-    const { error } = await supabase.rpc("mark_notification_read", {
-      p_notification_id: notificationId,
-    })
+    try {
+      const { error } = await supabase.rpc("mark_notification_read", {
+        p_notification_id: notificationId,
+      })
 
-    if (error) {
-      throw error
-    }
+      if (error) throw error
 
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item.id === notificationId
-          ? {
-              ...item,
-              is_read: true,
-              read_at: new Date().toISOString(),
-            }
-          : item
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === notificationId
+            ? {
+                ...item,
+                is_read: true,
+                read_at: new Date().toISOString(),
+              }
+            : item
+        )
       )
-    )
+    } catch (err) {
+      console.error("Error markOneRead:", err)
+    }
   }
 
   const markAllRead = async () => {
-    const { error } = await supabase.rpc("mark_all_notifications_read")
+    try {
+      const { error } = await supabase.rpc("mark_all_notifications_read")
 
-    if (error) {
-      throw error
+      if (error) throw error
+
+      setNotifications((prev) =>
+        prev.map((item) => ({
+          ...item,
+          is_read: true,
+          read_at: item.read_at || new Date().toISOString(),
+        }))
+      )
+    } catch (err) {
+      console.error("Error markAllRead:", err)
     }
-
-    setNotifications((prev) =>
-      prev.map((item) => ({
-        ...item,
-        is_read: true,
-        read_at: item.read_at || new Date().toISOString(),
-      }))
-    )
   }
 
+  // ---------------------------
+  // UI
+  // ---------------------------
   return (
     <div ref={panelRef} className="relative">
       <button
