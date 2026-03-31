@@ -5,12 +5,17 @@ import {
   FileText,
   Users,
   Calendar,
+  CheckSquare,
   Plus,
   ArrowRight,
   Clock,
   Sparkles,
   TrendingUp,
   Bell,
+  Bot,
+  Mic,
+  Plug,
+  Zap,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -38,9 +43,22 @@ type RecentDocument = {
 type TodayTask = {
   id: string
   title: string | null
-  due_date: string | null
+  due_at: string | null
   status: string | null
   priority: string | null
+}
+
+type UpcomingEvent = {
+  id: string
+  title: string
+  scheduledAt: string
+  type: "task" | "automation"
+}
+
+type FeatureAccess = {
+  voiceEnabled: boolean
+  googleEnabled: boolean
+  customAgentEnabled: boolean
 }
 
 function getUsagePercent(used: number, limit: number) {
@@ -118,6 +136,12 @@ export default function ProfessionalDashboardPage() {
   })
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([])
   const [todayTasks, setTodayTasks] = useState<TodayTask[]>([])
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
+  const [featureAccess, setFeatureAccess] = useState<FeatureAccess>({
+    voiceEnabled: false,
+    googleEnabled: false,
+    customAgentEnabled: false,
+  })
 
   const [greeting] = useState(() => {
     const hour = new Date().getHours()
@@ -183,7 +207,9 @@ export default function ProfessionalDashboardPage() {
 
           const limitsResp = await supabase
             .from("tenant_effective_limits")
-            .select("max_messages_month, max_audio_minutes, max_automations")
+            .select(
+              "max_messages_month, max_audio_minutes, max_automations, voice_enabled, google_enabled, custom_agent_enabled"
+            )
             .eq("client_id", clientId)
             .maybeSingle()
 
@@ -204,6 +230,12 @@ export default function ProfessionalDashboardPage() {
             automationsLimit: Number(limitsResp.data?.max_automations ?? 0),
           })
 
+          setFeatureAccess({
+            voiceEnabled: Boolean(limitsResp.data?.voice_enabled ?? false),
+            googleEnabled: Boolean(limitsResp.data?.google_enabled ?? false),
+            customAgentEnabled: Boolean(limitsResp.data?.custom_agent_enabled ?? false),
+          })
+
           const documentsResp = await supabase
             .from("documents")
             .select("id, title, file_name, created_at, status")
@@ -219,21 +251,57 @@ export default function ProfessionalDashboardPage() {
 
           const tasksResp = await supabase
             .from("tasks")
-            .select("id, title, due_date, status, priority")
+            .select("id, title, due_at, status, priority")
             .eq("client_id", clientId)
             .in("status", ["pending", "in_progress"])
-            .order("due_date", { ascending: true })
+            .order("due_at", { ascending: true })
             .limit(5)
 
           if (tasksResp.error) {
             console.error("Error cargando tasks:", tasksResp.error)
           } else {
             const filteredTasks = ((tasksResp.data || []) as TodayTask[]).filter((task) => {
-              if (!task.due_date) return true
-              return String(task.due_date).slice(0, 10) <= today
+              if (!task.due_at) return true
+              return String(task.due_at).slice(0, 10) <= today
             })
 
             setTodayTasks(filteredTasks)
+          }
+
+          const recurringResp = await supabase
+            .from("recurring_tasks")
+            .select("id, title, next_run, status")
+            .eq("client_id", clientId)
+            .eq("status", "active")
+            .order("next_run", { ascending: true })
+            .limit(5)
+
+          if (recurringResp.error) {
+            console.error("Error cargando recurring_tasks:", recurringResp.error)
+          } else {
+            const mappedTaskEvents: UpcomingEvent[] = ((tasksResp.data || []) as any[])
+              .filter((task) => task.due_at)
+              .map((task) => ({
+                id: task.id,
+                title: task.title || "Tarea",
+                scheduledAt: String(task.due_at),
+                type: "task" as const,
+              }))
+
+            const mappedRecurringEvents: UpcomingEvent[] = ((recurringResp.data || []) as any[])
+              .filter((item) => item.next_run)
+              .map((item) => ({
+                id: item.id,
+                title: item.title || "Automatización",
+                scheduledAt: String(item.next_run),
+                type: "automation" as const,
+              }))
+
+            const merged = [...mappedTaskEvents, ...mappedRecurringEvents]
+              .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+              .slice(0, 5)
+
+            setUpcomingEvents(merged)
           }
         }
       } catch (err) {
@@ -290,6 +358,64 @@ export default function ProfessionalDashboardPage() {
   const automationsUsageState = useMemo(() => {
     return getUsageLevel(usageSummary.automationsUsed, usageSummary.automationsLimit)
   }, [usageSummary.automationsUsed, usageSummary.automationsLimit])
+
+  const quickLinks = useMemo(() => {
+    const links = [
+      {
+        href: "/dashboard/professional/documentos",
+        title: "Documentos",
+        description: "Sube, revisa y organiza tus archivos",
+        icon: FileText,
+      },
+      {
+        href: "/dashboard/professional/agenda",
+        title: "Agenda",
+        description: "Visualiza tus citas y eventos programados",
+        icon: Calendar,
+      },
+      {
+        href: "/dashboard/professional/tareas",
+        title: "Pendientes",
+        description: "Trabaja tus tareas como tablero de control",
+        icon: CheckSquare,
+      },
+      {
+        href: "/dashboard/professional/automatizaciones",
+        title: "Automatizaciones",
+        description: "Programa acciones y seguimientos automáticos",
+        icon: Zap,
+      },
+    ]
+
+    if (featureAccess.customAgentEnabled) {
+      links.unshift({
+        href: "/dashboard/professional/asistente",
+        title: "Asistente",
+        description: "Personaliza el comportamiento de tu agente",
+        icon: Bot,
+      })
+    }
+
+    if (featureAccess.voiceEnabled) {
+      links.push({
+        href: "/dashboard/professional/voz",
+        title: "Voz",
+        description: "Configura voz, tonos y estilo de llamadas",
+        icon: Mic,
+      })
+    }
+
+    if (featureAccess.googleEnabled) {
+      links.push({
+        href: "/dashboard/professional/integraciones",
+        title: "Integraciones",
+        description: "Conecta Google Calendar, Drive y más",
+        icon: Plug,
+      })
+    }
+
+    return links
+  }, [featureAccess])
 
   if (loading) {
     return (
@@ -514,6 +640,62 @@ export default function ProfessionalDashboardPage() {
         </div>
       </div>
 
+      <div className="bg-card rounded-2xl border border-border p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-[#0F1F63]">Próximos eventos</h3>
+          <Link href="/dashboard/professional/agenda">
+            <Button variant="ghost" size="sm" className="text-[#3B82F6]">
+              Ver agenda
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </Button>
+          </Link>
+        </div>
+
+        {upcomingEvents.length > 0 ? (
+          <div className="space-y-3">
+            {upcomingEvents.map((event) => (
+              <div
+                key={`${event.type}-${event.id}`}
+                className="flex items-center justify-between rounded-xl border border-border p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      event.type === "automation"
+                        ? "bg-[#7C3AED]/10"
+                        : "bg-[#3B82F6]/10"
+                    }`}
+                  >
+                    {event.type === "automation" ? (
+                      <Zap className="w-4 h-4 text-[#7C3AED]" />
+                    ) : (
+                      <CheckSquare className="w-4 h-4 text-[#3B82F6]" />
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-medium text-[#0F1F63]">{event.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {event.type === "automation" ? "Automatización" : "Tarea"} ·{" "}
+                      {new Date(event.scheduledAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
+            <p className="text-[#0F1F63] font-medium">
+              No tienes próximos eventos programados.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Tus tareas con fecha y automatizaciones activas aparecerán aquí.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-6">
@@ -555,8 +737,8 @@ export default function ProfessionalDashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      {task.due_date
-                        ? new Date(task.due_date).toLocaleDateString()
+                      {task.due_at
+                        ? new Date(task.due_at).toLocaleDateString()
                         : "Sin fecha"}
                     </div>
                   </div>
@@ -581,32 +763,23 @@ export default function ProfessionalDashboardPage() {
           </div>
 
           <div className="space-y-4">
-            <Link href="/dashboard/professional/documentos" className="block">
-              <div className="p-4 rounded-xl border border-border hover:bg-secondary/40 transition-colors">
-                <p className="font-medium text-[#0F1F63]">Documentos</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Sube, revisa y organiza tus archivos
-                </p>
-              </div>
-            </Link>
-
-            <Link href="/dashboard/professional/agenda" className="block">
-              <div className="p-4 rounded-xl border border-border hover:bg-secondary/40 transition-colors">
-                <p className="font-medium text-[#0F1F63]">Agenda</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Visualiza tus citas en formato calendario
-                </p>
-              </div>
-            </Link>
-
-            <Link href="/dashboard/professional/tareas" className="block">
-              <div className="p-4 rounded-xl border border-border hover:bg-secondary/40 transition-colors">
-                <p className="font-medium text-[#0F1F63]">Pendientes</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Trabaja tus tareas como tablero de control
-                </p>
-              </div>
-            </Link>
+            {quickLinks.map((item) => (
+              <Link key={item.href} href={item.href} className="block">
+                <div className="p-4 rounded-xl border border-border hover:bg-secondary/40 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#3B82F6]/10 flex items-center justify-center">
+                      <item.icon className="w-4 h-4 text-[#3B82F6]" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-[#0F1F63]">{item.title}</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {item.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </div>
