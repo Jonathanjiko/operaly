@@ -31,7 +31,15 @@ type DashboardProfile = {
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
-
+  const [usageSummary, setUsageSummary] = useState({
+    messagesUsed: 0,
+    messagesLimit: 0,
+    audioUsed: 0,
+    audioLimit: 0,
+    automationsUsed: 0,
+    automationsLimit: 0,
+  })
+  
   const [greeting] = useState(() => {
     const hour = new Date().getHours()
     if (hour < 12) return "Buenos días"
