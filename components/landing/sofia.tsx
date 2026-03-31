@@ -1,140 +1,80 @@
-import { Bell, Users, Calendar, FileText, Brain, MessageSquare, UserPlus, ShoppingCart, BookOpen, TrendingUp, Sparkles } from "lucide-react"
+import { BellRing, BrainCircuit, FileSearch2, LockKeyhole, PhoneCall, SendHorizonal, Sparkles } from "lucide-react"
 
-const professionalFeatures = [
-  { icon: Bell, label: "Recordatorios automáticos" },
-  { icon: Users, label: "Seguimiento de clientes" },
-  { icon: Calendar, label: "Organización de agenda" },
-  { icon: FileText, label: "Notas y documentos" },
-  { icon: Brain, label: "Consultas con IA" },
-]
-
-const businessFeatures = [
-  { icon: MessageSquare, label: "Atención automática a clientes" },
-  { icon: UserPlus, label: "Registro de leads" },
-  { icon: ShoppingCart, label: "Ventas por WhatsApp" },
-  { icon: BookOpen, label: "Gestión de reservas" },
-  { icon: TrendingUp, label: "Seguimiento comercial" },
+const personalFlows = [
+  {
+    icon: BellRing,
+    title: "Tus mañanas dejan de empezar en caos",
+    text: "Operaly te saluda con tus pendientes del día, prioridades, citas y recordatorios para que sepas exactamente qué mover primero.",
+  },
+  {
+    icon: FileSearch2,
+    title: "Te ayuda a pensar y decidir mejor",
+    text: "Analiza fotos, PDFs, Word, Excel y otros documentos con profundidad, contexto profesional y estructura clara.",
+  },
+  {
+    icon: SendHorizonal,
+    title: "Ejecuta aunque tú estés ocupado",
+    text: "Puede enviar mensajes, archivos, audios, research o encargos a terceros justo cuando tú no puedes hacerlo.",
+  },
+  {
+    icon: PhoneCall,
+    title: "Hace gestiones en tu nombre",
+    text: "Reservas, coordinaciones, confirmaciones o llamadas programadas con resumen final de resultado positivo o negativo.",
+  },
+  {
+    icon: LockKeyhole,
+    title: "Guarda lo que no puedes perder",
+    text: "Contraseñas, links, contactos clave, documentos y secretos en un baúl privado organizado y accesible desde tu dashboard.",
+  },
+  {
+    icon: BrainCircuit,
+    title: "Se adapta a tu forma de trabajar",
+    text: "Puedes darle personalidad, enfoque profesional y criterio analítico según tu rubro para que piense más como tú necesitas.",
+  },
 ]
 
 export function Sofia() {
   return (
-    <section id="sofia" className="py-24 md:py-32 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#7C3AED]/[0.03] via-[#3B82F6]/[0.05] to-[#06B6D4]/[0.03]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-[#7C3AED]/10 via-[#3B82F6]/10 to-[#06B6D4]/10 rounded-full blur-3xl opacity-60" />
-      
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative">
-        {/* Section header with AI glow */}
-        <div className="text-center max-w-4xl mx-auto mb-20">
-          {/* Badge with sparkle */}
-          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#7C3AED]/15 via-[#3B82F6]/15 to-[#06B6D4]/15 border border-[#7C3AED]/20 mb-6">
-            <Sparkles className="w-4 h-4 text-[#7C3AED]" />
-            <span className="text-sm font-semibold bg-gradient-to-r from-[#7C3AED] to-[#3B82F6] bg-clip-text text-transparent">
-              Tu asistente IA
+    <section id="operaly" className="py-24 md:py-32">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid items-start gap-10 lg:grid-cols-[0.92fr_1.08fr]">
+          <div className="sticky top-28">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#7C3AED]/10 px-4 py-2 text-sm font-semibold text-[#6D28D9]">
+              <Sparkles className="h-4 w-4" />
+              ¿Qué hace diferente a Operaly?
             </span>
-          </div>
-          
-          {/* Title with glow effect */}
-          <div className="relative inline-block">
-            {/* Glow behind title */}
-            <div className="absolute -inset-x-20 -inset-y-10 bg-gradient-to-r from-[#7C3AED]/20 via-[#3B82F6]/20 to-[#06B6D4]/20 rounded-full blur-3xl opacity-70 animate-pulse" />
-            <h2 className="relative text-4xl sm:text-5xl md:text-6xl font-bold text-[#0F1F63] text-balance leading-tight">
-              Conoce a{" "}
-              <span className="relative inline-block">
-                {/* Glow specifically for Sofia name */}
-                <span className="absolute -inset-2 bg-gradient-to-r from-[#7C3AED] via-[#3B82F6] to-[#06B6D4] rounded-lg blur-xl opacity-30" />
-                <span className="relative bg-gradient-to-r from-[#7C3AED] via-[#3B82F6] to-[#06B6D4] bg-clip-text text-transparent font-extrabold">
-                  Sofía
-                </span>
-              </span>
+            <h2 className="mt-6 text-3xl font-bold text-[#0F1F63] sm:text-4xl md:text-5xl">
+              No solo responde.
+              <span className="block">Te acompaña, te recuerda y te ejecuta trabajo real.</span>
             </h2>
-          </div>
-          
-          <p className="mt-6 text-xl text-muted-foreground text-pretty max-w-2xl mx-auto leading-relaxed">
-            Tu asistente inteligente en WhatsApp con memoria conversacional y capacidad de ejecutar tareas por ti.
-          </p>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+              Operaly vive en tu WhatsApp, pero su cerebro se extiende a tu agenda, tus archivos, tus automatizaciones y tu panel privado.
+              Se siente como tener un asistente personal profesional, atento, discreto y siempre disponible.
+            </p>
 
-          {/* AI capabilities badges */}
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {["Memoria conversacional", "Memoria de clientes", "Ejecuta tareas"].map((cap) => (
-              <span 
-                key={cap} 
-                className="px-4 py-2 text-sm font-medium rounded-full bg-white border border-border shadow-sm text-[#0F1F63]"
+            <div className="mt-8 rounded-[28px] border border-[#DCE6F8] bg-gradient-to-br from-white via-[#F8FBFF] to-[#EEF6FF] p-6 shadow-[0_20px_50px_-25px_rgba(15,31,99,0.2)]">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#3B82F6]">Ejemplos reales</p>
+              <div className="mt-5 space-y-3 text-sm text-[#0F1F63]">
+                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">“Operaly, averigua sobre ese tema y envíaselo a mi esposa.”</div>
+                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">“Llama al restaurante a las 4 pm y resérvame una mesa para 4.”</div>
+                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">“Léeme por audio mis pendientes y los casos que siguen abiertos.”</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            {personalFlows.map((feature) => (
+              <article
+                key={feature.title}
+                className="group rounded-[28px] border border-border bg-white/85 p-6 shadow-[0_18px_50px_-28px_rgba(15,31,99,0.18)] transition-transform duration-300 hover:-translate-y-1"
               >
-                {cap}
-              </span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED]/12 via-[#3B82F6]/12 to-[#06B6D4]/12">
+                  <feature.icon className="h-5 w-5 text-[#3B82F6]" />
+                </div>
+                <h3 className="mt-5 text-xl font-bold text-[#0F1F63]">{feature.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">{feature.text}</p>
+              </article>
             ))}
-          </div>
-        </div>
-
-        {/* Two columns */}
-        <div className="grid md:grid-cols-2 gap-8 lg:gap-10">
-          {/* Professional column */}
-          <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-10 border border-[#3B82F6]/10 shadow-lg shadow-[#3B82F6]/5 hover:shadow-xl hover:shadow-[#3B82F6]/10 transition-all duration-300">
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#3B82F6]/5 via-transparent to-[#06B6D4]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative">
-              {/* Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] rounded-2xl blur-lg opacity-40" />
-                  <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] shadow-lg">
-                    <Brain className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-[#0F1F63]">
-                  Sofía para profesionales
-                </h3>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-4">
-                {professionalFeatures.map((feature) => (
-                  <div 
-                    key={feature.label} 
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#3B82F6]/5 to-transparent hover:from-[#3B82F6]/10 hover:to-[#06B6D4]/5 transition-colors border border-transparent hover:border-[#3B82F6]/10"
-                  >
-                    <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-white shadow-md border border-[#3B82F6]/10">
-                      <feature.icon className="w-5 h-5 text-[#3B82F6]" />
-                    </div>
-                    <span className="text-base font-medium text-foreground">{feature.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Business column */}
-          <div className="group relative bg-white/80 backdrop-blur-sm rounded-3xl p-10 border border-[#34D399]/10 shadow-lg shadow-[#34D399]/5 hover:shadow-xl hover:shadow-[#34D399]/10 transition-all duration-300">
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#34D399]/5 via-transparent to-[#06B6D4]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative">
-              {/* Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#34D399] to-[#06B6D4] rounded-2xl blur-lg opacity-40" />
-                  <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#34D399] to-[#06B6D4] shadow-lg">
-                    <MessageSquare className="w-7 h-7 text-white" />
-                  </div>
-                </div>
-                <h3 className="text-2xl font-bold text-[#0F1F63]">
-                  Sofía para negocios
-                </h3>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-4">
-                {businessFeatures.map((feature) => (
-                  <div 
-                    key={feature.label} 
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#34D399]/5 to-transparent hover:from-[#34D399]/10 hover:to-[#06B6D4]/5 transition-colors border border-transparent hover:border-[#34D399]/10"
-                  >
-                    <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-white shadow-md border border-[#34D399]/10">
-                      <feature.icon className="w-5 h-5 text-[#34D399]" />
-                    </div>
-                    <span className="text-base font-medium text-foreground">{feature.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>

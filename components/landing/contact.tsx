@@ -2,19 +2,17 @@ import { Mail } from "lucide-react"
 
 export function Contact() {
   return (
-    <section id="contacto" className="py-16 md:py-20 border-t border-border">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 text-center">
-        <h2 className="text-2xl md:text-3xl font-bold text-[#0F1F63] mb-4">
-          ¿Necesitas ayuda?
-        </h2>
-        <p className="text-muted-foreground text-lg mb-6">
-          Nuestro equipo está listo para ayudarte a implementar Operaly en tu negocio.
+    <section id="contacto" className="border-t border-border py-16 md:py-20">
+      <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+        <h2 className="text-2xl font-bold text-[#0F1F63] md:text-3xl">¿Quieres implementar Operaly con criterio desde el inicio?</h2>
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
+          Escríbenos y te ayudamos a aterrizar la mejor configuración para tu flujo personal o profesional.
         </p>
-        <a 
+        <a
           href="mailto:contacto@operaly.app"
-          className="inline-flex items-center gap-2 text-[#3B82F6] hover:text-[#06B6D4] font-medium text-lg transition-colors"
+          className="mt-7 inline-flex items-center gap-2 rounded-full border border-[#DBE8FF] bg-white px-6 py-3 text-base font-semibold text-[#3B82F6] shadow-sm transition hover:text-[#06B6D4]"
         >
-          <Mail className="w-5 h-5" />
+          <Mail className="h-5 w-5" />
           contacto@operaly.app
         </a>
       </div>

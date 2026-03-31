@@ -10,7 +10,7 @@ const professionalPlans = [
     price: 29,
     description: "Ideal para profesionales independientes.",
     features: [
-      "Asistente IA Sofía por WhatsApp",
+      "Operaly Assistant por WhatsApp",
       "Envío de mensajes a terceros por encargo",
       "Memoria conversacional de clientes",
       "Gestión de contactos y casos",
@@ -70,7 +70,7 @@ const businessPlans = [
     price: 29,
     description: "Para pequeños negocios.",
     features: [
-      "Agente de ventas IA Sofía",
+      "Operaly Seller Assistant",
       "Atención automática por WhatsApp",
       "CRM básico",
       "Catálogo básico de productos o servicios",
@@ -176,7 +176,7 @@ export function Pricing() {
             Planes simples y transparentes
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Todos los planes incluyen a <strong>Sofía</strong>, tu asistente IA con memoria conversacional.
+            Todos los planes incluyen <strong>Operaly</strong>, con memoria conversacional y ejecución inteligente.
           </p>
           <p className="mt-3 text-base text-[#0F1F63]/70 font-medium">
             WhatsApp + Redes sociales en un solo sistema de atención inteligente.

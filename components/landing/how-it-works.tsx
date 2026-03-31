@@ -1,95 +1,76 @@
-import { UserPlus, Smartphone, Sparkles } from "lucide-react"
+import { Bot, CalendarSync, Smartphone, Workflow } from "lucide-react"
 
 const steps = [
   {
     number: "01",
-    icon: UserPlus,
-    title: "Regístrate y configura tu cuenta",
-    description: "Crea tu cuenta en Operaly y elige si lo usarás como profesional o como negocio.",
+    icon: Smartphone,
+    title: "Conectas tu WhatsApp y eliges tu perfil",
+    description:
+      "Operaly se adapta a tu profesión, tu forma de trabajar y el tipo de seguimiento que necesitas manejar cada día.",
     gradient: "from-[#3B82F6] to-[#06B6D4]",
-    iconBg: "bg-[#3B82F6]/10",
-    iconColor: "text-[#3B82F6]",
   },
   {
     number: "02",
-    icon: Smartphone,
-    title: "Conecta tu número de WhatsApp",
-    description: "Registra tu número para que Sofía pueda asistirte o atender a tus clientes automáticamente.",
-    gradient: "from-[#06B6D4] to-[#34D399]",
-    iconBg: "bg-[#06B6D4]/10",
-    iconColor: "text-[#06B6D4]",
+    icon: Bot,
+    title: "Le delegas tareas reales con lenguaje natural",
+    description:
+      "Puedes pedirle recordatorios, resúmenes, research, llamadas, seguimiento de casos, envíos a terceros o gestión de pendientes por voz.",
+    gradient: "from-[#7C3AED] to-[#3B82F6]",
   },
   {
     number: "03",
-    icon: Sparkles,
-    title: "Empieza a trabajar con Sofía",
-    description: "Sofía organiza clientes, agenda, recordatorios y también puede vender, reservar y hacer seguimiento a tus clientes.",
-    gradient: "from-[#34D399] to-[#3B82F6]",
-    iconBg: "bg-[#34D399]/10",
-    iconColor: "text-[#34D399]",
+    icon: CalendarSync,
+    title: "Todo se refleja en tu sistema privado",
+    description:
+      "Agenda, dashboard, archivos, notas, automatizaciones y consumos del plan quedan visibles para que tengas control sin fricción.",
+    gradient: "from-[#06B6D4] to-[#34D399]",
   },
 ]
 
 export function HowItWorks() {
   return (
-    <section id="como-funciona" className="py-24 md:py-32 bg-gradient-to-b from-background to-secondary/30">
+    <section id="como-funciona" className="bg-gradient-to-b from-background to-secondary/20 py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Section header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <span className="inline-block px-4 py-1.5 rounded-full bg-[#06B6D4]/10 text-[#06B6D4] text-sm font-semibold mb-4">
+        <div className="mx-auto mb-16 max-w-3xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#06B6D4]/10 px-4 py-1.5 text-sm font-semibold text-[#0891B2]">
+            <Workflow className="h-4 w-4" />
             Cómo funciona
           </span>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#0F1F63] text-balance">
-            Cómo funciona Operaly
+          <h2 className="mt-5 text-3xl font-bold text-[#0F1F63] sm:text-4xl md:text-5xl">
+            Lo suficientemente simple como para usarlo hoy.
+            <span className="block">Lo suficientemente potente como para depender de él mañana.</span>
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Convierte WhatsApp en tu asistente inteligente o en tu agente de ventas en solo minutos.
+          <p className="mt-5 text-lg text-muted-foreground">
+            En pocos pasos conviertes tu WhatsApp en una capa operativa que recuerda, organiza, ejecuta y te devuelve foco.
           </p>
         </div>
 
-        {/* Steps */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid gap-8 md:grid-cols-3">
           {steps.map((step, index) => (
             <div
               key={step.number}
-              className="group relative bg-card rounded-3xl p-8 border border-border shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-[30px] border border-border bg-white/85 p-8 shadow-[0_18px_50px_-25px_rgba(15,31,99,0.18)] backdrop-blur"
             >
-              {/* Step number badge */}
-              <div className={`absolute -top-4 left-8 px-4 py-1.5 rounded-full bg-gradient-to-r ${step.gradient} text-white text-sm font-bold shadow-lg`}>
+              <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${step.gradient}`} />
+              {index < steps.length - 1 && (
+                <div className="absolute right-0 top-12 hidden h-px w-14 translate-x-1/2 bg-gradient-to-r from-[#D8E2F3] to-transparent md:block" />
+              )}
+              <div className="mt-2 inline-flex rounded-full bg-[#F3F7FE] px-4 py-1.5 text-sm font-bold text-[#0F1F63]">
                 Paso {step.number}
               </div>
-
-              {/* Connector line (hidden on mobile, shown on desktop) */}
-              {index < steps.length - 1 && (
-                <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-border to-transparent z-10" />
-              )}
-
-              <div className="pt-4">
-                {/* Icon */}
-                <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${step.iconBg} mb-6 group-hover:scale-110 transition-transform`}>
-                  <step.icon className={`w-7 h-7 ${step.iconColor}`} />
-                </div>
-
-                {/* Content */}
-                <h3 className="text-xl font-bold text-[#0F1F63] mb-3">
-                  {step.title}
-                </h3>
-                <p className="text-muted-foreground text-pretty leading-relaxed">
-                  {step.description}
-                </p>
+              <div className="mt-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F2F7FF] to-white shadow-sm">
+                <step.icon className="h-6 w-6 text-[#3B82F6]" />
               </div>
-
-              {/* Gradient overlay on hover */}
-              <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${step.gradient} opacity-0 group-hover:opacity-5 transition-opacity`} />
+              <h3 className="mt-6 text-2xl font-bold text-[#0F1F63]">{step.title}</h3>
+              <p className="mt-4 text-base leading-7 text-muted-foreground">{step.description}</p>
             </div>
           ))}
         </div>
 
-        {/* CTA */}
         <div className="mt-12 text-center">
           <a
             href="/register"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white font-semibold shadow-lg shadow-[#3B82F6]/25 hover:shadow-xl hover:shadow-[#3B82F6]/30 transition-all hover:-translate-y-0.5"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#3B82F6] via-[#4F46E5] to-[#06B6D4] px-8 py-4 font-semibold text-white shadow-[0_18px_45px_-18px_rgba(59,130,246,0.7)] transition hover:opacity-95"
           >
             Comenzar ahora
           </a>
