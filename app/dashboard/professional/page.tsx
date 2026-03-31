@@ -102,7 +102,7 @@ export default function ProfessionalDashboardPage() {
             .from("usage_monthly")
             .select("messages_used, audio_minutes_used, automations_used")
             .eq("client_id", clientId)
-            .eq("period_month", periodMonth)
+            .eq("period_yyyymm", periodYYYYMM)
             .maybeSingle()
 
           const limitsResp = await supabase
