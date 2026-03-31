@@ -48,8 +48,6 @@ export default function NotificationBell() {
   const [clientId, setClientId] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const channelRef = useRef<any>(null)
-
   const unreadCount = useMemo(() => {
     return notifications.filter((item) => !item.is_read).length
   }, [notifications])
@@ -74,42 +72,14 @@ export default function NotificationBell() {
   }, [])
 
   // ---------------------------
-  // REALTIME (FIX CRÍTICO)
+  // POLLING cada 30s (estable, sin errores de realtime)
   // ---------------------------
   useEffect(() => {
     if (!clientId) return
-
-    // 🔥 LIMPIAR SI YA EXISTE
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
-    }
-
-    const channel = supabase.channel(`notifications-${clientId}`)
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "notifications",
-        filter: `client_id=eq.${clientId}`,
-      },
-      () => {
-        loadNotifications(clientId)
-      }
-    )
-
-    channel.subscribe()
-
-    channelRef.current = channel
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
-    }
+    const interval = setInterval(() => {
+      loadNotifications(clientId)
+    }, 30000)
+    return () => clearInterval(interval)
   }, [clientId])
 
   // ---------------------------
