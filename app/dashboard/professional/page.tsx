@@ -27,6 +27,22 @@ type DashboardProfile = {
   preferredLanguage: string
 }
 
+type RecentDocument = {
+  id: string
+  title: string | null
+  file_name: string | null
+  created_at: string | null
+  status: string | null
+}
+
+type TodayTask = {
+  id: string
+  title: string | null
+  due_date: string | null
+  status: string | null
+  priority: string | null
+}
+
 function getUsagePercent(used: number, limit: number) {
   if (!limit || limit <= 0) return 0
   return Math.min((used / limit) * 100, 100)
@@ -100,6 +116,8 @@ export default function ProfessionalDashboardPage() {
     automationsUsed: 0,
     automationsLimit: 0,
   })
+  const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([])
+  const [todayTasks, setTodayTasks] = useState<TodayTask[]>([])
 
   const [greeting] = useState(() => {
     const hour = new Date().getHours()
@@ -153,7 +171,8 @@ export default function ProfessionalDashboardPage() {
         })
 
         if (clientId) {
-          const periodMonth = new Date().toISOString().slice(0, 7)
+          const periodYYYYMM = new Date().toISOString().slice(0, 7)
+          const today = new Date().toISOString().slice(0, 10)
 
           const usageResp = await supabase
             .from("usage_monthly")
@@ -184,6 +203,38 @@ export default function ProfessionalDashboardPage() {
             automationsUsed: Number(usageResp.data?.automations_used ?? 0),
             automationsLimit: Number(limitsResp.data?.max_automations ?? 0),
           })
+
+          const documentsResp = await supabase
+            .from("documents")
+            .select("id, title, file_name, created_at, status")
+            .eq("client_id", clientId)
+            .order("created_at", { ascending: false })
+            .limit(5)
+
+          if (documentsResp.error) {
+            console.error("Error cargando documents:", documentsResp.error)
+          } else {
+            setRecentDocuments((documentsResp.data || []) as RecentDocument[])
+          }
+
+          const tasksResp = await supabase
+            .from("tasks")
+            .select("id, title, due_date, status, priority")
+            .eq("client_id", clientId)
+            .in("status", ["pending", "in_progress"])
+            .order("due_date", { ascending: true })
+            .limit(5)
+
+          if (tasksResp.error) {
+            console.error("Error cargando tasks:", tasksResp.error)
+          } else {
+            const filteredTasks = ((tasksResp.data || []) as TodayTask[]).filter((task) => {
+              if (!task.due_date) return true
+              return String(task.due_date).slice(0, 10) <= today
+            })
+
+            setTodayTasks(filteredTasks)
+          }
         }
       } catch (err) {
         console.error(err)
@@ -227,7 +278,7 @@ export default function ProfessionalDashboardPage() {
       },
     ]
   }, [profile])
-  
+
   const messagesUsageState = useMemo(() => {
     return getUsageLevel(usageSummary.messagesUsed, usageSummary.messagesLimit)
   }, [usageSummary.messagesUsed, usageSummary.messagesLimit])
@@ -239,7 +290,7 @@ export default function ProfessionalDashboardPage() {
   const automationsUsageState = useMemo(() => {
     return getUsageLevel(usageSummary.automationsUsed, usageSummary.automationsLimit)
   }, [usageSummary.automationsUsed, usageSummary.automationsLimit])
-  
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -370,6 +421,7 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
       </div>
+
       {(messagesUsageState.level !== "normal" ||
         audioUsageState.level !== "normal" ||
         automationsUsageState.level !== "normal") && (
@@ -401,9 +453,7 @@ export default function ProfessionalDashboardPage() {
                 className={`rounded-2xl border p-5 shadow-sm ${item.state.toneClass}`}
               >
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[#0F1F63]">
-                    {item.label}
-                  </p>
+                  <p className="text-sm font-semibold text-[#0F1F63]">{item.label}</p>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.state.badgeClass}`}
                   >
@@ -411,12 +461,8 @@ export default function ProfessionalDashboardPage() {
                   </span>
                 </div>
 
-                <p className="text-sm font-medium text-[#0F1F63]">
-                  {item.state.title}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {item.state.message}
-                </p>
+                <p className="text-sm font-medium text-[#0F1F63]">{item.state.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{item.state.message}</p>
 
                 <p className="mt-3 text-xs text-muted-foreground">
                   Consumo actual: {item.used} / {item.limit || "∞"}
@@ -425,6 +471,7 @@ export default function ProfessionalDashboardPage() {
             ))}
         </div>
       )}
+
       <div className="bg-gradient-to-r from-[#7C3AED]/5 via-[#3B82F6]/5 to-[#06B6D4]/5 rounded-2xl border border-[#7C3AED]/20 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
@@ -479,43 +526,53 @@ export default function ProfessionalDashboardPage() {
             </Link>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30">
-              <div className="w-3 h-3 rounded-full bg-[#EF4444]" />
-              <div className="flex-1">
-                <p className="font-medium text-foreground">Revisar tu configuración inicial</p>
-                <p className="text-sm text-muted-foreground">Deja listo el entorno de Assistant</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                Hoy
-              </div>
-            </div>
+          {todayTasks.length > 0 ? (
+            <div className="space-y-3">
+              {todayTasks.map((task) => {
+                const priorityColor =
+                  task.priority === "high"
+                    ? "#EF4444"
+                    : task.priority === "medium"
+                    ? "#F59E0B"
+                    : "#34D399"
 
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30">
-              <div className="w-3 h-3 rounded-full bg-[#F59E0B]" />
-              <div className="flex-1">
-                <p className="font-medium text-foreground">Subir tus primeros documentos</p>
-                <p className="text-sm text-muted-foreground">Activa el análisis documental</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                Esta semana
-              </div>
+                return (
+                  <div
+                    key={task.id}
+                    className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30"
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: priorityColor }}
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">
+                        {task.title || "Tarea sin título"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {task.status === "in_progress" ? "En progreso" : "Pendiente"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="w-4 h-4" />
+                      {task.due_date
+                        ? new Date(task.due_date).toLocaleDateString()
+                        : "Sin fecha"}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30">
-              <div className="w-3 h-3 rounded-full bg-[#34D399]" />
-              <div className="flex-1">
-                <p className="font-medium text-foreground">Configurar agenda y tareas</p>
-                <p className="text-sm text-muted-foreground">Prepara tu espacio de trabajo</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                Próximo paso
-              </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
+              <p className="text-[#0F1F63] font-medium">
+                No tienes pendientes activos para hoy.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Crea tareas desde tu dashboard o desde WhatsApp y aparecerán aquí.
+              </p>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-6">
@@ -565,14 +622,44 @@ export default function ProfessionalDashboardPage() {
           </Link>
         </div>
 
-        <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-10 text-center">
-          <p className="text-[#0F1F63] font-medium">
-            Todavía no hemos conectado tus documentos reales aquí.
-          </p>
-          <p className="text-sm text-muted-foreground mt-2">
-            El diseño ya queda sobre la línea professional. En el siguiente bloque conectamos las tablas reales de documentos, agenda y tareas.
-          </p>
-        </div>
+        {recentDocuments.length > 0 ? (
+          <div className="space-y-3">
+            {recentDocuments.map((doc) => (
+              <div
+                key={doc.id}
+                className="flex items-center justify-between rounded-xl border border-border p-4"
+              >
+                <div>
+                  <p className="font-medium text-[#0F1F63]">
+                    {doc.title || doc.file_name || "Documento sin nombre"}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {doc.status || "Procesado"} ·{" "}
+                    {doc.created_at
+                      ? new Date(doc.created_at).toLocaleDateString()
+                      : "Sin fecha"}
+                  </p>
+                </div>
+
+                <Link href="/dashboard/professional/documentos">
+                  <Button variant="ghost" size="sm" className="text-[#3B82F6]">
+                    Ver
+                    <ArrowRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-10 text-center">
+            <p className="text-[#0F1F63] font-medium">
+              Aún no tienes documentos recientes.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Sube tu primer archivo para empezar a analizar información con Operaly.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
