@@ -5,71 +5,44 @@ import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
-  Check, Lock, ShieldCheck, Sparkles, Zap,
-  ArrowRight, RefreshCw, AlertCircle, CreditCard,
-  CheckCircle2, Clock, Star, ChevronRight,
+  Check, Lock, ShieldCheck, Sparkles, ArrowRight,
+  RefreshCw, AlertCircle, CreditCard, CheckCircle2, Star,
 } from "lucide-react"
 import { getPlanByCode, type OperalyPlanCode, OPERLAY_PLANS } from "@/lib/plans"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 type PaymentProvider = "mercadopago" | "stripe"
-type CheckoutMode = "redirect" | "hosted" | "embed"
 type CheckoutResponse = {
-  ok: boolean; provider?: PaymentProvider; mode?: CheckoutMode | null
-  checkout_url?: string | null; init_point?: string | null
-  subscription_id?: string | null; error?: string
+  ok: boolean; checkout_url?: string | null; init_point?: string | null; error?: string; detail?: string
 }
 
 const PAID_PLANS: OperalyPlanCode[] = ["core", "pro", "pro_plus"]
 
 const PLAN_FEATURES: Record<string, string[]> = {
-  core: [
-    "Agente IA en WhatsApp 24/7",
-    "Tareas, agenda y contactos",
-    "Dashboard privado",
-    "Documentos básicos",
-    "Soporte por WhatsApp",
-  ],
-  pro: [
-    "Todo lo de Core",
-    "🎙️ Voz: audios y llamadas (20 min/mes)",
-    "Automatizaciones activas",
-    "Análisis de documentos con IA",
-    "Mensajes a terceros",
-  ],
-  pro_plus: [
-    "Todo lo de Pro",
-    "🤖 Llamadas conversacionales IA (60 min/mes)",
-    "Análisis profundo por profesión",
-    "Agente personalizado avanzado",
-    "Acceso API + Google Suite",
-  ],
+  core:     ["Agente IA en WhatsApp 24/7", "Tareas, agenda y contactos", "Dashboard privado", "Documentos básicos", "Soporte por WhatsApp"],
+  pro:      ["Todo lo de Core", "🎙️ Voz: audios y llamadas (20 min/mes)", "Automatizaciones activas", "Análisis de documentos con IA", "Mensajes a terceros"],
+  pro_plus: ["Todo lo de Pro", "🤖 Llamadas conversacionales IA (60 min/mes)", "Análisis profundo por profesión", "Agente personalizado avanzado", "Acceso API + Google Suite"],
 }
 
-const TRUST_SIGNALS = [
+const TRUST = [
   { icon: Lock,         text: "Pago 100% seguro" },
   { icon: RefreshCw,    text: "Cancela cuando quieras" },
   { icon: ShieldCheck,  text: "Sin permanencia" },
   { icon: CheckCircle2, text: "Activo en 2 minutos" },
 ]
 
-function fmt(amount: number) {
-  return new Intl.NumberFormat("en-US", { style:"currency", currency:"USD", minimumFractionDigits:0 }).format(amount)
-}
-
 function normalizeError(msg: string) {
-  const m = msg.trim()
   const map: Record<string,string> = {
-    "missing_client_id":                    "No encontramos tu cuenta. Por favor recarga la página.",
-    "missing_plan_code":                    "Selecciona un plan válido para continuar.",
+    "missing_client_id":                    "No encontramos tu cuenta. Recarga la página.",
+    "missing_plan_code":                    "Selecciona un plan válido.",
     "missing_backend_url":                  "Error de configuración. Contacta soporte.",
-    "provider_not_enabled":                 "La pasarela seleccionada no está disponible.",
-    "missing_client_email_for_subscription":"Tu cuenta necesita un email registrado para procesar el pago.",
-    "missing_mercadopago_access_token":     "Mercado Pago está en proceso de activación. Intenta en unos minutos.",
+    "provider_not_enabled":                 "La pasarela no está disponible.",
+    "missing_client_email_for_subscription":"Tu cuenta necesita un email registrado.",
+    "missing_mercadopago_access_token":     "Mercado Pago está en proceso de activación.",
     "missing_checkout_url":                 "No se pudo generar el link de pago. Intenta nuevamente.",
     "checkout_failed":                      "No se pudo iniciar el checkout. Intenta nuevamente.",
   }
-  return map[m] || m
+  return map[msg.trim()] || msg
 }
 
 export default function IniciarPagoClient() {
@@ -83,44 +56,52 @@ export default function IniciarPagoClient() {
   const [error, setError]         = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
 
+  const { pricing, loading: pricingLoading, isPeru } = usePricingCurrency()
   const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
-  const { pricing } = usePricingCurrency()
+
+  // Display price for selected plan
+  const displayPrice = selectedPlan
+    ? pricing.display[selectedPlan.code as keyof typeof pricing.display] ?? selectedPlan.price
+    : 0
+
+  // Internal charge in PEN (what MP actually charges)
+  const chargePEN = selectedPlan
+    ? pricing.charge_pen[selectedPlan.code as keyof typeof pricing.charge_pen] ?? displayPrice * 5
+    : 0
 
   useEffect(() => {
-    const loadEmail = async () => {
-      // Try multiple localStorage keys (different registration flows)
+    const load = async () => {
+      // Try to get email from multiple localStorage sources
       const keys = ["operaly_pending_signup", "operaly_assistant_profile", "operaly_register_auth"]
       let email = ""
       for (const key of keys) {
         try {
           const raw = localStorage.getItem(key)
           if (raw) {
-            const parsed = JSON.parse(raw)
-            email = parsed?.email || parsed?.user?.email || ""
+            const p = JSON.parse(raw)
+            email = p?.email || p?.user?.email || ""
             if (email) break
           }
         } catch {}
       }
-
-      // If still no email and we have clientId, fetch from Supabase auth
-      if (!email && clientId) {
+      // If still no email, get from Supabase auth session
+      if (!email) {
         try {
           const { createClient } = await import("@supabase/supabase-js")
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-          if (supabaseUrl && supabaseKey) {
-            const sb = createClient(supabaseUrl, supabaseKey)
+          const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+          const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+          if (url && key) {
+            const sb = createClient(url, key)
             const { data: { user } } = await sb.auth.getUser()
             if (user?.email) email = user.email
           }
         } catch {}
       }
-
       setCustomerEmail(email)
       setLoading(false)
     }
-    loadEmail()
-  }, [clientId])
+    load()
+  }, [])
 
   // Keep URL in sync
   useEffect(() => {
@@ -133,48 +114,30 @@ export default function IniciarPagoClient() {
 
   const handlePay = async () => {
     if (!selectedPlan || selectedPlan.code === "trial") {
-      setError("Selecciona un plan de pago válido.")
-      return
+      setError("Selecciona un plan de pago válido."); return
     }
-    if (!clientId) {
-      // Try to get clientId from localStorage as fallback
-      const storedClientId = localStorage.getItem("operaly_client_id")
-      if (!storedClientId) {
-        setError("No encontramos tu cuenta. Por favor inicia sesión y vuelve a intentarlo.")
-        return
-      }
+    const resolvedCid = clientId || localStorage.getItem("operaly_client_id") || ""
+    if (!resolvedCid) {
+      setError("No encontramos tu cuenta. Por favor inicia sesión."); return
     }
-
-    setError("")
-    setSubmitting(true)
-
+    setError(""); setSubmitting(true)
     try {
-      // Use clientId from URL or localStorage fallback
-      const resolvedClientId = clientId || localStorage.getItem("operaly_client_id") || ""
-      if (!resolvedClientId) {
-        throw new Error("No se encontró tu cuenta. Por favor inicia sesión.")
-      }
-
       const res = await fetch("/api/payments/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          clientId: resolvedClientId, 
-          planCode: selectedPlan.code, 
+        body: JSON.stringify({
+          clientId: resolvedCid,
+          planCode: selectedPlan.code,
           provider: "mercadopago",
-          email: customerEmail || undefined,  // send email as fallback for backend
+          email: customerEmail || undefined,
+          // Send internal PEN amount for backend validation
+          amount_pen: chargePEN,
         }),
       })
-
-      const payload: CheckoutResponse & { detail?: string } = await res.json()
-
-      if (!res.ok || !payload?.ok) {
-        throw new Error(payload?.error || payload?.detail || "checkout_failed")
-      }
-
+      const payload: CheckoutResponse = await res.json()
+      if (!res.ok || !payload?.ok) throw new Error(payload?.error || payload?.detail || "checkout_failed")
       const url = String(payload.checkout_url || payload.init_point || "").trim()
       if (!url) throw new Error("missing_checkout_url")
-
       window.location.href = url
     } catch (err: any) {
       setError(normalizeError(err?.message || "checkout_failed"))
@@ -182,7 +145,7 @@ export default function IniciarPagoClient() {
     }
   }
 
-  if (loading) {
+  if (loading || pricingLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -222,7 +185,7 @@ export default function IniciarPagoClient() {
             <div>
               <h1 className="text-2xl font-bold text-[#0F1F63]">Elige tu plan</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Todos los planes incluyen 7 días de prueba gratuita. Cancela cuando quieras.
+                Activo inmediatamente. Sin permanencia. Cancela cuando quieras.
               </p>
             </div>
 
@@ -232,22 +195,18 @@ export default function IniciarPagoClient() {
                 const p = getPlanByCode(code)
                 if (!p) return null
                 const isSelected = plan === code
+                const price = pricing.display[code as keyof typeof pricing.display] ?? p.price
                 const features = PLAN_FEATURES[code] || p.features
 
                 return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setPlan(code)}
+                  <button key={code} type="button" onClick={() => setPlan(code)}
                     className={`w-full rounded-2xl border p-5 text-left transition-all ${
                       isSelected
                         ? "border-[#3B82F6] bg-white shadow-md ring-1 ring-[#3B82F6]/20"
                         : "border-border bg-white hover:border-[#3B82F6]/30 hover:shadow-sm"
-                    }`}
-                  >
+                    }`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
-                        {/* Radio */}
                         <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                           isSelected ? "border-[#3B82F6] bg-[#3B82F6]" : "border-border bg-white"
                         }`}>
@@ -266,14 +225,11 @@ export default function IniciarPagoClient() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-2xl font-bold text-[#0F1F63]">
-                          {pricing.format(pricing.prices[p.code as keyof typeof pricing.prices] || p.price)}
-                        </p>
+                        <p className="text-2xl font-bold text-[#0F1F63]">{pricing.fmt(price)}</p>
                         <p className="text-xs text-muted-foreground">{pricing.currency}/mes</p>
                       </div>
                     </div>
 
-                    {/* Features (expanded when selected) */}
                     {isSelected && (
                       <div className="mt-4 pt-4 border-t border-[#3B82F6]/10 grid sm:grid-cols-2 gap-1.5">
                         {features.map(f => (
@@ -291,7 +247,7 @@ export default function IniciarPagoClient() {
 
             {/* Trust signals */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {TRUST_SIGNALS.map(ts => {
+              {TRUST.map(ts => {
                 const Icon = ts.icon
                 return (
                   <div key={ts.text} className="flex items-center gap-2 bg-white rounded-xl border border-border p-3">
@@ -305,9 +261,8 @@ export default function IniciarPagoClient() {
 
           {/* ── Right: Summary + Pay ── */}
           <div className="space-y-4">
-            {/* Summary card */}
             <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-              {/* Header gradient */}
+              {/* Header */}
               <div className="bg-gradient-to-r from-[#0F1F63] to-[#1a3a9f] px-6 py-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-white/60 mb-2">Resumen del pedido</p>
                 <div className="flex items-end justify-between">
@@ -316,7 +271,7 @@ export default function IniciarPagoClient() {
                     <p className="text-sm text-white/70 mt-0.5">Suscripción mensual</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-white">{selectedPlan ? fmt(selectedPlan.price) : "—"}</p>
+                    <p className="text-3xl font-bold text-white">{pricing.fmt(displayPrice)}</p>
                     <p className="text-xs text-white/60">por mes</p>
                   </div>
                 </div>
@@ -326,28 +281,32 @@ export default function IniciarPagoClient() {
               <div className="px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Plan {selectedPlan?.name}</span>
-                  <span className="font-semibold text-[#0F1F63]">
-                    {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"}/mes
-                  </span>
+                  <span className="font-semibold text-[#0F1F63]">{pricing.fmt(displayPrice)}/mes</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Facturación</span>
                   <span className="font-semibold text-[#0F1F63]">Mensual recurrente</span>
                 </div>
+                {/* Show PEN charge amount for international users */}
+                {!isPeru && (
+                  <div className="flex items-center justify-between text-xs bg-[#F0F9FF] rounded-lg px-3 py-2">
+                    <span className="text-[#0369A1]">Cobro en MercadoPago</span>
+                    <span className="font-semibold text-[#0369A1]">S/{chargePEN} PEN</span>
+                  </div>
+                )}
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#0F1F63]">Total a pagar</span>
-                  <span className="font-bold text-2xl text-[#0F1F63]">
-                    {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"}
-                  </span>
+                  <span className="font-bold text-2xl text-[#0F1F63]">{pricing.fmt(displayPrice)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Se cobra {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"} {pricing.currency}/mes. Cancela cuando quieras.
-                  {pricing.currency === "PEN" && <span className="block mt-0.5 text-[#3B82F6]">Precio en soles peruanos.</span>}
+                  Se cobra {pricing.fmt(displayPrice)} {pricing.currency}/mes.
+                  {!isPeru && " El cargo se procesa en soles peruanos (S/{chargePEN}) a través de Mercado Pago."}
+                  {" "}Cancela cuando quieras desde tu dashboard.
                 </p>
               </div>
 
-              {/* Customer info */}
+              {/* Verified account */}
               {customerEmail && (
                 <div className="px-6 pb-4">
                   <div className="flex items-center gap-2 bg-secondary/50 rounded-xl p-3">
@@ -372,49 +331,37 @@ export default function IniciarPagoClient() {
 
               {/* CTA */}
               <div className="px-6 pb-6">
-                <button
-                  onClick={handlePay}
-                  disabled={submitting || !selectedPlan}
-                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-bold text-base hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#3B82F6]/30"
-                >
+                <button onClick={handlePay} disabled={submitting || !selectedPlan}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-bold text-base hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#3B82F6]/30">
                   {submitting ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      Conectando con Mercado Pago...
-                    </>
+                    <><RefreshCw className="w-5 h-5 animate-spin" /> Conectando con Mercado Pago...</>
                   ) : (
-                    <>
-                      <CreditCard className="w-5 h-5" />
-                      Continuar con Mercado Pago
-                      <ArrowRight className="w-5 h-5" />
-                    </>
+                    <><CreditCard className="w-5 h-5" /> Continuar con Mercado Pago <ArrowRight className="w-5 h-5" /></>
                   )}
                 </button>
                 <p className="text-center text-xs text-muted-foreground mt-3 flex items-center justify-center gap-1.5">
-                  <Lock className="w-3 h-3" />
-                  Pago procesado por Mercado Pago · SSL 256-bit
+                  <Lock className="w-3 h-3" /> Pago procesado por Mercado Pago · SSL 256-bit
                 </p>
               </div>
             </div>
 
             {/* MP Badge */}
             <div className="bg-white rounded-2xl border border-border p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#FFF159] flex items-center justify-center font-bold text-sm text-[#009EE3] flex-shrink-0">
-                MP
-              </div>
+              <div className="w-10 h-10 rounded-xl bg-[#FFF159] flex items-center justify-center font-bold text-sm text-[#009EE3] flex-shrink-0">MP</div>
               <div>
                 <p className="text-sm font-semibold text-[#0F1F63]">Procesado por Mercado Pago</p>
                 <p className="text-xs text-muted-foreground">Tu información de pago nunca pasa por nuestros servidores</p>
               </div>
             </div>
 
-            {/* FAQ quick */}
+            {/* FAQ */}
             <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Preguntas frecuentes</p>
               {[
-                ["¿Cuándo se me cobra?", "Inmediatamente al confirmar el pago en Mercado Pago."],
-                ["¿Puedo cancelar?", "Sí, en cualquier momento desde tu dashboard."],
-                ["¿Qué pasa al cancelar?", "Tu acceso continúa hasta el fin del período pagado."],
+                ["¿Cuándo se me cobra?",     "Inmediatamente al confirmar el pago en Mercado Pago."],
+                ["¿Puedo cancelar?",          "Sí, en cualquier momento desde tu dashboard."],
+                ["¿Qué pasa al cancelar?",    "Tu acceso continúa hasta el fin del período pagado."],
+                ["¿En qué moneda me cobran?", isPeru ? "En soles peruanos (PEN) directamente." : "En soles peruanos (PEN) equivalentes al precio en USD mostrado."],
               ].map(([q, a]) => (
                 <div key={q}>
                   <p className="text-xs font-semibold text-[#0F1F63]">{q}</p>
