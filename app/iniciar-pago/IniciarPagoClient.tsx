@@ -10,6 +10,7 @@ import {
   CheckCircle2, Clock, Star, ChevronRight,
 } from "lucide-react"
 import { getPlanByCode, type OperalyPlanCode, OPERLAY_PLANS } from "@/lib/plans"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 type PaymentProvider = "mercadopago" | "stripe"
 type CheckoutMode = "redirect" | "hosted" | "embed"
@@ -83,6 +84,7 @@ export default function IniciarPagoClient() {
   const [customerEmail, setCustomerEmail] = useState("")
 
   const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
+  const { pricing } = usePricingCurrency()
 
   useEffect(() => {
     const loadEmail = async () => {
@@ -264,8 +266,10 @@ export default function IniciarPagoClient() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-2xl font-bold text-[#0F1F63]">{fmt(p.price)}</p>
-                        <p className="text-xs text-muted-foreground">USD/mes</p>
+                        <p className="text-2xl font-bold text-[#0F1F63]">
+                          {pricing.format(pricing.prices[p.code as keyof typeof pricing.prices] || p.price)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{pricing.currency}/mes</p>
                       </div>
                     </div>
 
@@ -322,7 +326,9 @@ export default function IniciarPagoClient() {
               <div className="px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Plan {selectedPlan?.name}</span>
-                  <span className="font-semibold text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}/mes</span>
+                  <span className="font-semibold text-[#0F1F63]">
+                    {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"}/mes
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Facturación</span>
@@ -331,10 +337,13 @@ export default function IniciarPagoClient() {
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#0F1F63]">Total a pagar</span>
-                  <span className="font-bold text-2xl text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}</span>
+                  <span className="font-bold text-2xl text-[#0F1F63]">
+                    {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD cada mes. Cancela cuando quieras desde tu dashboard.
+                  Se cobra {selectedPlan ? pricing.format(pricing.prices[selectedPlan.code as keyof typeof pricing.prices] || selectedPlan.price) : "—"} {pricing.currency}/mes. Cancela cuando quieras.
+                  {pricing.currency === "PEN" && <span className="block mt-0.5 text-[#3B82F6]">Precio en soles peruanos.</span>}
                 </p>
               </div>
 
