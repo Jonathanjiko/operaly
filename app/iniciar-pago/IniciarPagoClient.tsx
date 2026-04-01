@@ -2,786 +2,378 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
-  BadgeCheck,
-  Check,
-  ChevronRight,
-  CreditCard,
-  Lock,
-  ShieldCheck,
-  Sparkles,
-  Wallet,
-  AlertCircle,
-  ArrowRight,
-  CircleHelp,
-  Building2,
+  Check, Lock, ShieldCheck, Sparkles, Zap,
+  ArrowRight, RefreshCw, AlertCircle, CreditCard,
+  CheckCircle2, Clock, Star, ChevronRight,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
-
-type PendingSignup = {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  companyName?: string
-  country: string
-  businessType: string
-  password: string
-  planCode: "trial" | "core" | "pro" | "pro_plus"
-}
+import { getPlanByCode, type OperalyPlanCode, OPERLAY_PLANS } from "@/lib/plans"
 
 type PaymentProvider = "mercadopago" | "stripe"
 type CheckoutMode = "redirect" | "hosted" | "embed"
-
 type CheckoutResponse = {
-  ok: boolean
-  provider?: PaymentProvider
-  mode?: CheckoutMode | null
-  checkout_url?: string | null
-  init_point?: string | null
-  subscription_id?: string | null
-  preapproval_plan_id?: string | null
-  order_id?: string | null
-  payment_url?: string | null
-  error?: string
+  ok: boolean; provider?: PaymentProvider; mode?: CheckoutMode | null
+  checkout_url?: string | null; init_point?: string | null
+  subscription_id?: string | null; error?: string
 }
 
-const BILLING_CURRENCY_CODE = "USD"
 const PAID_PLANS: OperalyPlanCode[] = ["core", "pro", "pro_plus"]
 
-const PAYMENT_PROVIDERS: Array<{
-  code: PaymentProvider
-  name: string
-  description: string
-  enabled: boolean
-  badge?: string
-}> = [
-  {
-    code: "mercadopago",
-    name: "Mercado Pago",
-    description: "Proveedor principal para suscripciones y cobros recurrentes en esta fase.",
-    enabled: true,
-    badge: "Principal",
-  },
-  {
-    code: "stripe",
-    name: "Stripe",
-    description: "Preparado para expansión internacional cuando la cuenta esté habilitada.",
-    enabled: false,
-    badge: "Próximamente",
-  },
-]
-
-function formatMoney(amount: number, currency = BILLING_CURRENCY_CODE) {
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  } catch {
-    return `${currency} ${amount}`
-  }
+const PLAN_FEATURES: Record<string, string[]> = {
+  core: [
+    "Agente IA en WhatsApp 24/7",
+    "Tareas, agenda y contactos",
+    "Dashboard privado",
+    "Documentos básicos",
+    "Soporte por WhatsApp",
+  ],
+  pro: [
+    "Todo lo de Core",
+    "🎙️ Voz: audios y llamadas (20 min/mes)",
+    "Automatizaciones activas",
+    "Análisis de documentos con IA",
+    "Mensajes a terceros",
+  ],
+  pro_plus: [
+    "Todo lo de Pro",
+    "🤖 Llamadas conversacionales IA (60 min/mes)",
+    "Análisis profundo por profesión",
+    "Agente personalizado avanzado",
+    "Acceso API + Google Suite",
+  ],
 }
 
-function normalizeCheckoutError(message: string) {
-  const value = String(message || "").trim()
+const TRUST_SIGNALS = [
+  { icon: Lock,         text: "Pago 100% seguro" },
+  { icon: RefreshCw,    text: "Cancela cuando quieras" },
+  { icon: ShieldCheck,  text: "Sin permanencia" },
+  { icon: CheckCircle2, text: "Activo en 2 minutos" },
+]
 
-  if (!value) {
-    return "No se pudo iniciar el checkout en este momento."
-  }
+function fmt(amount: number) {
+  return new Intl.NumberFormat("en-US", { style:"currency", currency:"USD", minimumFractionDigits:0 }).format(amount)
+}
 
-  switch (value) {
-    case "missing_client_id":
-      return "No se encontró el identificador del cliente para iniciar el pago."
-    case "missing_plan_code":
-      return "No se recibió el plan que se desea cobrar."
-    case "missing_backend_url":
-      return "La configuración del backend de pagos no está disponible."
-    case "provider_not_enabled":
-    case "provider_not_enabled_yet":
-      return "La pasarela seleccionada todavía no está habilitada."
-    case "missing_client_email_for_subscription":
-      return "Este checkout requiere que el cliente tenga un email registrado para crear la suscripción."
-    case "missing_mercadopago_access_token":
-      return "Mercado Pago todavía no tiene credenciales activas en este entorno. La arquitectura ya quedó lista, pero falta la habilitación final."
-    case "missing_checkout_url":
-      return "La pasarela respondió, pero no devolvió una URL válida de checkout."
-    case "checkout_failed":
-      return "No se pudo crear la sesión de checkout."
-    default:
-      return value
+function normalizeError(msg: string) {
+  const m = msg.trim()
+  const map: Record<string,string> = {
+    "missing_client_id":                    "No encontramos tu cuenta. Por favor recarga la página.",
+    "missing_plan_code":                    "Selecciona un plan válido para continuar.",
+    "missing_backend_url":                  "Error de configuración. Contacta soporte.",
+    "provider_not_enabled":                 "La pasarela seleccionada no está disponible.",
+    "missing_client_email_for_subscription":"Tu cuenta necesita un email registrado para procesar el pago.",
+    "missing_mercadopago_access_token":     "Mercado Pago está en proceso de activación. Intenta en unos minutos.",
+    "missing_checkout_url":                 "No se pudo generar el link de pago. Intenta nuevamente.",
+    "checkout_failed":                      "No se pudo iniciar el checkout. Intenta nuevamente.",
   }
+  return map[m] || m
 }
 
 export default function IniciarPagoClient() {
   const searchParams = useSearchParams()
+  const initialPlan  = (searchParams.get("plan") || "pro") as OperalyPlanCode
+  const clientId     = searchParams.get("cid")
 
-  const initialPlan = (searchParams.get("plan") || "pro") as OperalyPlanCode
-  const clientId = searchParams.get("cid")
-  const reference = searchParams.get("ref")
-
-  const [selectedPlanCode, setSelectedPlanCode] = useState<OperalyPlanCode>(
-    initialPlan === "trial" ? "pro" : initialPlan
-  )
-  const [selectedProvider, setSelectedProvider] =
-    useState<PaymentProvider>("mercadopago")
-  const [pendingSignup, setPendingSignup] = useState<PendingSignup | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [plan, setPlan]           = useState<OperalyPlanCode>(initialPlan === "trial" ? "pro" : initialPlan)
+  const [loading, setLoading]     = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [checkoutError, setCheckoutError] = useState("")
-  const [checkoutMode, setCheckoutMode] = useState<CheckoutMode | null>(null)
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
+  const [error, setError]         = useState("")
+  const [customerEmail, setCustomerEmail] = useState("")
 
-  const selectedPlan = useMemo(() => {
-    return getPlanByCode(selectedPlanCode)
-  }, [selectedPlanCode])
-
-  const selectedProviderConfig = useMemo(() => {
-    return PAYMENT_PROVIDERS.find((item) => item.code === selectedProvider) || null
-  }, [selectedProvider])
-
-  const customerDisplayName = useMemo(() => {
-    if (!pendingSignup) return null
-    return `${pendingSignup.firstName} ${pendingSignup.lastName}`.trim()
-  }, [pendingSignup])
-
-  const customerEmail = useMemo(() => {
-    return pendingSignup?.email?.trim() || null
-  }, [pendingSignup])
+  const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
 
   useEffect(() => {
     const raw = localStorage.getItem("operaly_pending_signup")
-
     if (raw) {
       try {
-        setPendingSignup(JSON.parse(raw))
-      } catch {
-        setPendingSignup(null)
-      }
+        const signup = JSON.parse(raw)
+        setCustomerEmail(signup?.email || "")
+      } catch {}
     }
-
     setLoading(false)
   }, [])
 
+  // Keep URL in sync
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-
-    const current = new URL(window.location.href)
-    current.searchParams.set("plan", selectedPlanCode)
-
-    if (clientId) {
-      current.searchParams.set("cid", clientId)
-    }
-
-    if (reference) {
-      current.searchParams.set("ref", reference)
-    }
-
-    window.history.replaceState({}, "", current.toString())
-  }, [selectedPlanCode, clientId, reference])
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    url.searchParams.set("plan", plan)
+    if (clientId) url.searchParams.set("cid", clientId)
+    window.history.replaceState({}, "", url.toString())
+  }, [plan, clientId])
 
   const handlePay = async () => {
     if (!selectedPlan || selectedPlan.code === "trial") {
-      setCheckoutError("Selecciona un plan de pago válido.")
+      setError("Selecciona un plan de pago válido.")
       return
     }
-
     if (!clientId) {
-      setCheckoutError("No se encontró el identificador del cliente para iniciar el checkout.")
+      setError("No encontramos tu cuenta. Regístrate de nuevo o inicia sesión.")
       return
     }
 
-    const providerConfig = PAYMENT_PROVIDERS.find(
-      (item) => item.code === selectedProvider
-    )
-
-    if (!providerConfig?.enabled) {
-      setCheckoutError(
-        `${providerConfig?.name || "Esta pasarela"} todavía no está habilitada en esta versión.`
-      )
-      return
-    }
-
-    setCheckoutError("")
-    setCheckoutMode(null)
-    setCheckoutUrl(null)
+    setError("")
     setSubmitting(true)
 
     try {
-      const response = await fetch("/api/payments/create-subscription", {
+      const res = await fetch("/api/payments/create-subscription", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clientId,
-          planCode: selectedPlan.code,
-          provider: selectedProvider,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, planCode: selectedPlan.code, provider: "mercadopago" }),
       })
 
-      const payload: CheckoutResponse & { detail?: string } = await response.json()
+      const payload: CheckoutResponse & { detail?: string } = await res.json()
 
-      if (!response.ok || !payload?.ok) {
+      if (!res.ok || !payload?.ok) {
         throw new Error(payload?.error || payload?.detail || "checkout_failed")
       }
 
-      const resolvedCheckoutUrl = String(
-        payload.checkout_url || payload.init_point || payload.payment_url || ""
-      ).trim()
+      const url = String(payload.checkout_url || payload.init_point || "").trim()
+      if (!url) throw new Error("missing_checkout_url")
 
-      setCheckoutMode(payload.mode || null)
-      setCheckoutUrl(resolvedCheckoutUrl || null)
-
-      if (!resolvedCheckoutUrl) {
-        throw new Error("missing_checkout_url")
-      }
-
-      const currentPath =
-        typeof window !== "undefined"
-          ? `${window.location.origin}${window.location.pathname}`
-          : ""
-
-      const normalizedRedirect = resolvedCheckoutUrl.split("?")[0]
-
-      if (
-        normalizedRedirect === currentPath ||
-        normalizedRedirect.endsWith("/iniciar-pago")
-      ) {
-        throw new Error(
-          "El backend devolvió una URL interna de Operaly en lugar del checkout final del proveedor."
-        )
-      }
-
-      window.location.href = resolvedCheckoutUrl
-    } catch (error: any) {
-      setCheckoutError(
-        normalizeCheckoutError(
-          error?.message || "No se pudo iniciar el checkout del proveedor seleccionado."
-        )
-      )
-    } finally {
+      window.location.href = url
+    } catch (err: any) {
+      setError(normalizeError(err?.message || "checkout_failed"))
       setSubmitting(false)
     }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F6F8FC]">
-        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-          <p className="text-sm text-slate-600">Preparando checkout seguro...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!selectedPlan || selectedPlan.code === "trial") {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-6 bg-[#F6F8FC]">
-        <div className="max-w-lg text-center bg-white border border-slate-200 rounded-[28px] p-8 shadow-sm">
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">
-            Selecciona un plan de pago
-          </h1>
-          <p className="text-slate-600 leading-7">
-            Esta página está diseñada para procesar la suscripción de planes de pago de Operaly.
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <RefreshCw className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Preparando checkout seguro...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8FC] px-4 py-8 md:px-6 md:py-10">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col items-center gap-4">
-          <Image
-            src="/images/operaly-logo.png"
-            alt="Operaly"
-            width={170}
-            height={54}
-            priority
-          />
-
-          <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600 shadow-sm">
-            <span className="inline-flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-slate-500" />
-              Checkout seguro
-            </span>
-            <span className="h-1 w-1 rounded-full bg-slate-300" />
-            <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
-              Suscripción recurrente
-            </span>
-            <span className="h-1 w-1 rounded-full bg-slate-300" />
-            <span className="inline-flex items-center gap-1.5">
-              <Wallet className="h-3.5 w-3.5 text-slate-500" />
-              Facturación en USD
-            </span>
+    <div className="min-h-screen bg-[#F7F9FC]">
+      {/* Top bar */}
+      <div className="border-b border-border bg-white">
+        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
+          <Link href="/">
+            <Image src="/images/operaly-logo.png" alt="Operaly" width={110} height={40} className="h-8 w-auto" />
+          </Link>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-[#10B981]" />
+              <span className="font-medium">Checkout seguro</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#10B981]" />
+              <span>Procesado por Mercado Pago</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.16fr_0.84fr]">
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
+
+          {/* ── Left: Plan selector ── */}
           <div className="space-y-6">
-            <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#0F1F63_0%,#162C8A_65%,#2440BF_100%)] px-6 py-8 md:px-8">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Suscripción mensual Operaly
-                </div>
+            <div>
+              <h1 className="text-2xl font-bold text-[#0F1F63]">Elige tu plan</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Todos los planes incluyen 7 días de prueba gratuita. Cancela cuando quieras.
+              </p>
+            </div>
 
-                <div className="grid gap-6 md:grid-cols-[1.06fr_0.94fr] md:items-end">
-                  <div>
-                    <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-                      Activa tu plan en una sola vista
-                    </h1>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 md:text-[15px]">
-                      Selecciona tu plan, revisa el resumen y continúa con una experiencia
-                      de checkout orientada a suscripciones reales. Mercado Pago es la
-                      pasarela principal en esta fase de Operaly.
-                    </p>
-                  </div>
+            {/* Plan cards */}
+            <div className="space-y-3">
+              {PAID_PLANS.map(code => {
+                const p = getPlanByCode(code)
+                if (!p) return null
+                const isSelected = plan === code
+                const features = PLAN_FEATURES[code] || p.features
 
-                  <div className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/65">
-                      Plan seleccionado
-                    </p>
-                    <div className="mt-3 flex items-end justify-between gap-4">
-                      <div>
-                        <p className="text-2xl font-semibold text-white">
-                          {selectedPlan.name}
-                        </p>
-                        <p className="mt-1 text-sm text-white/75">
-                          Facturación mensual
-                        </p>
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setPlan(code)}
+                    className={`w-full rounded-2xl border p-5 text-left transition-all ${
+                      isSelected
+                        ? "border-[#3B82F6] bg-white shadow-md ring-1 ring-[#3B82F6]/20"
+                        : "border-border bg-white hover:border-[#3B82F6]/30 hover:shadow-sm"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        {/* Radio */}
+                        <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                          isSelected ? "border-[#3B82F6] bg-[#3B82F6]" : "border-border bg-white"
+                        }`}>
+                          {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#0F1F63]">{p.name}</span>
+                            {p.popular && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white">
+                                <Star className="w-2.5 h-2.5" /> Popular
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-3xl font-semibold text-white">
-                          {formatMoney(selectedPlan.price)}
-                        </p>
-                        <p className="mt-1 text-xs text-white/70">por mes</p>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-2xl font-bold text-[#0F1F63]">{fmt(p.price)}</p>
+                        <p className="text-xs text-muted-foreground">USD/mes</p>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              <div className="grid gap-4 border-b border-slate-200 bg-slate-50/80 px-6 py-5 md:grid-cols-3 md:px-8">
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                  <div className="mb-2 flex items-center gap-2 text-slate-900">
-                    <ShieldCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Suscripción real</span>
-                  </div>
-                  <p className="text-xs leading-6 text-slate-600">
-                    Preparado para billing recurrente, no para cobros manuales aislados.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                  <div className="mb-2 flex items-center gap-2 text-slate-900">
-                    <Wallet className="h-4 w-4" />
-                    <span className="text-sm font-medium">Moneda única</span>
-                  </div>
-                  <p className="text-xs leading-6 text-slate-600">
-                    Todos los planes de Operaly se cobran exclusivamente en USD.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                  <div className="mb-2 flex items-center gap-2 text-slate-900">
-                    <BadgeCheck className="h-4 w-4" />
-                    <span className="text-sm font-medium">Arquitectura escalable</span>
-                  </div>
-                  <p className="text-xs leading-6 text-slate-600">
-                    Stripe podrá entrar después sin rehacer esta experiencia.
-                  </p>
-                </div>
-              </div>
-
-              <div className="px-6 py-6 md:px-8 md:py-8">
-                <div className="rounded-3xl border border-slate-200 overflow-hidden mb-8">
-                  <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
-                    <h2 className="text-sm font-semibold text-slate-900">
-                      Pasarela de pago
-                    </h2>
-                  </div>
-
-                  <div className="p-5 md:p-6 grid gap-3">
-                    {PAYMENT_PROVIDERS.map((provider) => {
-                      const isActive = selectedProvider === provider.code
-
-                      return (
-                        <button
-                          key={provider.code}
-                          type="button"
-                          onClick={() => provider.enabled && setSelectedProvider(provider.code)}
-                          disabled={!provider.enabled}
-                          className={`w-full text-left rounded-2xl border p-4 transition-all ${
-                            isActive
-                              ? "border-[#0F1F63] bg-[#0F1F63]/5 shadow-sm"
-                              : "border-slate-200 bg-white"
-                          } ${provider.enabled ? "hover:border-slate-300" : "opacity-70 cursor-not-allowed"}`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-[#FFF159] text-[11px] font-semibold text-slate-900">
-                                {provider.code === "mercadopago" ? "MP" : "ST"}
-                              </div>
-
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-base font-semibold text-slate-950">
-                                    {provider.name}
-                                  </p>
-                                  {provider.badge ? (
-                                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                                      {provider.badge}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-sm text-slate-600 mt-1">
-                                  {provider.description}
-                                </p>
-                              </div>
-                            </div>
-
-                            {isActive ? (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-[#0F1F63]/15 bg-[#0F1F63]/10 px-2.5 py-1 text-[11px] font-medium text-[#0F1F63]">
-                                <Check className="h-3.5 w-3.5" />
-                                Seleccionado
-                              </span>
-                            ) : null}
+                    {/* Features (expanded when selected) */}
+                    {isSelected && (
+                      <div className="mt-4 pt-4 border-t border-[#3B82F6]/10 grid sm:grid-cols-2 gap-1.5">
+                        {features.map(f => (
+                          <div key={f} className="flex items-start gap-2 text-sm text-[#0F1F63]">
+                            <Check className="w-4 h-4 text-[#3B82F6] flex-shrink-0 mt-0.5" />
+                            <span>{f}</span>
                           </div>
-                        </button>
-                      )
-                    })}
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Trust signals */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {TRUST_SIGNALS.map(ts => {
+                const Icon = ts.icon
+                return (
+                  <div key={ts.text} className="flex items-center gap-2 bg-white rounded-xl border border-border p-3">
+                    <Icon className="w-4 h-4 text-[#10B981] flex-shrink-0" />
+                    <span className="text-xs font-medium text-[#0F1F63]">{ts.text}</span>
                   </div>
-                </div>
-
-                <div className="mb-5 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-950">
-                      Elige el plan ideal para tu operación
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-600">
-                      Puedes cambiar tu selección antes de pasar al pago.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-4">
-                  {PAID_PLANS.map((planCode) => {
-                    const plan = getPlanByCode(planCode)
-                    if (!plan) return null
-
-                    const isActive = selectedPlanCode === plan.code
-                    const isPopular = Boolean(plan.popular)
-
-                    return (
-                      <button
-                        key={plan.code}
-                        type="button"
-                        onClick={() => setSelectedPlanCode(plan.code)}
-                        className={`relative w-full rounded-[24px] border p-5 text-left transition-all md:p-6 ${
-                          isActive
-                            ? "border-[#0F1F63] bg-[#0F1F63]/[0.04] shadow-sm ring-1 ring-[#0F1F63]/10"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                        }`}
-                      >
-                        {isPopular ? (
-                          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#0F1F63] px-3 py-1 text-[11px] font-medium text-white">
-                            <Sparkles className="h-3.5 w-3.5" />
-                            Recomendado
-                          </div>
-                        ) : null}
-
-                        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="max-w-2xl">
-                            <div className="flex items-center gap-3">
-                              <p className="text-xl font-semibold text-slate-950">
-                                {plan.name}
-                              </p>
-                              {isActive ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-[#0F1F63]/20 bg-[#0F1F63]/10 px-2.5 py-1 text-[11px] font-medium text-[#0F1F63]">
-                                  <Check className="h-3.5 w-3.5" />
-                                  Seleccionado
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <p className="mt-2 text-sm leading-7 text-slate-600">
-                              {plan.description}
-                            </p>
-
-                            <div className="mt-4 grid gap-2 md:grid-cols-2">
-                              {plan.features.map((feature) => (
-                                <div key={feature} className="flex items-start gap-3">
-                                  <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50">
-                                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                                  </div>
-                                  <p className="text-sm text-slate-700">{feature}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="min-w-[160px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-right">
-                            <p className="text-xs uppercase tracking-wide text-slate-500">
-                              Precio
-                            </p>
-                            <p className="mt-2 text-3xl font-semibold text-slate-950">
-                              {formatMoney(plan.price)}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">mensual</p>
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </section>
+                )
+              })}
+            </div>
           </div>
 
-          <aside className="space-y-6">
-            <section className="sticky top-6 overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-6 py-6">
-                <h2 className="text-2xl font-semibold text-slate-950">
-                  Resumen del checkout
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Todo listo para continuar con el cobro seguro de tu suscripción.
+          {/* ── Right: Summary + Pay ── */}
+          <div className="space-y-4">
+            {/* Summary card */}
+            <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+              {/* Header gradient */}
+              <div className="bg-gradient-to-r from-[#0F1F63] to-[#1a3a9f] px-6 py-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/60 mb-2">Resumen del pedido</p>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-xl font-bold text-white">Operaly {selectedPlan?.name}</p>
+                    <p className="text-sm text-white/70 mt-0.5">Suscripción mensual</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-white">{selectedPlan ? fmt(selectedPlan.price) : "—"}</p>
+                    <p className="text-xs text-white/60">por mes</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line items */}
+              <div className="px-6 py-5 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Plan {selectedPlan?.name}</span>
+                  <span className="font-semibold text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}/mes</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Período de prueba</span>
+                  <span className="font-semibold text-[#10B981]">7 días gratis</span>
+                </div>
+                <div className="h-px bg-border" />
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#0F1F63]">Total hoy</span>
+                  <span className="font-bold text-2xl text-[#10B981]">$0.00</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Después del período de prueba, se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD mensual automáticamente.
                 </p>
               </div>
 
-              <div className="space-y-6 px-6 py-6">
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex items-start justify-between gap-4">
+              {/* Customer info */}
+              {customerEmail && (
+                <div className="px-6 pb-4">
+                  <div className="flex items-center gap-2 bg-secondary/50 rounded-xl p-3">
+                    <CheckCircle2 className="w-4 h-4 text-[#10B981] flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Plan</p>
-                      <p className="mt-1 text-2xl font-semibold text-slate-950">
-                        {selectedPlan.name}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-right">
-                      <p className="text-xs text-slate-500">Mensual</p>
-                      <p className="text-lg font-semibold text-slate-950">
-                        {formatMoney(selectedPlan.price)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 space-y-3">
-                    {selectedPlan.features.map((feature) => (
-                      <div key={feature} className="flex items-start gap-3">
-                        <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50">
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        </div>
-                        <p className="text-sm text-slate-700">{feature}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-slate-700" />
-                    <p className="text-sm font-semibold text-slate-900">
-                      Datos del cobro
-                    </p>
-                  </div>
-
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Moneda</span>
-                      <span className="font-medium text-slate-900">
-                        {BILLING_CURRENCY_CODE}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Pasarela</span>
-                      <span className="font-medium text-slate-900">
-                        {selectedProviderConfig?.name || "No definida"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Modo técnico</span>
-                      <span className="font-medium text-slate-900">
-                        {checkoutMode || "Se define al iniciar el cobro"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Referencia</span>
-                      <span className="max-w-[180px] truncate text-right font-medium text-slate-900">
-                        {reference || "Se genera al iniciar el pago"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Cliente</span>
-                      <span className="max-w-[180px] truncate text-right font-medium text-slate-900">
-                        {clientId || "No disponible"}
-                      </span>
+                      <p className="text-xs font-semibold text-[#0F1F63]">Cuenta verificada</p>
+                      <p className="text-xs text-muted-foreground truncate">{customerEmail}</p>
                     </div>
                   </div>
                 </div>
+              )}
 
-                <div className="rounded-3xl border border-slate-200 p-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-slate-700" />
-                    <p className="text-sm font-semibold text-slate-900">
-                      Identidad de facturación
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                        Nombre
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">
-                        {customerDisplayName || "Se resolverá desde la cuenta del cliente"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                        Email
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-slate-900 break-all">
-                        {customerEmail || "No disponible en este navegador"}
-                      </p>
-                    </div>
+              {/* Error */}
+              {error && (
+                <div className="px-6 pb-4">
+                  <div className="flex items-start gap-2 bg-[#FEF2F2] border border-[#EF4444]/20 rounded-xl p-3">
+                    <AlertCircle className="w-4 h-4 text-[#EF4444] flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-[#EF4444] leading-relaxed">{error}</p>
                   </div>
                 </div>
+              )}
 
-                {!customerEmail ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-amber-700 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-amber-900">
-                          El email del cliente es importante para la suscripción
-                        </p>
-                        <p className="mt-1 text-sm leading-6 text-amber-800">
-                          Si este cliente no tiene email registrado en backend, el checkout
-                          de suscripción puede ser rechazado por la pasarela.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-3xl border border-slate-200 p-5">
-                  <p className="text-sm font-semibold text-slate-900">
-                    Lo que ocurrirá después
-                  </p>
-
-                  <div className="mt-4 space-y-3">
-                    {[
-                      "Se abrirá el checkout seguro de Mercado Pago.",
-                      "El intento de pago quedará trazado en billing_intents.",
-                      "Cuando el webhook confirme el cobro, Operaly podrá activar el plan automáticamente.",
-                      "La misma arquitectura permitirá add-ons y cobros desde WhatsApp.",
-                    ].map((item) => (
-                      <div key={item} className="flex items-start gap-3">
-                        <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-sky-50">
-                          <ChevronRight className="h-3.5 w-3.5 text-sky-700" />
-                        </div>
-                        <p className="text-sm text-slate-700">{item}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <CircleHelp className="h-4 w-4 text-slate-700" />
-                    <p className="text-sm font-semibold text-slate-900">
-                      Señales de confianza
-                    </p>
-                  </div>
-
-                  <div className="grid gap-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                      Mercado Pago como proveedor principal de checkout
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                      Seguimiento operativo con billing intents y métricas internas
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                      Cobros preparados para web, suscripción y add-ons
-                    </div>
-                  </div>
-                </div>
-
-                {checkoutUrl ? (
-                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-                    <p className="text-sm font-semibold text-emerald-900">
-                      Checkout generado
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-emerald-800">
-                      La URL del checkout fue creada correctamente y el navegador será
-                      redirigido al proveedor.
-                    </p>
-                  </div>
-                ) : null}
-
-                {checkoutError ? (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-red-700 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-red-900">
-                          No se pudo continuar con el checkout
-                        </p>
-                        <p className="mt-1 text-sm leading-6 text-red-800">
-                          {checkoutError}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="space-y-3">
-                  <Button
-                    onClick={handlePay}
-                    disabled={submitting}
-                    className="h-14 w-full rounded-2xl bg-[#0F1F63] px-6 text-base font-medium text-white hover:bg-[#12297f]"
-                  >
-                    {submitting ? (
-                      <span className="inline-flex items-center gap-2">
-                        Preparando checkout...
-                        <ArrowRight className="h-4 w-4" />
-                      </span>
-                    ) : (
-                      `Continuar con ${selectedProviderConfig?.name || "la pasarela"} • ${formatMoney(selectedPlan.price)}`
-                    )}
-                  </Button>
-
-                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
-                      <Lock className="h-3.5 w-3.5" />
-                      Conexión segura
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
-                      {selectedProviderConfig?.name || "Pasarela"}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
-                      Visa
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1">
-                      Mastercard
-                    </span>
-                  </div>
-                </div>
+              {/* CTA */}
+              <div className="px-6 pb-6">
+                <button
+                  onClick={handlePay}
+                  disabled={submitting || !selectedPlan}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-bold text-base hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#3B82F6]/30"
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      Conectando con Mercado Pago...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-5 h-5" />
+                      Continuar con Mercado Pago
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+                <p className="text-center text-xs text-muted-foreground mt-3 flex items-center justify-center gap-1.5">
+                  <Lock className="w-3 h-3" />
+                  Pago procesado por Mercado Pago · SSL 256-bit
+                </p>
               </div>
-            </section>
-          </aside>
+            </div>
+
+            {/* MP Badge */}
+            <div className="bg-white rounded-2xl border border-border p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF159] flex items-center justify-center font-bold text-sm text-[#009EE3] flex-shrink-0">
+                MP
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#0F1F63]">Procesado por Mercado Pago</p>
+                <p className="text-xs text-muted-foreground">Tu información de pago nunca pasa por nuestros servidores</p>
+              </div>
+            </div>
+
+            {/* FAQ quick */}
+            <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Preguntas frecuentes</p>
+              {[
+                ["¿Cuándo se me cobra?", "Después de los 7 días de prueba gratuita."],
+                ["¿Puedo cancelar?", "Sí, en cualquier momento desde tu dashboard."],
+                ["¿Qué pasa al cancelar?", "Tu acceso continúa hasta el fin del período pagado."],
+              ].map(([q, a]) => (
+                <div key={q}>
+                  <p className="text-xs font-semibold text-[#0F1F63]">{q}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
