@@ -1,3 +1,56 @@
+
+// ── Event Detail Modal ──────────────────────────────────────────────────────
+function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
+  const isTask = event.type === "task"
+  const color = isTask ? "#3B82F6" : "#7C3AED"
+  const d = new Date(event.sourceAt)
+  const ok = !isNaN(d.getTime())
+  const fullStr = ok ? d.toLocaleString("es-PE", {
+    weekday:"long", day:"numeric", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit"
+  }) : event.timeLabel
+  const overdue = ok && d.getTime() < Date.now()
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-3xl border border-border shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="h-1.5 w-full" style={{ backgroundColor: color }} />
+        <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "15" }}>
+                {isTask ? <CheckSquare className="w-4 h-4" style={{ color }} /> : <Zap className="w-4 h-4" style={{ color }} />}
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>
+                {isTask ? "Tarea" : "Automatización"}
+              </span>
+            </div>
+            <h2 className="text-lg font-bold text-[#0F1F63] leading-snug">{event.title}</h2>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-6 pb-6 space-y-3">
+          <div className="bg-secondary/40 rounded-xl p-4 flex items-start gap-3">
+            <AlarmClock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color }} />
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Fecha y hora</p>
+              <p className={`text-sm font-semibold capitalize ${overdue ? "text-[#EF4444]" : "text-[#0F1F63]"}`}>{fullStr}</p>
+              {overdue && <p className="text-xs text-[#EF4444] mt-0.5 font-medium">⚠️ Fecha vencida</p>}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-full h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a] transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+      {selectedEvent && (
+        <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      )}
+  )
+}
+
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
@@ -5,7 +58,7 @@ import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import {
   ChevronLeft, ChevronRight, Plus, RefreshCw,
-  Zap, CheckSquare, Clock, CalendarDays,
+  Zap, CheckSquare, Clock, CalendarDays, X, AlarmClock,
 } from "lucide-react"
 
 type EventItem = {
@@ -82,6 +135,7 @@ export default function AgendaPage() {
   const [selectedDK, setSelectedDK] = useState("")
   const [tz, setTz]                 = useState("America/Lima")
   const [locale, setLocale]         = useState("es-PE")
+  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -159,9 +213,9 @@ export default function AgendaPage() {
   const EventChip = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {
     const c = EVENT_COLORS[event.type]
     return (
-      <div className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium cursor-pointer transition-all hover:opacity-80 ${c.light} ${c.text} border ${c.border}`}>
+      <div onClick={(e) => { e.stopPropagation(); setSelectedEvent(event) }} className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold cursor-pointer transition-all hover:scale-[1.02] hover:shadow-sm ${c.light} ${c.text} border ${c.border}`}>
         {event.type === "task" ? <CheckSquare className="w-3 h-3 flex-shrink-0" /> : <Zap className="w-3 h-3 flex-shrink-0" />}
-        <span className="truncate">{compact ? event.title.slice(0,18) + (event.title.length > 18 ? "…" : "") : event.title}</span>
+        <span className="truncate">{compact ? event.title.slice(0,22) + (event.title.length > 22 ? "…" : "") : event.title}</span>
         {!compact && <span className="ml-auto text-[10px] opacity-70">{event.timeLabel}</span>}
       </div>
     )
