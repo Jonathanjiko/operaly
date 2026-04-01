@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react"
 import {
   BarChart3, FileText, Users, FolderOpen, CheckSquare,
   Zap, TrendingUp, RefreshCw, Mic, Brain, HardDrive,
-  MessageSquare, ShoppingBag, Bell,
+  MessageSquare, ShoppingBag, Bell, Plus, Clock, Star,
 } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
@@ -273,47 +274,85 @@ export default function ProfessionalAnalyticsPage() {
         </div>
       </div>
 
-      {/* Add-ons activos */}
-      <div className="bg-card rounded-2xl border border-border p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <ShoppingBag className="w-5 h-5 text-[#F59E0B]" />
-          <h2 className="text-xl font-semibold text-[#0F1F63]">Add-ons activos</h2>
-        </div>
-
-        {addons.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground text-sm">No tienes add-ons activos este período.</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Puedes comprar minutos extra, storage o integraciones desde WhatsApp o el panel de plan.
-            </p>
+      {/* Add-ons activos + disponibles */}
+      <div className="bg-card rounded-2xl border border-border p-6 space-y-6">
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-[#F59E0B]" />
+              <h2 className="text-lg font-semibold text-[#0F1F63]">Add-ons activos</h2>
+            </div>
+            <span className="text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full border border-border">
+              {addons.length} activo{addons.length !== 1 ? "s" : ""}
+            </span>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {addons.map((addon) => (
-              <div key={addon.id} className="flex items-center justify-between p-4 rounded-xl border border-border bg-secondary/30">
-                <div>
-                  <p className="font-medium text-sm text-[#0F1F63]">{addon.addon_type || addon.code}</p>
-                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                    {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
-                    {addon.storage_gb_extra    ? <span>+{addon.storage_gb_extra} GB</span>         : null}
-                    {addon.enables_voice       ? <span>🎙️ Voz habilitada</span>                   : null}
-                    {addon.enables_google      ? <span>📁 Google habilitado</span>                 : null}
+          {addons.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-5 text-center">
+              <ShoppingBag className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Sin add-ons activos este período</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {addons.map((addon) => (
+                <div key={addon.id} className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-[#F0FDF4]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#10B981]/10 flex items-center justify-center">
+                      <Star className="w-4 h-4 text-[#10B981]" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm text-[#0F1F63]">{addon.addon_type || addon.code}</p>
+                      <div className="flex gap-2 mt-0.5 text-xs text-muted-foreground">
+                        {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
+                        {addon.storage_gb_extra    ? <span>+{addon.storage_gb_extra} GB</span>         : null}
+                        {addon.enables_voice       ? <span>🎙️ Voz</span>                              : null}
+                        {addon.enables_google      ? <span>📁 Google</span>                            : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-medium px-2 py-1 rounded-lg bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20">Activo</span>
+                    {addon.expires_at && (
+                      <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 justify-end">
+                        <Clock className="w-3 h-3" />Vence {new Date(addon.expires_at).toLocaleDateString("es-PE")}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="inline-block px-2 py-1 rounded-lg text-xs font-medium bg-[#34D399]/10 text-[#34D399] border border-[#34D399]/20">
-                    Activo
-                  </span>
-                  {addon.expires_at && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Vence {new Date(addon.expires_at).toLocaleDateString("es-PE")}
-                    </p>
-                  )}
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Plus className="w-4 h-4 text-[#3B82F6]" />
+            <h3 className="font-semibold text-[#0F1F63]">Amplía tu plan</h3>
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {[
+              { icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", price: "$10", color: "#7C3AED" },
+              { icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",           price: "$5",  color: "#3B82F6" },
+              { icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",          price: "$8",  color: "#34A853" },
+            ].map(addon => (
+              <div key={addon.name} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
+                <div className="text-2xl mb-2">{addon.icon}</div>
+                <p className="font-semibold text-sm text-[#0F1F63]">{addon.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{addon.desc}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-base font-bold text-[#0F1F63]">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                  <button
+                    onClick={() => alert("Escríbele a Operaly por WhatsApp: 'quiero activar " + addon.name + "'")}
+                    className="h-7 px-3 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
+                    style={{ backgroundColor: addon.color }}
+                  >Activar</button>
                 </div>
               </div>
             ))}
           </div>
-        )}
+          <p className="text-xs text-muted-foreground mt-3 text-center">
+            Escríbele a Operaly por WhatsApp o contáctanos para activar cualquier add-on. Se aplica inmediatamente.
+          </p>
+        </div>
       </div>
 
       {/* Detalle técnico */}
