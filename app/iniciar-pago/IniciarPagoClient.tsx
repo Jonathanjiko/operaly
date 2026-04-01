@@ -320,16 +320,16 @@ export default function IniciarPagoClient() {
                   <span className="font-semibold text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}/mes</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Hoy pagas</span>
-                  <span className="font-semibold text-[#10B981]">$0.00</span>
+                  <span className="text-muted-foreground">Facturación</span>
+                  <span className="font-semibold text-[#0F1F63]">Mensual recurrente</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-[#0F1F63]">Total hoy</span>
-                  <span className="font-bold text-2xl text-[#10B981]">$0.00</span>
+                  <span className="font-bold text-[#0F1F63]">Total a pagar</span>
+                  <span className="font-bold text-2xl text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD/mes a partir del segundo mes. Cancela cuando quieras.
+                  Se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD cada mes. Cancela cuando quieras desde tu dashboard.
                 </p>
               </div>
 
@@ -398,7 +398,7 @@ export default function IniciarPagoClient() {
             <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Preguntas frecuentes</p>
               {[
-                ["¿Cuándo se me cobra?", "Después de los 7 días de prueba gratuita."],
+                ["¿Cuándo se me cobra?", "Inmediatamente al confirmar el pago en Mercado Pago."],
                 ["¿Puedo cancelar?", "Sí, en cualquier momento desde tu dashboard."],
                 ["¿Qué pasa al cancelar?", "Tu acceso continúa hasta el fin del período pagado."],
               ].map(([q, a]) => (
