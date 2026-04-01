@@ -1,4 +1,3 @@
-
 // ── Event Detail Modal ──────────────────────────────────────────────────────
 function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
   const isTask = event.type === "task"
