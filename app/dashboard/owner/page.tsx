@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import {
-  BarChart3,
+  BarChart3, Bell, X,
   ChevronRight,
   CreditCard,
   DollarSign,
@@ -96,7 +96,20 @@ type OwnerProfile = {
   email: string
 }
 
-const BILLING_CURRENCY_CODE = "USD"
+// Revenue is received in PEN via MercadoPago Peru
+// Costs are in USD (what we pay providers)
+const BILLING_CURRENCY_CODE = "PEN"
+const USD_TO_PEN = 5.0
+const MP_FEE_PCT = 0.0399
+
+const fmtPEN = (n: number) =>
+  `S/${new Intl.NumberFormat("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0)}`
+const fmtUSD = (n: number) =>
+  `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0)}`
+
+// Convert stored amount to PEN for display
+const toPEN = (amount: number, currency: string) =>
+  (currency || "").toUpperCase() === "USD" ? amount * USD_TO_PEN : amount
 
 const PROVIDER_COSTS = [
   { name: "OpenAI (GPT-4o)",    category: "IA",         cost_usd: 10, billing: "variable", url: "https://platform.openai.com/usage",    notes: "Variable según uso. ~$0.005/1k tokens." },
@@ -106,7 +119,10 @@ const PROVIDER_COSTS = [
   { name: "Supabase",           category: "Base datos", cost_usd: 25, billing: "mensual",  url: "https://supabase.com/dashboard",       notes: "Pro plan: 8 GB DB, 100 GB storage." },
   { name: "Vercel",             category: "Frontend",   cost_usd: 0,  billing: "mensual",  url: "https://vercel.com/dashboard",         notes: "Free tier. Pro si escala: $20/mes." },
   { name: "Hetzner (servidor)", category: "Backend",    cost_usd: 15, billing: "mensual",  url: "https://console.hetzner.cloud",        notes: "VPS backend Python + Docker." },
+  { name: "Mercado Pago",       category: "Pasarela",   cost_usd: 0,  billing: "variable", url: "https://www.mercadopago.com.pe",        notes: "~3.99% por transacción. Variable según volumen." },
 ]
+const TOTAL_FIXED_USD = PROVIDER_COSTS.filter(p => p.billing === "mensual").reduce((a, p) => a + p.cost_usd, 0)
+const TOTAL_FIXED_PEN = TOTAL_FIXED_USD * USD_TO_PEN
 
 const SECTIONS = [
   { id: "workspace",     label: "Mi Operaly",    icon: Sparkles },
@@ -145,19 +161,19 @@ export default function OwnerDashboardPage() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("month")
   const [clientSearch, setClientSearch] = useState("")
   const [selectedClientId, setSelectedClientId] = useState<string>("")
+  const [notifications, setNotifications] = useState<Array<{id:string;title:string;body:string;amount_pen?:number;created_at:string;read:boolean}>>([])
+  const [showNotifs, setShowNotifs] = useState(false)
 
-  const formatMoney = (amount: number | null | undefined) => {
-    const numericAmount = Number(amount || 0)
-
-    try {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: BILLING_CURRENCY_CODE,
-      }).format(numericAmount)
-    } catch {
-      return `${BILLING_CURRENCY_CODE} ${numericAmount}`
-    }
+  // Revenue always shown in PEN (what MP deposits)
+  const formatMoney = (amount: number | null | undefined, currency = "PEN") => {
+    const n = Number(amount || 0)
+    if (currency === "USD") return fmtUSD(n)
+    return fmtPEN(n)
   }
+
+  // For amounts stored in USD, convert to PEN for display
+  const formatMoneyAuto = (amount: number | null | undefined, storedCurrency = "USD") =>
+    fmtPEN(toPEN(Number(amount || 0), storedCurrency))
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -484,6 +500,41 @@ export default function OwnerDashboardPage() {
 
   useEffect(() => {
     loadOwnerDashboard()
+
+    // ── Realtime: new payments & clients ──────────────────────────────────
+    const channel = supabase
+      .channel("owner_realtime_v1")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "billing_payments" },
+        (payload: any) => {
+          const p = payload.new || {}
+          const pen = toPEN(Number(p.amount_usd || p.amount || 0), p.currency_code || "USD")
+          const note = {
+            id: p.id || Date.now().toString(),
+            title: "💰 Nuevo pago recibido",
+            body: `${p.client_name || "Cliente"} · ${fmtPEN(pen)}`,
+            amount_pen: pen,
+            created_at: new Date().toISOString(),
+            read: false,
+          }
+          setNotifications(prev => [note, ...prev].slice(0, 30))
+        }
+      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "clients" },
+        (payload: any) => {
+          const c = payload.new || {}
+          const note = {
+            id: c.id || Date.now().toString(),
+            title: "👤 Nuevo usuario registrado",
+            body: `${c.name || "Usuario"} · Plan ${c.plan_code || "trial"}`,
+            created_at: new Date().toISOString(),
+            read: false,
+          }
+          setNotifications(prev => [note, ...prev].slice(0, 30))
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
@@ -729,15 +780,65 @@ export default function OwnerDashboardPage() {
                 <p className="text-xs text-white/80">{ownerProfile.email}</p>
               </div>
 
-              <Button
-                variant="secondary"
-                className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
-                onClick={() => loadOwnerDashboard(true)}
-                disabled={refreshing}
-              >
-                <RefreshCcw className="w-4 h-4 mr-2" />
-                {refreshing ? "Actualizando..." : "Actualizar"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Realtime notification bell */}
+                <div className="relative">
+                  <Button variant="secondary" size="icon"
+                    className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90 relative"
+                    onClick={() => setShowNotifs(!showNotifs)}>
+                    <Bell className="w-4 h-4" />
+                    {notifications.filter(n => !n.read).length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#EF4444] text-white text-[9px] font-bold flex items-center justify-center">
+                        {Math.min(9, notifications.filter(n => !n.read).length)}
+                      </span>
+                    )}
+                  </Button>
+                  {showNotifs && (
+                    <div className="absolute right-0 top-11 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="font-semibold text-sm text-[#0F1F63]">Notificaciones en tiempo real</p>
+                        <div className="flex gap-2 items-center">
+                          {notifications.filter(n => !n.read).length > 0 && (
+                            <button onClick={() => setNotifications(prev => prev.map(n => ({...n, read: true})))}
+                              className="text-[10px] text-[#3B82F6] hover:underline">Marcar leídas</button>
+                          )}
+                          <button onClick={() => setShowNotifs(false)}>
+                            <X className="w-4 h-4 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                      {notifications.length === 0 ? (
+                        <div className="py-8 text-center">
+                          <Bell className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                          <p className="text-xs text-slate-500">Sin notificaciones aún</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Los nuevos pagos y registros aparecen aquí</p>
+                        </div>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                          {notifications.map(n => (
+                            <div key={n.id} className={`px-4 py-3 ${!n.read ? "bg-[#EFF6FF]/40" : ""}`}>
+                              <p className="text-xs font-semibold text-[#0F1F63]">{n.title}</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">{n.body}</p>
+                              {n.amount_pen && <p className="text-xs font-bold text-[#10B981] mt-1">{fmtPEN(n.amount_pen)}</p>}
+                              <p className="text-[10px] text-slate-400 mt-1">{new Date(n.created_at).toLocaleString("es-PE")}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  variant="secondary"
+                  className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                  onClick={() => loadOwnerDashboard(true)}
+                  disabled={refreshing}
+                >
+                  <RefreshCcw className="w-4 h-4 mr-2" />
+                  {refreshing ? "Actualizando..." : "Actualizar"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1017,7 +1118,7 @@ export default function OwnerDashboardPage() {
 
                       <div className="text-left xl:text-right">
                         <p className="text-xl font-semibold text-[#0F1F63]">
-                          {formatMoney(payment.amount)}
+                          {fmtPEN(toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"))}
                         </p>
                         <p className="text-sm text-slate-500 mt-1">
                           {payment.payment_method_brand ||
@@ -1080,7 +1181,7 @@ export default function OwnerDashboardPage() {
 
                       <div className="text-left xl:text-right">
                         <p className="text-xl font-semibold text-[#0F1F63]">
-                          {formatMoney(subscription.amount)}
+                          {fmtPEN(toPEN(Number(subscription.amount || 0), subscription.currency_code || "PEN"))}
                         </p>
                         <span
                           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${subscriptionStatusClass(
@@ -1305,7 +1406,7 @@ export default function OwnerDashboardPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="font-medium text-[#0F1F63]">
-                              {formatMoney(payment.amount)}
+                              {fmtPEN(toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"))}
                             </p>
                             <p className="text-xs text-slate-500 mt-1">
                               {payment.order_number || "—"} · {formatDateTime(payment.created_at)}
@@ -1401,9 +1502,9 @@ export default function OwnerDashboardPage() {
                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
                   <p className="text-sm text-slate-500">Total estimado</p>
                   <p className="text-3xl font-bold text-[#7C3AED] mt-1">
-                    ~${PROVIDER_COSTS.reduce((a, b) => a + b.cost_usd, 0)}
+                    ~{fmtUSD(TOTAL_FIXED_USD)}/mes
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">USD/mes</p>
+                  <p className="text-xs text-slate-400 mt-1">≈ {fmtPEN(TOTAL_FIXED_PEN)} PEN · TC S/{USD_TO_PEN}/$</p>
                 </div>
               </div>
 
@@ -1431,8 +1532,10 @@ export default function OwnerDashboardPage() {
                       </div>
                       <div className="flex items-center gap-4 flex-shrink-0">
                         <div className="text-right">
-                          <p className="font-bold text-[#0F1F63]">{provider.cost_usd === 0 ? "Free" : `$${provider.cost_usd}`}</p>
-                          <p className="text-xs text-slate-400">USD/mes</p>
+                          <p className="font-bold text-[#0F1F63]">{provider.cost_usd === 0 ? "Free" : fmtUSD(provider.cost_usd)}</p>
+                          <p className="text-xs text-slate-400">
+                            {provider.cost_usd > 0 ? `≈ ${fmtPEN(provider.cost_usd * USD_TO_PEN)}/mes` : "Variable"}
+                          </p>
                         </div>
                         <a href={provider.url} target="_blank" rel="noopener noreferrer"
                           className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
