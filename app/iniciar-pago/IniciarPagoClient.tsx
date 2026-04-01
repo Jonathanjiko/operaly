@@ -156,7 +156,12 @@ export default function IniciarPagoClient() {
       const res = await fetch("/api/payments/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId: resolvedClientId, planCode: selectedPlan.code, provider: "mercadopago" }),
+        body: JSON.stringify({ 
+          clientId: resolvedClientId, 
+          planCode: selectedPlan.code, 
+          provider: "mercadopago",
+          email: customerEmail || undefined,  // send email as fallback for backend
+        }),
       })
 
       const payload: CheckoutResponse & { detail?: string } = await res.json()
