@@ -1,6 +1,9 @@
+"use client"
+
 import Link from "next/link"
 import { Check, Sparkles, Zap, ArrowRight } from "lucide-react"
 import { OPERLAY_PLANS } from "@/lib/plans"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 const PLAN_FEATURES: Record<string, string[]> = {
   trial: [
@@ -37,6 +40,8 @@ const PLAN_FEATURES: Record<string, string[]> = {
 }
 
 export function Pricing() {
+  const { pricing, loading } = usePricingCurrency()
+
   return (
     <section id="precios" className="py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -79,8 +84,10 @@ export function Pricing() {
                       <span className="text-4xl font-bold text-[#0F1F63]">Gratis</span>
                     ) : (
                       <>
-                        <span className="text-xs font-medium text-muted-foreground">USD</span>
-                        <span className="text-4xl font-bold text-[#0F1F63]">${plan.price}</span>
+                        <span className="text-xs font-medium text-muted-foreground">{pricing.currency}</span>
+                        <span className="text-4xl font-bold text-[#0F1F63]">
+                          {pricing.prices[plan.code as keyof typeof pricing.prices] ?? plan.price}
+                        </span>
                         <span className="text-sm text-muted-foreground">/mes</span>
                       </>
                     )}
