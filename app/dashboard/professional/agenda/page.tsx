@@ -3,64 +3,117 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import {
-  ChevronLeft, ChevronRight, X,
-  Plus, CalendarDays, Clock
-} from "lucide-react"
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 // TYPES
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 type EventItem = {
   id: string
   title: string
   date: Date
 }
 
-// ─────────────────────────────────────────────
-// MODAL (EDITABLE)
-// ─────────────────────────────────────────────
-function EventModal({ event, onClose }: any) {
-  const [title, setTitle] = useState(event.title)
+// ─────────────────────────────
+// EVENT BLOCK (INLINE EDIT)
+// ─────────────────────────────
+function EventBlock({ event, onUpdate }: any) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(event.title)
+
+  const save = () => {
+    setEditing(false)
+    if (value !== event.title) onUpdate(event.id, value)
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl relative">
-        <button onClick={onClose} className="absolute top-3 right-3">
-          <X />
-        </button>
-
+    <div
+      className="group text-[12px] px-2 py-1 rounded-md bg-[#E8F0FE] text-[#1D4ED8] hover:bg-[#DBEAFE] transition cursor-pointer"
+      onClick={() => setEditing(true)}
+    >
+      {editing ? (
         <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full text-lg font-bold outline-none"
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save()
+            if (e.key === "Escape") setEditing(false)
+          }}
+          className="w-full bg-white text-xs outline-none rounded px-1"
         />
+      ) : (
+        <span className="block truncate">{event.title}</span>
+      )}
+    </div>
+  )
+}
 
-        <p className="text-sm text-gray-500 mt-2">
-          {event.date.toLocaleString()}
-        </p>
+// ─────────────────────────────
+// DAY CELL
+// ─────────────────────────────
+function DayCell({ date, events, onCreate, onUpdate, locale }: any) {
+  const [creating, setCreating] = useState(false)
+  const [value, setValue] = useState("")
 
-        <button className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg">
-          Guardar cambios
+  const handleCreate = () => {
+    if (!value.trim()) return
+    onCreate(value, date)
+    setValue("")
+    setCreating(false)
+  }
+
+  return (
+    <div className="relative min-h-[110px] p-2 border border-[#E5E7EB] bg-white hover:bg-[#FAFAFA] transition">
+      {/* DAY NUMBER */}
+      <div className="flex justify-between items-start mb-1">
+        <span className="text-xs font-semibold text-[#374151]">
+          {date.getDate()}
+        </span>
+
+        <button
+          onClick={() => setCreating(true)}
+          className="opacity-0 hover:opacity-100 group-hover:opacity-100 text-gray-400 text-xs"
+        >
+          +
         </button>
+      </div>
+
+      {/* EVENTS */}
+      <div className="flex flex-col gap-1">
+        {events.map((e: EventItem) => (
+          <EventBlock key={e.id} event={e} onUpdate={onUpdate} />
+        ))}
+
+        {/* CREATE INLINE */}
+        {creating && (
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={handleCreate}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate()
+              if (e.key === "Escape") setCreating(false)
+            }}
+            placeholder="Nueva tarea..."
+            className="text-xs border rounded px-1 py-0.5 outline-none"
+          />
+        )}
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 // MAIN
-// ─────────────────────────────────────────────
-export default function AgendaUltra() {
+// ─────────────────────────────
+export default function AgendaPage() {
   const [events, setEvents] = useState<EventItem[]>([])
   const [current, setCurrent] = useState(new Date())
-  const [view, setView] = useState<"month" | "week">("month")
-  const [selected, setSelected] = useState<EventItem | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [locale, setLocale] = useState("es-PE")
 
-  // ── LOAD DATA
+  // ── LOAD
   useEffect(() => {
     const load = async () => {
       const cid = await getCurrentClientId()
@@ -78,185 +131,102 @@ export default function AgendaUltra() {
         })) || []
 
       setEvents(mapped)
-      setLoading(false)
     }
 
     load()
   }, [])
 
-  // ─────────────────────────────────────────────
-  // NAVIGATION
-  // ─────────────────────────────────────────────
-  function navigate(dir: number) {
-    const d = new Date(current)
-    if (view === "month") d.setMonth(d.getMonth() + dir)
-    else d.setDate(d.getDate() + dir * 7)
-    setCurrent(d)
+  // ── CREATE
+  const createEvent = (title: string, date: Date) => {
+    setEvents((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        title,
+        date,
+      },
+    ])
   }
 
-  // ─────────────────────────────────────────────
-  // MONTH VIEW
-  // ─────────────────────────────────────────────
-  const renderMonth = () => {
+  // ── UPDATE
+  const updateEvent = (id: string, title: string) => {
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, title } : e))
+    )
+  }
+
+  // ── GRID
+  const monthGrid = useMemo(() => {
     const year = current.getFullYear()
     const month = current.getMonth()
 
-    const firstDay = new Date(year, month, 1).getDay()
-    const days = new Date(year, month + 1, 0).getDate()
+    const first = new Date(year, month, 1)
+    const last = new Date(year, month + 1, 0)
+
+    const startOffset = first.getDay()
 
     const cells = []
 
-    for (let i = 0; i < firstDay; i++) {
-      cells.push(<div key={"empty" + i} />)
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+
+    for (let d = 1; d <= last.getDate(); d++) {
+      cells.push(new Date(year, month, d))
     }
 
-    for (let d = 1; d <= days; d++) {
-      const date = new Date(year, month, d)
+    return cells
+  }, [current])
 
-      const dayEvents = events.filter(
-        (e) => e.date.toDateString() === date.toDateString()
-      )
-
-      cells.push(
-        <div
-          key={d}
-          className="h-28 border bg-white p-2 flex flex-col gap-1 group hover:bg-gray-50 transition"
-        >
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold">{d}</span>
-
-            <button
-              onClick={() =>
-                setEvents((prev) => [
-                  ...prev,
-                  {
-                    id: Math.random().toString(),
-                    title: "Nueva tarea",
-                    date,
-                  },
-                ])
-              }
-              className="opacity-0 group-hover:opacity-100 transition"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-
-          {dayEvents.map((e) => (
-            <div
-              key={e.id}
-              onClick={() => setSelected(e)}
-              className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded cursor-pointer hover:bg-blue-200"
-            >
-              {e.title}
-            </div>
-          ))}
-        </div>
-      )
-    }
-
-    return (
-      <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-xl overflow-hidden">
-        {cells}
-      </div>
-    )
+  // ── NAV
+  const next = () => {
+    const d = new Date(current)
+    d.setMonth(d.getMonth() + 1)
+    setCurrent(d)
   }
 
-  // ─────────────────────────────────────────────
-  // WEEK VIEW (PRO)
-  // ─────────────────────────────────────────────
-  const renderWeek = () => {
-    const start = new Date(current)
-    start.setDate(start.getDate() - start.getDay())
-
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(start)
-      d.setDate(start.getDate() + i)
-      return d
-    })
-
-    return (
-      <div className="grid grid-cols-7 border rounded-xl overflow-hidden">
-        {days.map((day, i) => (
-          <div key={i} className="border h-96 p-2">
-            <p className="text-xs font-bold mb-2">
-              {day.toLocaleDateString("es", { weekday: "short", day: "numeric" })}
-            </p>
-
-            {events
-              .filter((e) => e.date.toDateString() === day.toDateString())
-              .map((e) => (
-                <div
-                  key={e.id}
-                  onClick={() => setSelected(e)}
-                  className="text-xs bg-purple-100 text-purple-700 px-2 py-1 mb-1 rounded cursor-pointer"
-                >
-                  {e.title}
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
-    )
+  const prev = () => {
+    const d = new Date(current)
+    d.setMonth(d.getMonth() - 1)
+    setCurrent(d)
   }
 
-  // ─────────────────────────────────────────────
-  // UI
-  // ─────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6">
       {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Agenda</h1>
-
-        <div className="flex gap-2">
-          {["month", "week"].map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v as any)}
-              className={`px-3 py-1 rounded-lg text-sm ${
-                view === v
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 hover:bg-gray-200"
-              }`}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* NAV */}
-      <div className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)}>
-          <ChevronLeft />
-        </button>
-
-        <button onClick={() => navigate(1)}>
-          <ChevronRight />
-        </button>
-
-        <span className="font-semibold capitalize">
-          {current.toLocaleDateString("es", {
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-semibold">
+          {current.toLocaleDateString(locale, {
             month: "long",
             year: "numeric",
           })}
-        </span>
+        </h1>
+
+        <div className="flex gap-2">
+          <button onClick={prev}>◀</button>
+          <button onClick={next}>▶</button>
+        </div>
       </div>
 
-      {/* CONTENT */}
-      {loading ? (
-        <div>Cargando...</div>
-      ) : view === "month" ? (
-        renderMonth()
-      ) : (
-        renderWeek()
-      )}
+      {/* GRID */}
+      <div className="grid grid-cols-7 border border-[#E5E7EB] rounded-xl overflow-hidden">
+        {monthGrid.map((date, i) => {
+          if (!date) return <div key={i} className="bg-[#F9FAFB]" />
 
-      {/* MODAL */}
-      {selected && (
-        <EventModal event={selected} onClose={() => setSelected(null)} />
-      )}
+          const dayEvents = events.filter(
+            (e) => e.date.toDateString() === date.toDateString()
+          )
+
+          return (
+            <DayCell
+              key={i}
+              date={date}
+              events={dayEvents}
+              onCreate={createEvent}
+              onUpdate={updateEvent}
+              locale={locale}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }
