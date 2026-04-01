@@ -85,15 +85,40 @@ export default function IniciarPagoClient() {
   const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
 
   useEffect(() => {
-    const raw = localStorage.getItem("operaly_pending_signup")
-    if (raw) {
-      try {
-        const signup = JSON.parse(raw)
-        setCustomerEmail(signup?.email || "")
-      } catch {}
+    const loadEmail = async () => {
+      // Try multiple localStorage keys (different registration flows)
+      const keys = ["operaly_pending_signup", "operaly_assistant_profile", "operaly_register_auth"]
+      let email = ""
+      for (const key of keys) {
+        try {
+          const raw = localStorage.getItem(key)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            email = parsed?.email || parsed?.user?.email || ""
+            if (email) break
+          }
+        } catch {}
+      }
+
+      // If still no email and we have clientId, fetch from Supabase auth
+      if (!email && clientId) {
+        try {
+          const { createClient } = await import("@supabase/supabase-js")
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+          if (supabaseUrl && supabaseKey) {
+            const sb = createClient(supabaseUrl, supabaseKey)
+            const { data: { user } } = await sb.auth.getUser()
+            if (user?.email) email = user.email
+          }
+        } catch {}
+      }
+
+      setCustomerEmail(email)
+      setLoading(false)
     }
-    setLoading(false)
-  }, [])
+    loadEmail()
+  }, [clientId])
 
   // Keep URL in sync
   useEffect(() => {
@@ -110,18 +135,28 @@ export default function IniciarPagoClient() {
       return
     }
     if (!clientId) {
-      setError("No encontramos tu cuenta. Regístrate de nuevo o inicia sesión.")
-      return
+      // Try to get clientId from localStorage as fallback
+      const storedClientId = localStorage.getItem("operaly_client_id")
+      if (!storedClientId) {
+        setError("No encontramos tu cuenta. Por favor inicia sesión y vuelve a intentarlo.")
+        return
+      }
     }
 
     setError("")
     setSubmitting(true)
 
     try {
+      // Use clientId from URL or localStorage fallback
+      const resolvedClientId = clientId || localStorage.getItem("operaly_client_id") || ""
+      if (!resolvedClientId) {
+        throw new Error("No se encontró tu cuenta. Por favor inicia sesión.")
+      }
+
       const res = await fetch("/api/payments/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, planCode: selectedPlan.code, provider: "mercadopago" }),
+        body: JSON.stringify({ clientId: resolvedClientId, planCode: selectedPlan.code, provider: "mercadopago" }),
       })
 
       const payload: CheckoutResponse & { detail?: string } = await res.json()
@@ -285,8 +320,8 @@ export default function IniciarPagoClient() {
                   <span className="font-semibold text-[#0F1F63]">{selectedPlan ? fmt(selectedPlan.price) : "—"}/mes</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Período de prueba</span>
-                  <span className="font-semibold text-[#10B981]">7 días gratis</span>
+                  <span className="text-muted-foreground">Hoy pagas</span>
+                  <span className="font-semibold text-[#10B981]">$0.00</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
@@ -294,7 +329,7 @@ export default function IniciarPagoClient() {
                   <span className="font-bold text-2xl text-[#10B981]">$0.00</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Después del período de prueba, se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD mensual automáticamente.
+                  Se cobra {selectedPlan ? fmt(selectedPlan.price) : "—"} USD/mes a partir del segundo mes. Cancela cuando quieras.
                 </p>
               </div>
 
