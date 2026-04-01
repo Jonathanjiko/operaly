@@ -121,28 +121,26 @@ export default function ProfessionalAnalyticsPage() {
         if (!limitsError && limitsData) {
           setLimits(limitsData as EffectiveLimits)
         } else {
-          // Fallback: leer directamente de tenant_effective_limits
-          const { data: telData } = await supabase
-            .from("tenant_effective_limits")
-            .select("*")
-            .eq("client_id", cid)
-            .limit(1)
-          if (telData?.[0]) {
-            const tel = telData[0]
-            setLimits({
-              plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
-              addons: {},
-              usage: {},
-              limits: {
-                calls_minutes_total: (tel.max_audio_minutes || 0),
-                storage_gb_total:    (tel.max_storage_mb || 0) / 1024,
-                ia_limit_total:      (tel.max_messages_month || 0),
-                voice_enabled:       tel.voice_enabled || false,
-                google_enabled:      tel.google_enabled || false,
-              },
-              period: new Date().toISOString().slice(0,7).replace("-",""),
-            } as EffectiveLimits)
-          }
+          // Fallback via RPC segura (evita 403 en tenant_effective_limits)
+          try {
+            const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
+            if (myLimits) {
+              const tel = myLimits as any
+              setLimits({
+                plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
+                addons: {},
+                usage: {},
+                limits: {
+                  calls_minutes_total: (tel.max_audio_minutes || 0),
+                  storage_gb_total:    (tel.max_storage_mb || 0) / 1024,
+                  ia_limit_total:      (tel.max_messages_month || 0),
+                  voice_enabled:       tel.voice_enabled || false,
+                  google_enabled:      tel.google_enabled || false,
+                },
+                period: new Date().toISOString().slice(0,7).replace("-",""),
+              } as EffectiveLimits)
+            }
+          } catch (_) {}
         }
       } catch (limitsErr) {
         console.warn("Error cargando límites:", limitsErr)
@@ -199,6 +197,35 @@ export default function ProfessionalAnalyticsPage() {
     { label: "Automatizaciones",     value: activeRecurringCount,            helper: "tareas recurrentes activas",   icon: Zap,          color: "#8B5CF6" },
     { label: "Notificaciones",       value: unreadNotifications,             helper: "sin leer",                     icon: Bell,         color: "#14B8A6" },
   ], [usage, documentsCount, contactsCount, casesCount, tasksCount, activeRecurringCount, unreadNotifications])
+
+  const handleAddonCheckout = async (addonCode: string) => {
+    if (!clientId) return
+    setAddonLoading(addonCode)
+    setAddonError("")
+    try {
+      // Get email from Supabase session for backend fallback
+      let clientEmail = ""
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        clientEmail = user?.email || ""
+      } catch {}
+
+      const res = await fetch("/api/payments/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, planCode: addonCode, provider: "mercadopago", email: clientEmail || undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data?.ok) throw new Error(data?.error || data?.detail || "checkout_failed")
+      const url = data.checkout_url || data.init_point || ""
+      if (!url) throw new Error("No se pudo generar el link de pago.")
+      window.location.href = url
+    } catch (err: any) {
+      setAddonError(err.message || "No se pudo iniciar el pago. Intenta nuevamente.")
+    } finally {
+      setAddonLoading(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -330,27 +357,47 @@ export default function ProfessionalAnalyticsPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-3">
             {[
-              { icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", price: "$10", color: "#7C3AED" },
-              { icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",           price: "$5",  color: "#3B82F6" },
-              { icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",          price: "$8",  color: "#34A853" },
-            ].map(addon => (
-              <div key={addon.name} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
-                <div className="text-2xl mb-2">{addon.icon}</div>
-                <p className="font-semibold text-sm text-[#0F1F63]">{addon.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{addon.desc}</p>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="text-base font-bold text-[#0F1F63]">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
-                  <button
-                    onClick={() => alert("Escríbele a Operaly por WhatsApp: 'quiero activar " + addon.name + "'")}
-                    className="h-7 px-3 rounded-lg text-xs font-medium text-white transition-all hover:opacity-90"
-                    style={{ backgroundColor: addon.color }}
-                  >Activar</button>
+              { code: "addon_voice_100", icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", price: "$10", color: "#7C3AED" },
+              { code: "addon_storage_5gb", icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",         price: "$5",  color: "#3B82F6" },
+              { code: "addon_google",      icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",        price: "$8",  color: "#34A853" },
+            ].map(addon => {
+              const isLoading = addonLoading === addon.code
+              return (
+                <div key={addon.code} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
+                  <div className="text-2xl mb-2">{addon.icon}</div>
+                  <p className="font-semibold text-sm text-[#0F1F63]">{addon.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{addon.desc}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-base font-bold text-[#0F1F63]">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                    <button
+                      onClick={() => handleAddonCheckout(addon.code)}
+                      disabled={isLoading}
+                      className="h-7 px-3 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-1.5"
+                      style={{ backgroundColor: addon.color }}
+                    >
+                      {isLoading && (
+                        <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                      )}
+                      {isLoading ? "Procesando..." : "Activar"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
+          {addonError && (
+            <div className="mt-3 flex items-center gap-2 bg-[#FEF2F2] border border-[#EF4444]/20 rounded-xl p-3">
+              <svg className="w-4 h-4 text-[#EF4444] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-[#EF4444]">{addonError}</p>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-3 text-center">
-            Escríbele a Operaly por WhatsApp o contáctanos para activar cualquier add-on. Se aplica inmediatamente.
+            El pago se procesa de forma segura con Mercado Pago. Se activa inmediatamente al confirmar.
           </p>
         </div>
       </div>
