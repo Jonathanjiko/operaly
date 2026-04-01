@@ -366,7 +366,7 @@ export default function ProfessionalAnalyticsPage() {
               { code: "addon_google",      icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",        priceUSD: 8,  pricePEN: 40, color: "#34A853" },
             ].map(addon => {
               const displayPrice = pricing.currency === "PEN" ? addon.pricePEN : addon.priceUSD
-              const displayLabel = pricing.format(displayPrice)
+              const displayLabel = pricing.fmt(displayPrice)
               const isLoading = addonLoading === addon.code
               return (
                 <div key={addon.code} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
