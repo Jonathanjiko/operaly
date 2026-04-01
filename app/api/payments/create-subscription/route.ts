@@ -6,6 +6,7 @@ type CheckoutRequestBody = {
   clientId?: string
   planCode?: string
   provider?: PaymentProvider
+  email?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -27,6 +28,7 @@ export async function POST(req: NextRequest) {
   const planCode = String(body.planCode || "").trim().toLowerCase()
   const provider = (String(body.provider || "mercadopago").trim().toLowerCase() ||
     "mercadopago") as PaymentProvider
+  const email = String(body.email || "").trim().toLowerCase()
 
   if (!clientId) {
     return NextResponse.json(
@@ -73,6 +75,7 @@ export async function POST(req: NextRequest) {
         client_id: clientId,
         item_code: planCode,
         provider,
+        ...(email ? { email, client_email: email } : {}),
       }),
       cache: "no-store",
     })
