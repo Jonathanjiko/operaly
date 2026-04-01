@@ -10,6 +10,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 type EffectiveLimits = {
   plan: Record<string, any>
@@ -101,6 +102,9 @@ export default function ProfessionalAnalyticsPage() {
   const [clientId, setClientId]       = useState("")
   const [limits, setLimits]           = useState<EffectiveLimits | null>(null)
   const [addons, setAddons]           = useState<AddOnRow[]>([])
+  const [addonLoading, setAddonLoading] = useState<string | null>(null)
+  const { pricing } = usePricingCurrency()
+  const [addonError, setAddonError]   = useState("")
   const [documentsCount, setDocumentsCount] = useState(0)
   const [contactsCount, setContactsCount]   = useState(0)
   const [casesCount, setCasesCount]         = useState(0)
@@ -357,10 +361,12 @@ export default function ProfessionalAnalyticsPage() {
           </div>
           <div className="grid md:grid-cols-3 gap-3">
             {[
-              { code: "addon_voice_100", icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", price: "$10", color: "#7C3AED" },
-              { code: "addon_storage_5gb", icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",         price: "$5",  color: "#3B82F6" },
-              { code: "addon_google",      icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",        price: "$8",  color: "#34A853" },
+              { code: "addon_voice_100", icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", priceUSD: 10, pricePEN: 50, color: "#7C3AED" },
+              { code: "addon_storage_5gb", icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",         priceUSD: 5,  pricePEN: 25, color: "#3B82F6" },
+              { code: "addon_google",      icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",        priceUSD: 8,  pricePEN: 40, color: "#34A853" },
             ].map(addon => {
+              const displayPrice = pricing.currency === "PEN" ? addon.pricePEN : addon.priceUSD
+              const displayLabel = pricing.format(displayPrice)
               const isLoading = addonLoading === addon.code
               return (
                 <div key={addon.code} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
@@ -368,7 +374,7 @@ export default function ProfessionalAnalyticsPage() {
                   <p className="font-semibold text-sm text-[#0F1F63]">{addon.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{addon.desc}</p>
                   <div className="mt-3 flex items-center justify-between">
-                    <span className="text-base font-bold text-[#0F1F63]">{addon.price}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                    <span className="text-base font-bold text-[#0F1F63]">{displayLabel}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
                     <button
                       onClick={() => handleAddonCheckout(addon.code)}
                       disabled={isLoading}
