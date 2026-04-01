@@ -1,309 +1,197 @@
+"use client"
+
+import { useEffect, useState, Suspense } from "react"
+import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  Clock3,
-  CreditCard,
-  Home,
-  RefreshCcw,
-  ShieldCheck,
+  CheckCircle2, XCircle, Clock, ArrowRight,
+  RefreshCw, Sparkles, MessageSquare, LayoutDashboard,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
-type SearchParams = {
-  status?: string
-  collection_status?: string
-  payment_id?: string
-  paymentId?: string
-  preapproval_id?: string
-  preapprovalId?: string
-  external_reference?: string
-  externalReference?: string
-  merchant_order_id?: string
-  merchantOrderId?: string
-}
+type PaymentStatus = "approved" | "pending" | "rejected" | "loading"
 
-function normalizeStatus(searchParams: SearchParams) {
-  const raw = String(
-    searchParams.status ||
-      searchParams.collection_status ||
+function ResultContent() {
+  const searchParams  = useSearchParams()
+  const [status, setStatus] = useState<PaymentStatus>("loading")
+  const [planCode, setPlanCode] = useState("")
+
+  useEffect(() => {
+    // MercadoPago returns: collection_status, status, payment_status
+    const s = (
+      searchParams.get("collection_status") ||
+      searchParams.get("status") ||
+      searchParams.get("payment_status") ||
       ""
-  )
-    .trim()
-    .toLowerCase()
+    ).toLowerCase()
+    const plan = searchParams.get("plan") || searchParams.get("external_reference") || ""
+    setPlanCode(plan)
 
-  if (["approved", "authorized", "success", "successful"].includes(raw)) {
-    return "success"
+    if (s === "approved" || s === "authorized") setStatus("approved")
+    else if (s === "pending" || s === "in_process") setStatus("pending")
+    else if (s === "rejected" || s === "cancelled") setStatus("rejected")
+    else setStatus("approved") // default optimistic for redirect back
+  }, [searchParams])
+
+  const configs = {
+    approved: {
+      icon:      CheckCircle2,
+      iconColor: "#10B981",
+      iconBg:    "bg-[#10B981]/10",
+      title:     "¡Pago completado!",
+      subtitle:  "Tu suscripción a Operaly está activa",
+      message:   "Ya tienes acceso completo a tu asistente IA. En segundos recibirás un mensaje de Operaly en WhatsApp para empezar.",
+      cta:       "/dashboard/professional",
+      ctaLabel:  "Ir a mi dashboard",
+      ctaIcon:   LayoutDashboard,
+      secondary: null,
+    },
+    pending: {
+      icon:      Clock,
+      iconColor: "#F59E0B",
+      iconBg:    "bg-[#F59E0B]/10",
+      title:     "Pago en proceso",
+      subtitle:  "Tu pago está siendo verificado",
+      message:   "Mercado Pago está confirmando tu pago. Esto puede tomar unos minutos. Te avisaremos por WhatsApp cuando esté confirmado.",
+      cta:       "/dashboard/professional",
+      ctaLabel:  "Ver mi dashboard",
+      ctaIcon:   LayoutDashboard,
+      secondary: "/precios",
+    },
+    rejected: {
+      icon:      XCircle,
+      iconColor: "#EF4444",
+      iconBg:    "bg-[#EF4444]/10",
+      title:     "Pago no completado",
+      subtitle:  "Hubo un problema con tu pago",
+      message:   "No se pudo procesar el pago. Puedes intentarlo nuevamente o usar un método diferente.",
+      cta:       "/precios",
+      ctaLabel:  "Intentar de nuevo",
+      ctaIcon:   RefreshCw,
+      secondary: "/dashboard/professional",
+    },
+    loading: null,
   }
 
-  if (["pending", "in_process", "inprocess"].includes(raw)) {
-    return "pending"
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="w-8 h-8 text-[#3B82F6] animate-spin" />
+          <p className="text-sm text-muted-foreground">Verificando tu pago...</p>
+        </div>
+      </div>
+    )
   }
 
-  if (["rejected", "failure", "failed", "cancelled", "canceled"].includes(raw)) {
-    return "error"
-  }
-
-  return "pending"
-}
-
-function getStatusConfig(status: string) {
-  if (status === "success") {
-    return {
-      title: "Pago recibido correctamente",
-      description:
-        "Tu checkout fue procesado y Operaly registrará la confirmación automáticamente cuando el proveedor termine de sincronizar el evento.",
-      badge: "Confirmación recibida",
-      icon: CheckCircle2,
-      panelClass:
-        "border-emerald-200 bg-emerald-50 text-emerald-900",
-      iconWrapClass: "bg-emerald-100 text-emerald-700",
-      points: [
-        "El evento de pago debe quedar trazado en billing_intents.",
-        "El webhook terminará de confirmar el estado en backend.",
-        "Cuando aplique, el plan o add-on se activará automáticamente.",
-      ],
-    }
-  }
-
-  if (status === "error") {
-    return {
-      title: "No se pudo completar el pago",
-      description:
-        "La operación no terminó correctamente o fue cancelada. Puedes intentarlo otra vez sin perder el contexto de tu cuenta.",
-      badge: "Pago no completado",
-      icon: AlertCircle,
-      panelClass:
-        "border-red-200 bg-red-50 text-red-900",
-      iconWrapClass: "bg-red-100 text-red-700",
-      points: [
-        "No se confirmó un cobro exitoso.",
-        "Puedes volver al checkout y reintentar con el mismo plan.",
-        "Si el problema persiste, revisaremos el intento desde billing_intents.",
-      ],
-    }
-  }
-
-  return {
-    title: "Tu pago está siendo procesado",
-    description:
-      "La operación quedó en estado pendiente. Operaly actualizará el resultado final cuando Mercado Pago confirme el evento correspondiente.",
-    badge: "Procesando confirmación",
-    icon: Clock3,
-    panelClass:
-      "border-amber-200 bg-amber-50 text-amber-900",
-    iconWrapClass: "bg-amber-100 text-amber-700",
-    points: [
-      "El proveedor todavía no marcó el cobro como finalizado.",
-      "El webhook de backend cerrará el estado real del intento.",
-      "No necesitas repetir el pago mientras siga pendiente.",
-    ],
-  }
-}
-
-export default async function PagoResultadoPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  const params = await searchParams
-
-  const normalizedStatus = normalizeStatus(params)
-  const config = getStatusConfig(normalizedStatus)
-  const StatusIcon = config.icon
-
-  const paymentId = params.payment_id || params.paymentId || null
-  const preapprovalId = params.preapproval_id || params.preapprovalId || null
-  const externalReference =
-    params.external_reference || params.externalReference || null
-  const merchantOrderId =
-    params.merchant_order_id || params.merchantOrderId || null
+  const cfg = configs[status]!
+  const Icon = cfg.icon
 
   return (
-    <div className="min-h-screen bg-[#F6F8FC] px-4 py-8 md:px-6 md:py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-          <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#0F1F63_0%,#162C8A_65%,#2440BF_100%)] px-6 py-8 md:px-8">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                Resultado del checkout
+    <div className="min-h-screen bg-[#F7F9FC] flex flex-col">
+      {/* Top bar */}
+      <div className="border-b border-border bg-white">
+        <div className="mx-auto max-w-4xl px-4 h-16 flex items-center justify-between">
+          <Link href="/">
+            <Image src="/images/operaly-logo.png" alt="Operaly" width={110} height={40} className="h-8 w-auto" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md space-y-5">
+          {/* Main card */}
+          <div className="bg-white rounded-3xl border border-border shadow-lg overflow-hidden">
+            {/* Top accent */}
+            <div className="h-1.5 w-full" style={{ backgroundColor: cfg.iconColor }} />
+
+            <div className="px-8 py-8 text-center">
+              {/* Icon */}
+              <div className={`w-20 h-20 rounded-full ${cfg.iconBg} flex items-center justify-center mx-auto mb-5`}>
+                <Icon className="w-10 h-10" style={{ color: cfg.iconColor }} />
               </div>
 
-              <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-                Estado de tu operación
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80 md:text-[15px]">
-                Esta pantalla resume el estado devuelto por la pasarela y sirve
-                como punto de continuidad mientras el backend termina de sincronizar
-                el evento real del cobro.
-              </p>
+              <h1 className="text-2xl font-bold text-[#0F1F63]">{cfg.title}</h1>
+              <p className="text-base font-medium mt-1" style={{ color: cfg.iconColor }}>{cfg.subtitle}</p>
+              <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{cfg.message}</p>
             </div>
 
-            <div className="px-6 py-6 md:px-8 md:py-8">
-              <div className={`rounded-[28px] border p-5 md:p-6 ${config.panelClass}`}>
-                <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-2xl ${config.iconWrapClass}`}
-                    >
-                      <StatusIcon className="h-7 w-7" />
-                    </div>
-
-                    <div>
-                      <div className="inline-flex items-center rounded-full border border-current/10 bg-white/50 px-3 py-1 text-[11px] font-medium">
-                        {config.badge}
-                      </div>
-                      <h2 className="mt-3 text-2xl font-semibold">
-                        {config.title}
-                      </h2>
-                      <p className="mt-2 max-w-2xl text-sm leading-7 opacity-90">
-                        {config.description}
-                      </p>
-                    </div>
-                  </div>
+            {/* WhatsApp nudge for approved */}
+            {status === "approved" && (
+              <div className="mx-6 mb-6 bg-[#F0FDF4] border border-[#10B981]/20 rounded-2xl p-4 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#25D366] flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-4 h-4 text-white" />
                 </div>
-
-                <div className="mt-6 grid gap-3">
-                  {config.points.map((item) => (
-                    <div
-                      key={item}
-                      className="flex items-start gap-3 rounded-2xl border border-white/50 bg-white/60 px-4 py-3"
-                    >
-                      <ArrowRight className="mt-0.5 h-4 w-4 shrink-0" />
-                      <p className="text-sm leading-6">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50 p-5 md:p-6">
-                <div className="mb-4 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-slate-700" />
-                  <p className="text-sm font-semibold text-slate-900">
-                    Identificadores del proveedor
+                <div>
+                  <p className="text-sm font-semibold text-[#0F1F63]">Revisa tu WhatsApp</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Operaly ya está activo en tu número. Escríbele para empezar.
                   </p>
                 </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      Status recibido
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-slate-900">
-                      {normalizedStatus}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      Payment ID
-                    </p>
-                    <p className="mt-1 break-all text-sm font-medium text-slate-900">
-                      {paymentId || "No informado"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      Preapproval ID
-                    </p>
-                    <p className="mt-1 break-all text-sm font-medium text-slate-900">
-                      {preapprovalId || "No informado"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      External reference
-                    </p>
-                    <p className="mt-1 break-all text-sm font-medium text-slate-900">
-                      {externalReference || "No informada"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      Merchant order ID
-                    </p>
-                    <p className="mt-1 break-all text-sm font-medium text-slate-900">
-                      {merchantOrderId || "No informado"}
-                    </p>
-                  </div>
-                </div>
               </div>
+            )}
+
+            {/* CTA */}
+            <div className="px-6 pb-6 space-y-2.5">
+              <Link href={cfg.cta}
+                className="w-full h-12 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 text-white transition-all hover:opacity-90"
+                style={{ backgroundColor: cfg.iconColor }}>
+                <cfg.ctaIcon className="w-4 h-4" />
+                {cfg.ctaLabel}
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              {cfg.secondary && (
+                <Link href={cfg.secondary}
+                  className="w-full h-10 rounded-2xl border border-border text-sm font-medium text-muted-foreground flex items-center justify-center hover:bg-secondary transition-colors">
+                  Ver planes
+                </Link>
+              )}
             </div>
-          </section>
+          </div>
 
-          <aside className="space-y-6">
-            <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-6 py-6">
-                <h2 className="text-2xl font-semibold text-slate-950">
-                  Siguientes acciones
-                </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Continúa desde una ruta clara sin perder el contexto del cobro.
-                </p>
-              </div>
-
-              <div className="space-y-4 px-6 py-6">
-                <Button
-                  asChild
-                  className="h-14 w-full rounded-2xl bg-[#0F1F63] px-6 text-base font-medium text-white hover:bg-[#12297f]"
-                >
-                  <Link href="/dashboard/professional/configuracion">
-                    Ir a configuración y facturación
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-14 w-full rounded-2xl border-slate-300 text-base"
-                >
-                  <Link href="/iniciar-pago?plan=pro">
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Volver al checkout
-                  </Link>
-                </Button>
-
-                <Button
-                  asChild
-                  variant="outline"
-                  className="h-14 w-full rounded-2xl border-slate-300 text-base"
-                >
-                  <Link href="/dashboard/professional">
-                    <Home className="mr-2 h-4 w-4" />
-                    Ir al dashboard
-                  </Link>
-                </Button>
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold text-slate-900">
-                Qué valida Operaly internamente
+          {/* What's next for approved */}
+          {status === "approved" && (
+            <div className="bg-white rounded-2xl border border-border p-5 space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#3B82F6]" /> Próximos pasos
               </p>
-
-              <div className="mt-4 space-y-3">
-                {[
-                  "El backend registra cada intento en billing_intents.",
-                  "Las métricas owner consumen ese funnel en tiempo real.",
-                  "La activación final debe cerrarse con webhook y confirmación del proveedor.",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                    </div>
-                    <p className="text-sm text-slate-700">{item}</p>
+              {[
+                "Tu acceso está activo — entra al dashboard",
+                "Configura tu asistente: profesión, tono y contexto",
+                "Escríbele a Operaly por WhatsApp y empieza a operar",
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-[#3B82F6] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {i + 1}
                   </div>
-                ))}
-              </div>
-            </section>
-          </aside>
+                  <p className="text-sm text-[#0F1F63]">{step}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Support note */}
+          <p className="text-center text-xs text-muted-foreground">
+            ¿Tienes dudas? Escríbenos a{" "}
+            <a href="mailto:soporte@operaly.app" className="text-[#3B82F6] hover:underline">
+              soporte@operaly.app
+            </a>
+          </p>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PagoResultadoPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
+        <RefreshCw className="w-8 h-8 text-[#3B82F6] animate-spin" />
+      </div>
+    }>
+      <ResultContent />
+    </Suspense>
   )
 }
