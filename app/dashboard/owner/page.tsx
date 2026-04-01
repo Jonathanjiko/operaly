@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import {
-  BarChart3, Bell, X,
+  BarChart3,
+  Bell,
   ChevronRight,
   CreditCard,
   DollarSign,
