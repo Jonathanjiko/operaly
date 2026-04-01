@@ -42,6 +42,13 @@ const PLAN_FEATURES: Record<string, string[]> = {
 export function Pricing() {
   const { pricing, loading } = usePricingCurrency()
 
+  // Safe price getter - handles SSR and loading states
+  const getPrice = (planCode: string, fallback: number): number => {
+    return pricing?.prices?.[planCode as keyof typeof pricing.prices] ?? fallback
+  }
+
+  const getCurrency = (): string => pricing?.currency ?? "USD"
+
   return (
     <section id="precios" className="py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -84,9 +91,9 @@ export function Pricing() {
                       <span className="text-4xl font-bold text-[#0F1F63]">Gratis</span>
                     ) : (
                       <>
-                        <span className="text-xs font-medium text-muted-foreground">{pricing.currency}</span>
+                        <span className="text-xs font-medium text-muted-foreground">{getCurrency()}</span>
                         <span className="text-4xl font-bold text-[#0F1F63]">
-                          {pricing.prices[plan.code as keyof typeof pricing.prices] ?? plan.price}
+                          {getPrice(plan.code, plan.price)}
                         </span>
                         <span className="text-sm text-muted-foreground">/mes</span>
                       </>
