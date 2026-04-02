@@ -49,13 +49,14 @@ type PreferenceRow = {
 type SubscriptionRow = {
   id: string
   client_id: string
-  provider: string
-  provider_subscription_id: string | null
+  plan_id: string | null
   plan_code: string
+  plan_name: string | null
   status: string
-  currency: string
-  amount_pen: number
+  provider: string | null
+  provider_ref: string | null
   started_at: string | null
+  current_period_start: string | null
   current_period_end: string | null
   cancelled_at: string | null
   created_at: string
@@ -64,8 +65,12 @@ type SubscriptionRow = {
 type PaymentRow = {
   id: string
   client_id: string
+  plan_id: string | null
+  subscription_id: string | null
+  item_code: string | null
   provider: string
   provider_ref: string | null
+  transaction_id: string | null
   status: string
   amount_usd: number
   currency: string
@@ -346,13 +351,14 @@ export default function ProfessionalSettingsPage() {
           `
             id,
             client_id,
-            provider,
-            provider_subscription_id,
+            plan_id,
             plan_code,
+            plan_name,
             status,
-            currency,
-            amount_pen,
+            provider,
+            provider_ref,
             started_at,
+            current_period_start,
             current_period_end,
             cancelled_at,
             created_at
@@ -375,8 +381,12 @@ export default function ProfessionalSettingsPage() {
           `
             id,
             client_id,
+            plan_id,
+            subscription_id,
+            item_code,
             provider,
             provider_ref,
+            transaction_id,
             status,
             amount_usd,
             currency,
@@ -852,7 +862,7 @@ export default function ProfessionalSettingsPage() {
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
                     {subscription
-                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.amount_pen)
+                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.plan_code === "pro_plus" ? 199 : subscription.plan_code === "pro" ? 99 : 49)
                       : formatMoney(BILLING_CURRENCY_CODE, 0)}
                   </p>
                 </div>
