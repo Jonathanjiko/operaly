@@ -358,16 +358,16 @@ export default function OwnerDashboardPage() {
           ),
           withTimeout(
             supabase
-              .from("billing_payments")
-              .select("id, client_id, status, amount_usd, currency_code, payment_method, payment_method_brand, order_id, transaction_id, created_at")
+              .from("payments")
+              .select("id, client_id, status, amount_usd, currency, provider, provider_ref, paid_at, created_at")
               .order("created_at", { ascending: false })
               .limit(100),
             12000
           ),
           withTimeout(
             supabase
-              .from("billing_subscriptions")
-              .select("id, client_id, plan_code, status, amount_usd, currency_code, current_period_start, current_period_end, created_at")
+              .from("subscriptions")
+              .select("id, client_id, plan_code, status, amount_pen, currency, current_period_end, started_at, created_at")
               .order("created_at", { ascending: false })
               .limit(100),
             12000
@@ -406,12 +406,12 @@ export default function OwnerDashboardPage() {
             plan_code: client?.plan_code ?? null,
             status: String(row.status || ""),
             amount: Number(row.amount_usd || 0),
-            currency_code: String(row.currency_code || "USD"),
-            payment_method: row.payment_method ?? null,
-            payment_method_brand: row.payment_method_brand ?? null,
-            order_number: row.order_id ?? null,
-            transaction_id: row.transaction_id ?? null,
-            created_at: row.created_at,
+            currency_code: String(row.currency || "PEN"),
+            payment_method: row.provider ?? null,
+            payment_method_brand: null,
+            order_number: row.provider_ref ?? null,
+            transaction_id: row.provider_ref ?? null,
+            created_at: row.paid_at || row.created_at,
           }
         })
 
@@ -426,9 +426,9 @@ export default function OwnerDashboardPage() {
             city: client?.city ?? null,
             plan_code: String(row.plan_code || ""),
             status: String(row.status || ""),
-            amount: Number(row.amount_usd || 0),
-            currency_code: String(row.currency_code || "USD"),
-            current_period_start: row.current_period_start ?? null,
+            amount: Number(row.amount_pen || 0),
+            currency_code: String(row.currency || "PEN"),
+            current_period_start: row.started_at ?? null,
             current_period_end: row.current_period_end ?? null,
             created_at: row.created_at,
           }
@@ -505,10 +505,10 @@ export default function OwnerDashboardPage() {
     // ── Realtime: new payments & clients ──────────────────────────────────
     const channel = supabase
       .channel("owner_realtime_v1")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "billing_payments" },
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" },
         (payload: any) => {
           const p = payload.new || {}
-          const pen = toPEN(Number(p.amount_usd || p.amount || 0), p.currency_code || "USD")
+          const pen = toPEN(Number(p.amount_usd || 0), p.currency || "PEN")
           const note = {
             id: p.id || Date.now().toString(),
             title: "💰 Nuevo pago recibido",
