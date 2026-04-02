@@ -329,151 +329,140 @@ export default function OwnerDashboardPage() {
       let nextSubscriptions: SubscriptionRow[] = []
       let nextClients: ClientRow[] = []
 
+      // ── Capa 1: intentar RPCs de owner ──────────────────────────────────
       try {
         const [summaryResponse, paymentsResponse, subscriptionsResponse, clientsResponse] = await Promise.all([
-          withTimeout(supabase.rpc("owner_dashboard_summary"), 12000).catch(() => ({ data: null, error: new Error("rpc_fail") })),
-          withTimeout(supabase.rpc("owner_recent_payments", { p_limit: 50 }), 12000).catch(() => ({ data: [], error: null })),
-          withTimeout(supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }), 12000).catch(() => ({ data: [], error: null })),
-          withTimeout(supabase.rpc("owner_clients_list", { p_limit: 100 }), 12000).catch(() => ({ data: [], error: null })),
+          supabase.rpc("owner_dashboard_summary").catch(() => ({ data: null, error: null })),
+          supabase.rpc("owner_recent_payments", { p_limit: 50 }).catch(() => ({ data: [], error: null })),
+          supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }).catch(() => ({ data: [], error: null })),
+          supabase.rpc("owner_clients_list", { p_limit: 100 }).catch(() => ({ data: [], error: null })),
         ])
 
-        // Solo lanzamos si clients falla — el resto es opcional
-        if (clientsResponse.error) throw clientsResponse.error
-
-        nextSummary = (summaryResponse.data || null) as SummaryRow | null
-        nextPayments = (paymentsResponse.data || []) as PaymentRow[]
+        nextSummary     = (summaryResponse.data     || null) as SummaryRow | null
+        nextPayments    = (paymentsResponse.data     || [])  as PaymentRow[]
         nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
-        nextClients = (clientsResponse.data || []) as ClientRow[]
+        nextClients     = (clientsResponse.data      || [])  as ClientRow[]
+      } catch (_) {
+        // RPC falló completamente — ignorar, ir a capa 2
+      }
 
-        // Si clientes vino vacío del RPC, forzar fallback directo a tabla clients
-        if (nextClients.length === 0) throw new Error("rpc_clients_empty")
-      } catch {
-        // Fallback directo — cada query aislada para que un error de RLS en payments
-        // no impida cargar los clientes
-        const [directClientsResponse, directPaymentsResponse, directSubscriptionsResponse] = await Promise.all([
-          withTimeout(
-            supabase
-              .from("clients")
-              .select("id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ).catch(() => ({ data: [], error: null })),
-          withTimeout(
-            supabase
-              .from("payments")
-              .select("id, client_id, status, amount_usd, currency, provider, provider_ref, paid_at, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ).catch(() => ({ data: [], error: null })),
-          withTimeout(
-            supabase
-              .from("subscriptions")
-              .select("id, client_id, plan_code, plan_name, status, provider, provider_ref, current_period_start, current_period_end, started_at, cancelled_at, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ).catch(() => ({ data: [], error: null })),
-        ])
+      // ── Capa 2: si clientes vacíos, leer directo de tabla clients ────────
+      if (nextClients.length === 0) {
+        try {
+          const { data: rawClients } = await supabase
+            .from("clients")
+            .select("id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at")
+            .order("created_at", { ascending: false })
+            .limit(200)
 
-        // Solo lanzar error si clientes falla — payments y subscriptions son opcionales
-        if (directClientsResponse.error) throw directClientsResponse.error
-
-        nextClients = ((directClientsResponse.data || []) as any[]).map((row) => ({
-          id: String(row.id),
-          name: row.name ?? null,
-          email: row.email ?? null,
-          phone: row.phone ?? null,
-          country_code: row.country_code ?? null,
-          city: row.city ?? null,
-          timezone: row.timezone ?? null,
-          plan_code: row.plan_code ?? null,
-          plan_status: row.plan_status ?? null,
-          status: row.status ?? null,
-          created_at: row.created_at,
-        }))
-
-        const clientMap = new Map(nextClients.map((client) => [client.id, client]))
-
-        nextPayments = ((directPaymentsResponse.data || []) as any[]).map((row) => {
-          const client = clientMap.get(String(row.client_id))
-          return {
-            id: String(row.id),
-            client_id: String(row.client_id),
-            client_name: client?.name ?? null,
-            client_phone: client?.phone ?? null,
-            country_code: client?.country_code ?? null,
-            city: client?.city ?? null,
-            plan_code: client?.plan_code ?? null,
-            status: String(row.status || ""),
-            amount: Number(row.amount_usd || 0),
-            currency_code: String(row.currency || "PEN"),
-            payment_method: row.provider ?? null,
-            payment_method_brand: null,
-            order_number: row.provider_ref ?? null,
-            transaction_id: row.provider_ref ?? null,
-            created_at: row.paid_at || row.created_at,
-          }
-        })
-
-        nextSubscriptions = ((directSubscriptionsResponse.data || []) as any[]).map((row) => {
-          const client = clientMap.get(String(row.client_id))
-          return {
-            id: String(row.id),
-            client_id: String(row.client_id),
-            client_name: client?.name ?? null,
-            client_phone: client?.phone ?? null,
-            country_code: client?.country_code ?? null,
-            city: client?.city ?? null,
-            plan_code: String(row.plan_code || ""),
-            plan_name: row.plan_name ?? null,
-            status: String(row.status || ""),
-            amount: 0,
-            currency_code: "PEN",
-            current_period_start: row.current_period_start ?? row.started_at ?? null,
-            current_period_end: row.current_period_end ?? null,
-            created_at: row.created_at,
-          }
-        })
-
-        const approvedPayments = nextPayments.filter((payment) =>
-          ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
-        )
-        const pendingPayments = nextPayments.filter(
-          (payment) => String(payment.status || "").toLowerCase() === "pending"
-        )
-        const failedPayments = nextPayments.filter((payment) =>
-          ["failed", "declined"].includes(String(payment.status || "").toLowerCase())
-        )
-
-        const now = new Date()
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const weekStart = new Date(now)
-        const day = now.getDay()
-        const diff = day === 0 ? 6 : day - 1
-        weekStart.setDate(now.getDate() - diff)
-        weekStart.setHours(0, 0, 0, 0)
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-
-        nextSummary = {
-          total_clients: nextClients.length,
-          active_clients: nextClients.filter((client) => String(client.status || "").toLowerCase() === "active").length,
-          trial_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "trial").length,
-          paid_clients: nextClients.filter((client) => ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())).length,
-          pro_plus_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "pro_plus").length,
-          payments_approved_total: approvedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_pending_total: pendingPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_failed_total: failedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_today_total: approvedPayments.filter((item) => new Date(item.created_at) >= todayStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_week_total: approvedPayments.filter((item) => new Date(item.created_at) >= weekStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_month_total: approvedPayments.filter((item) => new Date(item.created_at) >= monthStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          subscriptions_active: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "active").length,
-          subscriptions_pending: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "pending").length,
-          subscriptions_cancelled: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length,
+          nextClients = ((rawClients || []) as any[]).map((row) => ({
+            id:           String(row.id),
+            name:         row.name         ?? null,
+            email:        row.email        ?? null,
+            phone:        row.phone        ?? null,
+            country_code: row.country_code ?? null,
+            city:         row.city         ?? null,
+            timezone:     row.timezone     ?? null,
+            plan_code:    row.plan_code    ?? null,
+            plan_status:  row.plan_status  ?? null,
+            status:       row.status       ?? null,
+            created_at:   row.created_at,
+          }))
+        } catch (_) {
+          // tabla clients también con RLS — nextClients queda []
         }
       }
 
+      // ── Capa 3: si pagos vacíos, leer directo de tabla payments ──────────
+      if (nextPayments.length === 0) {
+        try {
+          const { data: rawPayments } = await supabase
+            .from("payments")
+            .select("id, client_id, status, amount_usd, currency, provider, provider_ref, paid_at, created_at")
+            .order("created_at", { ascending: false })
+            .limit(100)
+
+          const clientMap = new Map(nextClients.map((c) => [c.id, c]))
+          nextPayments = ((rawPayments || []) as any[]).map((row) => {
+            const client = clientMap.get(String(row.client_id))
+            return {
+              id:                   String(row.id),
+              client_id:            String(row.client_id),
+              client_name:          client?.name   ?? null,
+              client_phone:         client?.phone  ?? null,
+              country_code:         client?.country_code ?? null,
+              city:                 client?.city   ?? null,
+              plan_code:            client?.plan_code ?? null,
+              status:               String(row.status || ""),
+              amount:               Number(row.amount_usd || 0),
+              currency_code:        String(row.currency || "PEN"),
+              payment_method:       row.provider   ?? null,
+              payment_method_brand: null,
+              order_number:         row.provider_ref ?? null,
+              transaction_id:       row.provider_ref ?? null,
+              created_at:           row.paid_at || row.created_at,
+            }
+          })
+        } catch (_) {
+          // payments con RLS — dejar vacío, no es crítico
+        }
+      }
+
+      // ── Capa 3b: si suscripciones vacías, leer directo ───────────────────
+      if (nextSubscriptions.length === 0) {
+        try {
+          const { data: rawSubs } = await supabase
+            .from("subscriptions")
+            .select("id, client_id, plan_code, plan_name, status, current_period_start, current_period_end, started_at, created_at")
+            .order("created_at", { ascending: false })
+            .limit(100)
+
+          const clientMap = new Map(nextClients.map((c) => [c.id, c]))
+          nextSubscriptions = ((rawSubs || []) as any[]).map((row) => {
+            const client = clientMap.get(String(row.client_id))
+            return {
+              id:                   String(row.id),
+              client_id:            String(row.client_id),
+              client_name:          client?.name   ?? null,
+              client_phone:         client?.phone  ?? null,
+              country_code:         client?.country_code ?? null,
+              city:                 client?.city   ?? null,
+              plan_code:            String(row.plan_code || ""),
+              plan_name:            row.plan_name  ?? null,
+              status:               String(row.status || ""),
+              amount:               0,
+              currency_code:        "PEN",
+              current_period_start: row.current_period_start ?? row.started_at ?? null,
+              current_period_end:   row.current_period_end   ?? null,
+              created_at:           row.created_at,
+            }
+          })
+        } catch (_) {
+          // suscripciones con RLS — dejar vacío
+        }
+      }
+
+      // ── Calcular summary si los RPCs no lo dieron ─────────────────────────
+      if (!nextSummary && nextClients.length > 0) {
+        const approved = nextPayments.filter(p =>
+          ["paid","approved","succeeded"].includes((p.status||"").toLowerCase()))
+        nextSummary = {
+          total_clients:            nextClients.length,
+          active_clients:           nextClients.filter(c => (c.status||"").toLowerCase() === "active").length,
+          trial_clients:            nextClients.filter(c => (c.plan_code||"") === "trial").length,
+          paid_clients:             nextClients.filter(c => ["core","pro","pro_plus"].includes(c.plan_code||"")).length,
+          pro_plus_clients:         nextClients.filter(c => (c.plan_code||"") === "pro_plus").length,
+          payments_approved_total:  approved.reduce((a,p) => a + p.amount, 0),
+          payments_pending_total:   nextPayments.filter(p => (p.status||"").toLowerCase() === "pending").reduce((a,p) => a + p.amount, 0),
+          payments_failed_total:    nextPayments.filter(p => ["failed","declined"].includes((p.status||"").toLowerCase())).reduce((a,p) => a + p.amount, 0),
+          payments_today_total:     0,
+          payments_week_total:      0,
+          payments_month_total:     approved.reduce((a,p) => a + p.amount, 0),
+          subscriptions_active:     nextSubscriptions.filter(s => (s.status||"").toLowerCase() === "active").length,
+          subscriptions_pending:    nextSubscriptions.filter(s => (s.status||"").toLowerCase() === "pending").length,
+          subscriptions_cancelled:  nextSubscriptions.filter(s => (s.status||"").toLowerCase() === "cancelled").length,
+        }
+      }
       setSummary(nextSummary)
       setPayments(nextPayments)
       setSubscriptions(nextSubscriptions)
