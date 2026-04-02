@@ -195,7 +195,7 @@ export default function ProfessionalDashboardPage() {
         })
 
         if (clientId) {
-          const periodYYYYMM = new Date().toISOString().slice(0, 7)
+          const periodYYYYMM = new Date().toISOString().slice(0, 7).replace("-", "")
           const today = new Date().toISOString().slice(0, 10)
 
           const usageResp = await supabase
