@@ -53,14 +53,10 @@ type SubscriptionRow = {
   provider_subscription_id: string | null
   plan_code: string
   status: string
-  currency_code: string
-  amount: number
-  interval_unit: string
-  interval_count: number
-  starts_at: string | null
-  current_period_start: string | null
+  currency: string
+  amount_pen: number
+  started_at: string | null
   current_period_end: string | null
-  cancel_at_period_end: boolean
   cancelled_at: string | null
   created_at: string
 }
@@ -68,18 +64,12 @@ type SubscriptionRow = {
 type PaymentRow = {
   id: string
   client_id: string
-  subscription_id: string | null
   provider: string
-  transaction_id: string
-  order_number: string
+  provider_ref: string | null
   status: string
-  currency_code: string
-  amount: number
-  payment_method: string | null
-  payment_method_brand: string | null
-  last4: string | null
-  approved_at: string | null
-  failed_at: string | null
+  amount_usd: number
+  currency: string
+  paid_at: string | null
   created_at: string
 }
 
@@ -96,7 +86,7 @@ type AuthMetadata = {
   selected_plan?: string
 }
 
-const BILLING_CURRENCY_CODE = "USD"
+const BILLING_CURRENCY_CODE = "PEN"
 
 const PLAN_LABELS: Record<string, string> = {
   trial: "Trial",
@@ -351,7 +341,7 @@ export default function ProfessionalSettingsPage() {
       setClientPlanStatus(String(client.plan_status || "trialing"))
 
       const { data: subscriptionData, error: subscriptionError } = await supabase
-        .from("billing_subscriptions")
+        .from("subscriptions")
         .select(
           `
             id,
@@ -360,14 +350,10 @@ export default function ProfessionalSettingsPage() {
             provider_subscription_id,
             plan_code,
             status,
-            currency_code,
-            amount,
-            interval_unit,
-            interval_count,
-            starts_at,
-            current_period_start,
+            currency,
+            amount_pen,
+            started_at,
             current_period_end,
-            cancel_at_period_end,
             cancelled_at,
             created_at
           `
@@ -384,23 +370,17 @@ export default function ProfessionalSettingsPage() {
       setSubscription((subscriptionData as SubscriptionRow | null) || null)
 
       const { data: paymentsData, error: paymentsError } = await supabase
-        .from("billing_payments")
+        .from("payments")
         .select(
           `
             id,
             client_id,
-            subscription_id,
             provider,
-            transaction_id,
-            order_number,
+            provider_ref,
             status,
-            currency_code,
-            amount,
-            payment_method,
-            payment_method_brand,
-            last4,
-            approved_at,
-            failed_at,
+            amount_usd,
+            currency,
+            paid_at,
             created_at
           `
         )
@@ -872,7 +852,7 @@ export default function ProfessionalSettingsPage() {
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
                     {subscription
-                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.amount)
+                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.amount_pen)
                       : formatMoney(BILLING_CURRENCY_CODE, 0)}
                   </p>
                 </div>
@@ -882,9 +862,7 @@ export default function ProfessionalSettingsPage() {
                     Periodicidad
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {subscription
-                      ? `${subscription.interval_count} ${subscription.interval_unit}`
-                      : "mensual"}
+                    {subscription ? "mensual" : "mensual"}
                   </p>
                 </div>
 
@@ -942,18 +920,16 @@ export default function ProfessionalSettingsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
-                          {formatMoney(BILLING_CURRENCY_CODE, payment.amount)}
+                          {formatMoney(BILLING_CURRENCY_CODE, payment.amount_usd)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {payment.payment_method_brand
-                            ? `${payment.payment_method_brand}${payment.last4 ? ` •••• ${payment.last4}` : ""}`
-                            : payment.payment_method || "Método no informado"}
+                          {payment.provider || "MercadoPago"}
                         </p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Orden: {payment.order_number}
+                          Ref: {payment.provider_ref || "—"}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Fecha: {formatDateTime(payment.created_at)}
+                          Fecha: {formatDateTime(payment.paid_at || payment.created_at)}
                         </p>
                       </div>
 
