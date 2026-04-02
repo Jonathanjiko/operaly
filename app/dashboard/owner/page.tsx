@@ -367,7 +367,7 @@ export default function OwnerDashboardPage() {
           withTimeout(
             supabase
               .from("subscriptions")
-              .select("id, client_id, plan_code, status, amount_pen, currency, current_period_end, started_at, created_at")
+              .select("id, client_id, plan_code, plan_name, status, provider, provider_ref, current_period_start, current_period_end, started_at, cancelled_at, created_at")
               .order("created_at", { ascending: false })
               .limit(100),
             12000
@@ -425,10 +425,11 @@ export default function OwnerDashboardPage() {
             country_code: client?.country_code ?? null,
             city: client?.city ?? null,
             plan_code: String(row.plan_code || ""),
+            plan_name: row.plan_name ?? null,
             status: String(row.status || ""),
-            amount: Number(row.amount_pen || 0),
-            currency_code: String(row.currency || "PEN"),
-            current_period_start: row.started_at ?? null,
+            amount: 0,
+            currency_code: "PEN",
+            current_period_start: row.current_period_start ?? row.started_at ?? null,
             current_period_end: row.current_period_end ?? null,
             created_at: row.created_at,
           }
@@ -1025,59 +1026,203 @@ export default function OwnerDashboardPage() {
           ) : null}
 
           {activeSection === "overview" ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
+
+              {/* ── KPI Cards ── */}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {overviewCards.map((card) => {
                   const Icon = card.icon
-
                   return (
-                    <div
-                      key={card.title}
-                      className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5"
-                    >
+                    <div key={card.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                       <div className="flex items-center justify-between mb-3">
                         <p className="text-sm text-slate-500">{card.title}</p>
                         <Icon className="w-5 h-5 text-[#3B82F6]" />
                       </div>
-                      <p className="text-3xl font-semibold text-[#0F1F63]">
-                        {card.value}
-                      </p>
+                      <p className="text-3xl font-semibold text-[#0F1F63]">{card.value}</p>
                     </div>
                   )
                 })}
               </div>
 
+              {/* ── Charts Row ── */}
+              <div className="grid gap-6 xl:grid-cols-2">
+
+                {/* Donut — Distribución de clientes por plan */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <p className="text-base font-semibold text-[#0F1F63] mb-4">Distribución por plan</p>
+                  {(() => {
+                    const trial   = summary?.trial_clients    || clients.filter(c => (c.plan_code||"") === "trial").length
+                    const core    = clients.filter(c => (c.plan_code||"") === "core").length
+                    const pro     = clients.filter(c => (c.plan_code||"") === "pro").length
+                    const proPlus = summary?.pro_plus_clients || clients.filter(c => (c.plan_code||"") === "pro_plus").length
+                    const total   = trial + core + pro + proPlus || 1
+                    const segments = [
+                      { label: "Trial",    value: trial,   color: "#94A3B8" },
+                      { label: "Core",     value: core,    color: "#3B82F6" },
+                      { label: "Pro",      value: pro,     color: "#7C3AED" },
+                      { label: "Pro Plus", value: proPlus, color: "#06B6D4" },
+                    ]
+                    const cx = 80, cy = 80, r = 60, ri = 36
+                    let angle = -Math.PI / 2
+                    const arcs = segments.map(seg => {
+                      const sweep = (seg.value / total) * 2 * Math.PI
+                      const x1 = cx + r * Math.cos(angle)
+                      const y1 = cy + r * Math.sin(angle)
+                      angle += sweep
+                      const x2 = cx + r * Math.cos(angle)
+                      const y2 = cy + r * Math.sin(angle)
+                      const xi1 = cx + ri * Math.cos(angle)
+                      const yi1 = cy + ri * Math.sin(angle)
+                      const xi2 = cx + ri * Math.cos(angle - sweep)
+                      const yi2 = cy + ri * Math.sin(angle - sweep)
+                      const large = sweep > Math.PI ? 1 : 0
+                      return {
+                        ...seg,
+                        d: seg.value === 0 ? "" :
+                          `M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${xi1},${yi1} A${ri},${ri} 0 ${large},0 ${xi2},${yi2} Z`,
+                      }
+                    })
+                    return (
+                      <div className="flex items-center gap-6">
+                        <svg width="160" height="160" viewBox="0 0 160 160">
+                          {arcs.map(a => a.d ? <path key={a.label} d={a.d} fill={a.color} /> : null)}
+                          <text x="80" y="76" textAnchor="middle" fontSize="22" fontWeight="700" fill="#0F1F63">{total}</text>
+                          <text x="80" y="92" textAnchor="middle" fontSize="9" fill="#64748B">clientes</text>
+                        </svg>
+                        <div className="space-y-2 flex-1">
+                          {segments.map(s => (
+                            <div key={s.label} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full" style={{background: s.color}} />
+                                <span className="text-xs text-slate-600">{s.label}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-[#0F1F63]">{s.value}</span>
+                                <span className="text-[10px] text-slate-400">{total > 0 ? Math.round(s.value/total*100) : 0}%</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* Bar chart — Revenue últimos 7 días */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <p className="text-base font-semibold text-[#0F1F63] mb-4">Revenue últimos 7 días (S/)</p>
+                  {(() => {
+                    const days: {label:string; amount:number}[] = []
+                    for (let i = 6; i >= 0; i--) {
+                      const d = new Date()
+                      d.setDate(d.getDate() - i)
+                      const key = d.toISOString().slice(0,10)
+                      const label = d.toLocaleDateString("es-PE",{weekday:"short"}).slice(0,3)
+                      const amount = payments
+                        .filter(p => ["paid","approved","succeeded"].includes((p.status||"").toLowerCase()))
+                        .filter(p => (p.created_at||"").slice(0,10) === key)
+                        .reduce((acc,p) => acc + toPEN(Number(p.amount||0), p.currency_code||"PEN"), 0)
+                      days.push({label, amount})
+                    }
+                    const max = Math.max(...days.map(d=>d.amount), 1)
+                    const W = 280, H = 110, pad = 20, barW = (W - pad*2) / days.length
+                    return (
+                      <svg width="100%" viewBox={`0 0 ${W} ${H+28}`} preserveAspectRatio="xMidYMid meet">
+                        {/* Grid lines */}
+                        {[0,0.5,1].map(f => (
+                          <line key={f} x1={pad} x2={W-pad} y1={H - f*H + 4} y2={H - f*H + 4}
+                            stroke="#E2E8F0" strokeWidth="1" strokeDasharray="4,3" />
+                        ))}
+                        {days.map((d,i) => {
+                          const bh = Math.max(4, (d.amount/max) * (H-8))
+                          const bx = pad + i * barW + barW*0.15
+                          const by = H - bh + 4
+                          const bwInner = barW * 0.7
+                          return (
+                            <g key={d.label}>
+                              <rect x={bx} y={by} width={bwInner} height={bh}
+                                rx="4" fill={d.amount > 0 ? "#3B82F6" : "#E2E8F0"} />
+                              {d.amount > 0 && (
+                                <text x={bx + bwInner/2} y={by - 3} textAnchor="middle"
+                                  fontSize="7" fill="#0F1F63" fontWeight="600">
+                                  {d.amount >= 1000 ? `${(d.amount/1000).toFixed(1)}k` : Math.round(d.amount)}
+                                </text>
+                              )}
+                              <text x={bx + bwInner/2} y={H+20} textAnchor="middle"
+                                fontSize="9" fill="#64748B">{d.label}</text>
+                            </g>
+                          )
+                        })}
+                      </svg>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* ── Estado de suscripciones (mini pills) ── */}
               {summary ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Trials</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {summary.trial_clients}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Pro Plus</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {summary.pro_plus_clients}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Pagos pendientes</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {formatMoney(filteredOverview.pendingTotal)}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Pagos fallidos</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {formatMoney(filteredOverview.failedTotal)}
-                    </p>
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <p className="text-base font-semibold text-[#0F1F63] mb-4">Estado de suscripciones</p>
+                  <div className="flex flex-wrap gap-4">
+                    {[
+                      { label: "Activas",    value: summary.subscriptions_active,    color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                      { label: "Pendientes", value: summary.subscriptions_pending,   color: "bg-amber-50 text-amber-700 border-amber-200" },
+                      { label: "Canceladas", value: summary.subscriptions_cancelled, color: "bg-red-50 text-red-700 border-red-200" },
+                      { label: "Trial",      value: summary.trial_clients,           color: "bg-slate-50 text-slate-700 border-slate-200" },
+                      { label: "Pagos OK",   value: filteredOverview.approvedPayments.length, color: "bg-blue-50 text-blue-700 border-blue-200" },
+                    ].map(item => (
+                      <div key={item.label} className={`rounded-2xl border px-5 py-3 ${item.color}`}>
+                        <p className="text-2xl font-bold">{item.value}</p>
+                        <p className="text-xs mt-0.5">{item.label}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ) : null}
+
+              {/* ── Actividad reciente (timeline) ── */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <p className="text-base font-semibold text-[#0F1F63] mb-4">Actividad reciente</p>
+                {payments.length === 0 && clients.length === 0 ? (
+                  <p className="text-sm text-slate-400">Sin actividad registrada aún.</p>
+                ) : (
+                  <div className="space-y-0 relative">
+                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-200" />
+                    {[
+                      ...payments.slice(0,5).map(p => ({
+                        type: "payment" as const,
+                        title: `Pago ${p.status} · ${fmtPEN(toPEN(Number(p.amount||0), p.currency_code||"PEN"))}`,
+                        sub: p.client_name || p.client_id,
+                        date: p.created_at,
+                        color: ["paid","approved","succeeded"].includes((p.status||"").toLowerCase()) ? "#10B981" : "#EF4444",
+                      })),
+                      ...clients.slice(0,5).map(c => ({
+                        type: "client" as const,
+                        title: `Nuevo usuario · ${c.plan_code || "trial"}`,
+                        sub: c.name || c.email || c.phone || c.id,
+                        date: c.created_at,
+                        color: "#3B82F6",
+                      })),
+                    ]
+                    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .slice(0,8)
+                    .map((item, i) => (
+                      <div key={i} className="flex items-start gap-4 py-2.5 pl-6 relative">
+                        <div className="absolute left-0 top-3.5 w-3.5 h-3.5 rounded-full border-2 border-white"
+                          style={{background: item.color}} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-[#0F1F63] truncate">{item.title}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{item.sub}</p>
+                        </div>
+                        <p className="text-[10px] text-slate-400 whitespace-nowrap">
+                          {new Date(item.date).toLocaleDateString("es-PE",{day:"2-digit",month:"short"})}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           ) : null}
 
