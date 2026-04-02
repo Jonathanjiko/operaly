@@ -331,22 +331,25 @@ export default function OwnerDashboardPage() {
 
       try {
         const [summaryResponse, paymentsResponse, subscriptionsResponse, clientsResponse] = await Promise.all([
-          withTimeout(supabase.rpc("owner_dashboard_summary"), 12000),
-          withTimeout(supabase.rpc("owner_recent_payments", { p_limit: 50 }), 12000),
-          withTimeout(supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }), 12000),
-          withTimeout(supabase.rpc("owner_clients_list", { p_limit: 100 }), 12000),
+          withTimeout(supabase.rpc("owner_dashboard_summary"), 12000).catch(() => ({ data: null, error: new Error("rpc_fail") })),
+          withTimeout(supabase.rpc("owner_recent_payments", { p_limit: 50 }), 12000).catch(() => ({ data: [], error: null })),
+          withTimeout(supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }), 12000).catch(() => ({ data: [], error: null })),
+          withTimeout(supabase.rpc("owner_clients_list", { p_limit: 100 }), 12000).catch(() => ({ data: [], error: null })),
         ])
 
-        if (summaryResponse.error) throw summaryResponse.error
-        if (paymentsResponse.error) throw paymentsResponse.error
-        if (subscriptionsResponse.error) throw subscriptionsResponse.error
+        // Solo lanzamos si clients falla — el resto es opcional
         if (clientsResponse.error) throw clientsResponse.error
 
         nextSummary = (summaryResponse.data || null) as SummaryRow | null
         nextPayments = (paymentsResponse.data || []) as PaymentRow[]
         nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
         nextClients = (clientsResponse.data || []) as ClientRow[]
+
+        // Si clientes vino vacío del RPC, forzar fallback directo a tabla clients
+        if (nextClients.length === 0) throw new Error("rpc_clients_empty")
       } catch {
+        // Fallback directo — cada query aislada para que un error de RLS en payments
+        // no impida cargar los clientes
         const [directClientsResponse, directPaymentsResponse, directSubscriptionsResponse] = await Promise.all([
           withTimeout(
             supabase
@@ -355,7 +358,7 @@ export default function OwnerDashboardPage() {
               .order("created_at", { ascending: false })
               .limit(100),
             12000
-          ),
+          ).catch(() => ({ data: [], error: null })),
           withTimeout(
             supabase
               .from("payments")
@@ -363,7 +366,7 @@ export default function OwnerDashboardPage() {
               .order("created_at", { ascending: false })
               .limit(100),
             12000
-          ),
+          ).catch(() => ({ data: [], error: null })),
           withTimeout(
             supabase
               .from("subscriptions")
@@ -371,12 +374,11 @@ export default function OwnerDashboardPage() {
               .order("created_at", { ascending: false })
               .limit(100),
             12000
-          ),
+          ).catch(() => ({ data: [], error: null })),
         ])
 
+        // Solo lanzar error si clientes falla — payments y subscriptions son opcionales
         if (directClientsResponse.error) throw directClientsResponse.error
-        if (directPaymentsResponse.error) throw directPaymentsResponse.error
-        if (directSubscriptionsResponse.error) throw directSubscriptionsResponse.error
 
         nextClients = ((directClientsResponse.data || []) as any[]).map((row) => ({
           id: String(row.id),
