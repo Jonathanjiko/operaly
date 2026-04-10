@@ -23,6 +23,7 @@ import {
   Bot,
   Mic,
   Plug,
+  List,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
@@ -30,6 +31,7 @@ const sidebarItems = [
   { href: "/dashboard/professional", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/professional/agenda", label: "Agenda", icon: Calendar },
   { href: "/dashboard/professional/tareas", label: "Tareas", icon: CheckSquare },
+  { href: "/dashboard/professional/listas", label: "Listas", icon: List },
   { href: "/dashboard/professional/casos", label: "Casos", icon: FolderOpen },
   { href: "/dashboard/professional/contactos", label: "Contactos", icon: Users },
   { href: "/dashboard/professional/documentos", label: "Documentos", icon: FileText },
@@ -77,8 +79,9 @@ export default function ProfessionalDashboardLayout({
           return
         }
 
+        const appMeta = user.app_metadata || {}
         const meta = user.user_metadata || {}
-        const clientId = meta.client_id || localStorage.getItem("operaly_client_id")
+        const clientId = appMeta.client_id || meta.client_id || localStorage.getItem("operaly_client_id")
 
         if (!clientId) {
           const selectedPlan = meta.selected_plan || "trial"
