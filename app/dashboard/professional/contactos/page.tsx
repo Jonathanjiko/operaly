@@ -1,220 +1,120 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import {
-  Plus, Trash2, RefreshCw, Pencil, X, Save,
-  Search, Phone, Users, MessageSquare, User,
-} from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import { AppToast } from "@/components/ui/app-toast"
+import {
+  ChevronLeft, ChevronRight, Plus, RefreshCw,
+  Zap, CheckSquare, Clock, CalendarDays, X, AlarmClock,
+} from "lucide-react"
 
-type ContactRow = {
-  id: string; client_id: string; name: string | null; phone: string | null
-  relationship: string | null; notes: string | null
-  preferred_language: string | null; whatsapp_opt_in: boolean | null; created_at: string | null
+type EventItem = {
+  id: string
+  title: string
+  dateKey: string
+  timeLabel: string
+  hour: number
+  minute: number
+  type: "task" | "automation"
+  sourceAt: string
+  status?: string
 }
 
-const COLORS = ["#3B82F6","#7C3AED","#10B981","#F59E0B","#EF4444","#06B6D4","#8B5CF6","#EC4899"]
+type ViewMode = "month" | "week" | "day" | "agenda"
 
-function initials(name: string | null) {
-  if (!name) return "?"
-  return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase()).join("") || "?"
-}
+// ── Event Detail Modal ──────────────────────────────────────────────────────
+function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
+  const isTask = event.type === "task"
+  const color = isTask ? "#3B82F6" : "#7C3AED"
+  const d = new Date(event.sourceAt)
+  const ok = !isNaN(d.getTime())
+  const fullStr = ok ? d.toLocaleString("es-PE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }) : event.timeLabel
+  const overdue = ok && d.getTime() < Date.now()
 
-function colorFor(name: string | null) {
-  const s = (name || "?").charCodeAt(0) % COLORS.length
-  return COLORS[s]
-}
 
-// ── Avatar ───────────────────────────────────────────────────────────────────
-function Avatar({ name, size = "md" }: { name: string | null; size?: "sm" | "md" | "lg" }) {
-  const sz = size === "sm" ? "w-9 h-9 text-sm" : size === "lg" ? "w-14 h-14 text-xl" : "w-11 h-11 text-base"
-  return (
-    <div className={`${sz} rounded-2xl flex items-center justify-center font-bold text-white flex-shrink-0`}
-      style={{ backgroundColor: colorFor(name) }}>
-      {initials(name)}
-    </div>
-  )
-}
+  // Real-time: agenda changes from WhatsApp appear instantly
+  useEffect(() => {
+    if (!clientId) return
+    const ch = supabase
+      .channel(`agenda-rt-${clientId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "tasks",
+        filter: `client_id=eq.${clientId}`
+      }, async () => {
+        // Re-run the same load logic
+        const [t, r] = await Promise.all([
+          supabase.from("tasks").select("id,title,due_at,status").eq("client_id", clientId).not("due_at","is",null),
+          supabase.from("recurring_tasks").select("id,title,next_run,status").eq("client_id", clientId).not("next_run","is",null),
+        ])
+        const mapped = [...(t.data||[]), ...(r.data||[])].map(e => ({
+          id: e.id,
+          title: e.title||"Sin título",
+          date: ((e as any).due_at||(e as any).next_run||"").slice(0,10),
+          time: ((e as any).due_at||(e as any).next_run||"").slice(11,16),
+          type: (e as any).next_run ? "recurring" : "task",
+        }))
+        setEvents(mapped)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [clientId])
 
-// ── Contact Card ──────────────────────────────────────────────────────────────
-function ContactCard({ contact, onClick, onEdit, onDelete }: {
-  contact: ContactRow; onClick: () => void; onEdit: () => void; onDelete: () => void
-}) {
-  return (
-    <div onClick={onClick}
-      className="group bg-card rounded-2xl border border-border p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all cursor-pointer">
-      <div className="flex items-start gap-3">
-        <Avatar name={contact.name} />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm text-[#0F1F63] truncate">{contact.name || "Sin nombre"}</p>
-          {contact.phone && (
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-              <Phone className="w-3 h-3" /> {contact.phone}
-            </p>
-          )}
-          {contact.relationship && (
-            <span className="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary border border-border text-muted-foreground">
-              {contact.relationship}
-            </span>
-          )}
-        </div>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-          <button onClick={onEdit} className="w-7 h-7 rounded-lg border border-border bg-background flex items-center justify-center hover:bg-secondary transition-colors">
-            <Pencil className="w-3 h-3" />
-          </button>
-          <button onClick={onDelete} className="w-7 h-7 rounded-lg border border-border bg-background flex items-center justify-center hover:bg-[#FEF2F2] hover:border-[#EF4444]/30 hover:text-[#EF4444] transition-colors">
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </div>
-      </div>
-      {contact.notes && (
-        <p className="text-xs text-muted-foreground mt-3 bg-secondary/30 rounded-lg px-3 py-2 line-clamp-2">{contact.notes}</p>
-      )}
-    </div>
-  )
-}
-
-// ── Detail Modal ─────────────────────────────────────────────────────────────
-function DetailModal({ contact, onClose, onEdit, onDelete }: {
-  contact: ContactRow; onClose: () => void; onEdit: () => void; onDelete: () => void
-}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-card rounded-3xl border border-border shadow-2xl w-full max-w-sm overflow-hidden">
-        {/* Top banner */}
-        <div className="h-16 w-full" style={{ backgroundColor: colorFor(contact.name) + "30" }}>
-          <div className="absolute top-8 left-6">
-            <Avatar name={contact.name} size="lg" />
-          </div>
-        </div>
-        <button onClick={onClose} className="absolute top-3 right-4 w-8 h-8 rounded-xl border border-white/30 bg-white/50 flex items-center justify-center hover:bg-white/80 transition-colors">
-          <X className="w-4 h-4" />
-        </button>
-        <div className="pt-12 px-6 pb-6 space-y-4">
-          <div>
-            <h2 className="text-xl font-bold text-[#0F1F63]">{contact.name || "Sin nombre"}</h2>
-            {contact.relationship && (
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-secondary border border-border text-muted-foreground">
-                {contact.relationship}
+        <div className="h-1.5 w-full" style={{ backgroundColor: color }} />
+        <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: color + "15" }}
+              >
+                {isTask
+                  ? <CheckSquare className="w-4 h-4" style={{ color }} />
+                  : <Zap className="w-4 h-4" style={{ color }} />}
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>
+                {isTask ? "Tarea" : "Automatización"}
               </span>
-            )}
+            </div>
+            <h2 className="text-lg font-bold text-[#0F1F63] leading-snug">{event.title}</h2>
           </div>
-          <div className="space-y-2">
-            {contact.phone && (
-              <div className="flex items-center gap-3 bg-secondary/40 rounded-xl p-3">
-                <Phone className="w-4 h-4 text-[#3B82F6]" />
-                <div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Teléfono</p>
-                  <p className="text-sm font-semibold text-[#0F1F63]">{contact.phone}</p>
-                </div>
-                <a href={`https://wa.me/${contact.phone.replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer"
-                  className="ml-auto h-8 px-3 rounded-lg bg-[#25D366] text-white text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
-                  onClick={e => e.stopPropagation()}>
-                  <MessageSquare className="w-3.5 h-3.5" /> WA
-                </a>
-              </div>
-            )}
-            {contact.notes && (
-              <div className="bg-secondary/40 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Notas</p>
-                <p className="text-sm text-[#0F1F63] leading-relaxed">{contact.notes}</p>
-              </div>
-            )}
-            {contact.created_at && (
-              <p className="text-xs text-muted-foreground">
-                Contacto desde {new Date(contact.created_at).toLocaleDateString("es-PE", { day:"numeric", month:"long", year:"numeric" })}
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => { onEdit(); onClose() }}
-              className="flex-1 h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a] transition-colors flex items-center justify-center gap-2">
-              <Pencil className="w-4 h-4" /> Editar
-            </button>
-            <button onClick={() => { onDelete(); onClose() }}
-              className="h-10 w-10 rounded-xl border border-[#EF4444]/30 bg-[#FEF2F2] text-[#EF4444] hover:bg-[#EF4444] hover:text-white transition-colors flex items-center justify-center">
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Form Modal ───────────────────────────────────────────────────────────────
-function FormModal({ contact, onClose, onSave }: {
-  contact?: ContactRow; onClose: () => void; onSave: (data: any) => Promise<void>
-}) {
-  const [name, setName]           = useState(contact?.name || "")
-  const [phone, setPhone]         = useState(contact?.phone || "")
-  const [relationship, setRel]    = useState(contact?.relationship || "")
-  const [notes, setNotes]         = useState(contact?.notes || "")
-  const [saving, setSaving]       = useState(false)
-
-  const handle = async () => {
-    if (!name.trim()) return
-    setSaving(true)
-    await onSave({ name: name.trim(), phone: phone.trim() || null, relationship: relationship.trim() || null, notes: notes.trim() || null })
-    setSaving(false)
-    onClose()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card rounded-3xl border border-border shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-border">
-          <h3 className="font-bold text-[#0F1F63]">{contact ? "Editar contacto" : "Nuevo contacto"}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors flex-shrink-0"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          {/* Preview avatar */}
-          <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-xl">
-            <Avatar name={name || null} size="md" />
+        <div className="px-6 pb-6 space-y-3">
+          <div className="bg-secondary/40 rounded-xl p-4 flex items-start gap-3">
+            <AlarmClock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color }} />
             <div>
-              <p className="font-semibold text-sm text-[#0F1F63]">{name || "Nombre del contacto"}</p>
-              <p className="text-xs text-muted-foreground">{relationship || "Sin relación"}</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                Fecha y hora
+              </p>
+              <p className={`text-sm font-semibold capitalize ${overdue ? "text-[#EF4444]" : "text-[#0F1F63]"}`}>
+                {fullStr}
+              </p>
+              {overdue && (
+                <p className="text-xs text-[#EF4444] mt-0.5 font-medium">⚠️ Fecha vencida</p>
+              )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Nombre *</label>
-              <input value={name} onChange={e => setName(e.target.value)} autoFocus
-                placeholder="Nombre completo"
-                className="w-full h-10 px-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Teléfono</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)}
-                placeholder="+51 999 000 000"
-                className="w-full h-10 px-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Relación</label>
-            <input value={relationship} onChange={e => setRel(e.target.value)}
-              placeholder="Ej: Cliente, Proveedor, Familiar, Socio..."
-              className="w-full h-10 px-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Notas</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="Información relevante sobre este contacto..."
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
-          </div>
-        </div>
-        <div className="px-6 pb-6 flex gap-2.5">
-          <button onClick={onClose} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium hover:bg-secondary transition-colors">Cancelar</button>
-          <button onClick={handle} disabled={saving || !name.trim()}
-            className="flex-1 h-11 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white text-sm font-bold hover:opacity-90 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : contact ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {contact ? "Guardar" : "Crear contacto"}
+          <button
+            onClick={onClose}
+            className="w-full h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a] transition-colors"
+          >
+            Cerrar
           </button>
         </div>
       </div>
@@ -222,124 +122,484 @@ function FormModal({ contact, onClose, onSave }: {
   )
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
-export default function ContactosPage() {
-  const [loading, setLoading]   = useState(true)
-  const [contacts, setContacts] = useState<ContactRow[]>([])
-  const [clientId, setClientId] = useState("")
-  const [search, setSearch]     = useState("")
-  const [detail, setDetail]     = useState<ContactRow | null>(null)
-  const [editing, setEditing]   = useState<ContactRow | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [toast, setToast]       = useState<{ open: boolean; msg: string; type: "success"|"error"|"info" }>({ open: false, msg: "", type: "info" })
+function safeDate(v: string | null | undefined): Date | null {
+  if (!v) return null
+  const d = new Date(String(v))
+  return isNaN(d.getTime()) ? null : d
+}
 
-  const show = (msg: string, type: typeof toast.type = "info") => setToast({ open: true, msg, type })
+function dateKey(d: Date, tz: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d)
+}
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const cid = await getCurrentClientId(); setClientId(cid)
-      const { data, error } = await supabase.from("contacts").select("*").eq("client_id", cid).order("created_at", { ascending: false })
-      if (error) throw error
-      setContacts((data || []) as ContactRow[])
-    } catch (err: any) { show(err.message || "Error al cargar.", "error") }
-    finally { setLoading(false) }
+function timeLabel(d: Date, locale: string, tz: string) {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d)
+}
+
+function hourOf(d: Date, tz: string) {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      hour12: false,
+    }).format(d)
+  ) % 24
+}
+
+function minuteOf(d: Date, tz: string) {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      minute: "2-digit",
+    }).format(d)
+  )
+}
+
+const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+const DAYS_SHORT = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+const DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+const HOURS_RANGE = Array.from({ length: 24 }, (_, i) => i)
+
+function getWeekDates(from: Date) {
+  const d = new Date(from)
+  const dow = d.getDay()
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(monday)
+    x.setDate(monday.getDate() + i)
+    return x
+  })
+}
+
+function getMonthGrid(date: Date) {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const first = new Date(year, month, 1)
+  const last = new Date(year, month + 1, 0)
+  const startOffset = first.getDay() === 0 ? 6 : first.getDay() - 1
+  const cells: (Date | null)[] = []
+  for (let i = 0; i < startOffset; i++) cells.push(null)
+  for (let d = 1; d <= last.getDate(); d++) cells.push(new Date(year, month, d))
+  while (cells.length % 7 !== 0) cells.push(null)
+  return cells
+}
+
+const EVENT_COLORS = {
+  task: { bg: "bg-[#3B82F6]", light: "bg-[#EFF6FF]", text: "text-[#1D4ED8]", border: "border-[#BFDBFE]" },
+  automation: { bg: "bg-[#7C3AED]", light: "bg-[#F5F3FF]", text: "text-[#5B21B6]", border: "border-[#DDD6FE]" },
+}
+
+export default function AgendaPage() {
+  const [loading, setLoading] = useState(true)
+  const [events, setEvents] = useState<EventItem[]>([])
+  const [view, setView] = useState<ViewMode>("week")
+  const [current, setCurrent] = useState(new Date())
+  const [selectedDK, setSelectedDK] = useState("")
+  const [tz, setTz] = useState("America/Lima")
+  const [locale, setLocale] = useState("es-PE")
+  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const cid = await getCurrentClientId()
+        setClientId(cid)
+        const { data: cl } = await supabase
+          .from("clients")
+          .select("timezone, timezone_auto, preferred_language, language")
+          .eq("id", cid)
+          .maybeSingle()
+
+        const resolvedTz =
+          cl?.timezone_auto ||
+          cl?.timezone ||
+          Intl.DateTimeFormat().resolvedOptions().timeZone ||
+          "America/Lima"
+
+        const lang = cl?.preferred_language || cl?.language || "es"
+        const resolvedLocale = lang === "en" ? "en-US" : lang === "pt" ? "pt-BR" : "es-PE"
+
+        setTz(resolvedTz)
+        setLocale(resolvedLocale)
+
+        const now = new Date()
+        setSelectedDK(dateKey(now, resolvedTz))
+
+        const [{ data: tasks }, { data: automations }] = await Promise.all([
+          supabase.from("tasks").select("id,title,due_at,status").eq("client_id", cid).not("due_at", "is", null),
+          supabase.from("recurring_tasks").select("id,title,next_run,status").eq("client_id", cid).not("next_run", "is", null),
+        ])
+
+        const mapped: EventItem[] = [
+          ...(tasks || []).map((t: any) => {
+            const d = safeDate(t.due_at)
+            if (!d) return null
+            return {
+              id: t.id,
+              title: t.title || "Tarea",
+              dateKey: dateKey(d, resolvedTz),
+              timeLabel: timeLabel(d, resolvedLocale, resolvedTz),
+              hour: hourOf(d, resolvedTz),
+              minute: minuteOf(d, resolvedTz),
+              type: "task" as const,
+              sourceAt: t.due_at,
+              status: t.status,
+            }
+          }).filter(Boolean) as EventItem[],
+          ...(automations || []).map((a: any) => {
+            const d = safeDate(a.next_run)
+            if (!d) return null
+            return {
+              id: a.id,
+              title: a.title || "Automatización",
+              dateKey: dateKey(d, resolvedTz),
+              timeLabel: timeLabel(d, resolvedLocale, resolvedTz),
+              hour: hourOf(d, resolvedTz),
+              minute: minuteOf(d, resolvedTz),
+              type: "automation" as const,
+              sourceAt: a.next_run,
+              status: a.status,
+            }
+          }).filter(Boolean) as EventItem[],
+        ]
+
+        setEvents(mapped)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    init()
+  }, [])
+
+  const weekDates = useMemo(() => getWeekDates(current), [current])
+  const monthCells = useMemo(() => getMonthGrid(current), [current])
+
+  const eventsForDK = (dk: string) => events.filter(e => e.dateKey === dk)
+  const todayDK = dateKey(new Date(), tz)
+
+  function navigate(dir: number) {
+    const d = new Date(current)
+    if (view === "month") d.setMonth(d.getMonth() + dir)
+    else if (view === "week") d.setDate(d.getDate() + dir * 7)
+    else d.setDate(d.getDate() + dir)
+    setCurrent(d)
   }
 
-  useEffect(() => { load() }, [])
-
-  const filtered = useMemo(() => contacts.filter(c => {
-    const q = search.toLowerCase()
-    return !q || (c.name || "").toLowerCase().includes(q) || (c.phone || "").includes(q) || (c.relationship || "").toLowerCase().includes(q)
-  }), [contacts, search])
-
-  const handleCreate = async (data: any) => {
-    const { error } = await supabase.from("contacts").insert({ client_id: clientId, ...data, created_at: new Date().toISOString() })
-    if (error) throw error
-    show("Contacto creado.", "success"); await load()
+  function navTitle() {
+    if (view === "month") return `${MONTHS[current.getMonth()]} ${current.getFullYear()}`
+    if (view === "week") {
+      const first = weekDates[0]
+      const last = weekDates[6]
+      if (first.getMonth() === last.getMonth()) {
+        return `${first.getDate()} – ${last.getDate()} ${MONTHS[first.getMonth()]} ${first.getFullYear()}`
+      }
+      return `${first.getDate()} ${MONTHS[first.getMonth()]} – ${last.getDate()} ${MONTHS[last.getMonth()]} ${first.getFullYear()}`
+    }
+    return new Intl.DateTimeFormat(locale, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: tz,
+    }).format(current)
   }
 
-  const handleUpdate = async (data: any) => {
-    if (!editing) return
-    const { error } = await supabase.from("contacts").update({ ...data, updated_at: new Date().toISOString() }).eq("id", editing.id)
-    if (error) throw error
-    show("Contacto actualizado.", "success"); await load()
-  }
+  const dayEventsForAgenda = useMemo(() => {
+    const map = new Map<string, EventItem[]>()
+    events.forEach(e => {
+      if (!map.has(e.dateKey)) map.set(e.dateKey, [])
+      map.get(e.dateKey)!.push(e)
+    })
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .filter(([dk]) => dk >= dateKey(new Date(), tz))
+      .slice(0, 14)
+  }, [events, tz])
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Eliminar este contacto?")) return
-    const { error } = await supabase.from("contacts").delete().eq("id", id)
-    if (error) { show("Error al eliminar.", "error"); return }
-    show("Contacto eliminado.", "success"); setContacts(prev => prev.filter(c => c.id !== id))
+  const EventChip = ({ event, compact = false }: { event: EventItem; compact?: boolean }) => {
+    const c = EVENT_COLORS[event.type]
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation()
+          setSelectedEvent(event)
+        }}
+        className={`group flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold cursor-pointer transition-all hover:scale-[1.02] hover:shadow-sm ${c.light} ${c.text} border ${c.border}`}
+      >
+        {event.type === "task"
+          ? <CheckSquare className="w-3 h-3 flex-shrink-0" />
+          : <Zap className="w-3 h-3 flex-shrink-0" />}
+        <span className="truncate">
+          {compact ? event.title.slice(0, 22) + (event.title.length > 22 ? "…" : "") : event.title}
+        </span>
+        {!compact && <span className="ml-auto text-[10px] opacity-70">{event.timeLabel}</span>}
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-0 h-full">
+      <div className="flex items-center justify-between pb-4 border-b border-border">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F1F63]">Contactos</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{contacts.length} contactos guardados</p>
+          <h1 className="text-2xl font-bold text-[#0F1F63]">Agenda</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {events.length} evento{events.length !== 1 ? "s" : ""} en total
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary transition-colors">
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+          <button
+            onClick={() => {
+              setCurrent(new Date())
+              setSelectedDK(dateKey(new Date(), tz))
+            }}
+            className="h-9 px-4 rounded-xl border border-border bg-white text-sm font-medium text-[#0F1F63] hover:bg-secondary transition-colors"
+          >
+            Hoy
           </button>
-          <button onClick={() => setCreating(true)}
-            className="h-9 px-4 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white text-sm font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5">
-            <Plus className="w-4 h-4" /> Nuevo contacto
-          </button>
+          <div className="flex rounded-xl border border-border bg-secondary/30 p-1 gap-0.5">
+            {(["month", "week", "day", "agenda"] as ViewMode[]).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`h-7 px-3 rounded-lg text-xs font-medium transition-all capitalize ${
+                  view === v ? "bg-white shadow-sm text-[#0F1F63]" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "month" ? "Mes" : v === "week" ? "Semana" : v === "day" ? "Día" : "Agenda"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, teléfono o relación..."
-          className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
+      <div className="flex items-center gap-3 py-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => navigate(1)}
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary transition-colors"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        <h2 className="text-base font-semibold text-[#0F1F63] capitalize">{navTitle()}</h2>
+        {loading && <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin ml-auto" />}
       </div>
 
-      {/* Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-          <RefreshCw className="w-5 h-5 animate-spin" /> Cargando contactos...
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-          <p className="font-semibold text-[#0F1F63]">{search ? "Sin resultados" : "Sin contactos"}</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {search ? "Prueba con otro término" : "Crea tu primer contacto o dile a Operaly por WhatsApp que guarde uno"}
-          </p>
-          {!search && (
-            <button onClick={() => setCreating(true)}
-              className="mt-4 h-9 px-5 rounded-xl bg-[#3B82F6] text-white text-sm font-semibold hover:bg-[#2563EB] transition-colors">
-              Crear contacto
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {filtered.map(contact => (
-            <ContactCard key={contact.id} contact={contact}
-              onClick={() => setDetail(contact)}
-              onEdit={() => setEditing(contact)}
-              onDelete={() => handleDelete(contact.id)} />
-          ))}
+      {view === "month" && (
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-7 border-b border-border">
+            {DAYS_SHORT.map(d => (
+              <div key={d} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 border-l border-border">
+            {monthCells.map((cell, i) => {
+              const dk = cell ? dateKey(cell, tz) : ""
+              const dayEvents = cell ? eventsForDK(dk) : []
+              const isToday = dk === todayDK
+              const isSelected = dk === selectedDK
+
+              return (
+                <div
+                  key={i}
+                  onClick={() => cell && setSelectedDK(dk)}
+                  className={`min-h-[96px] border-r border-b border-border p-1.5 cursor-pointer transition-colors ${
+                    !cell ? "bg-secondary/20" : isSelected ? "bg-[#EFF6FF]" : "hover:bg-secondary/30"
+                  }`}
+                >
+                  {cell && (
+                    <>
+                      <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold mb-1 ${
+                        isToday ? "bg-[#3B82F6] text-white" : "text-[#0F1F63]"
+                      }`}>
+                        {cell.getDate()}
+                      </div>
+                      <div className="space-y-0.5">
+                        {dayEvents.slice(0, 3).map(e => (
+                          <EventChip key={e.id} event={e} compact />
+                        ))}
+                        {dayEvents.length > 3 && (
+                          <div className="text-[10px] text-muted-foreground pl-1">+{dayEvents.length - 3} más</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
-      {/* Modals */}
-      {creating && <FormModal onClose={() => setCreating(false)} onSave={handleCreate} />}
-      {detail && !editing && (
-        <DetailModal contact={detail} onClose={() => setDetail(null)}
-          onEdit={() => { setEditing(detail); setDetail(null) }}
-          onDelete={() => { handleDelete(detail.id); setDetail(null) }} />
-      )}
-      {editing && <FormModal contact={editing} onClose={() => setEditing(null)} onSave={handleUpdate} />}
+      {view === "week" && (
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b border-border sticky top-0 bg-card z-10">
+            <div className="border-r border-border" />
+            {weekDates.map((d, i) => {
+              const dk = dateKey(d, tz)
+              const isToday = dk === todayDK
+              const isSelected = dk === selectedDK
 
-      <AppToast open={toast.open} message={toast.msg} type={toast.type} onClose={() => setToast(p => ({...p,open:false}))} />
+              return (
+                <div
+                  key={i}
+                  onClick={() => setSelectedDK(dk)}
+                  className={`py-2 px-1 text-center cursor-pointer transition-colors border-r border-border ${
+                    isSelected ? "bg-[#EFF6FF]" : "hover:bg-secondary/30"
+                  }`}
+                >
+                  <div className="text-xs text-muted-foreground font-medium uppercase">{DAYS_SHORT[i]}</div>
+                  <div className={`mt-1 w-7 h-7 mx-auto flex items-center justify-center rounded-full text-sm font-bold ${
+                    isToday ? "bg-[#3B82F6] text-white" : "text-[#0F1F63]"
+                  }`}>
+                    {d.getDate()}
+                  </div>
+                  {eventsForDK(dk).length > 0 && (
+                    <div className="mt-1 text-[10px] text-[#3B82F6] font-semibold">{eventsForDK(dk).length}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="grid grid-cols-[64px_repeat(7,1fr)]">
+            {HOURS_RANGE.map(hour => (
+              <div key={hour} className="contents">
+                <div className="border-r border-b border-border px-2 py-1 text-right">
+                  <span className="text-[10px] text-muted-foreground">
+                    {hour.toString().padStart(2, "0")}:00
+                  </span>
+                </div>
+                {weekDates.map((d, di) => {
+                  const dk = dateKey(d, tz)
+                  const hourEvents = eventsForDK(dk).filter(e => e.hour === hour)
+
+                  return (
+                    <div
+                      key={`${hour}-${di}`}
+                      className={`border-r border-b border-border px-1 py-0.5 min-h-[40px] ${
+                        dk === selectedDK ? "bg-[#EFF6FF]/50" : ""
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        {hourEvents.map(e => <EventChip key={e.id} event={e} />)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "day" && (
+        <div className="flex-1 overflow-auto">
+          <div className="grid grid-cols-[64px_1fr]">
+            {HOURS_RANGE.map(hour => {
+              const hourEvents = eventsForDK(selectedDK).filter(e => e.hour === hour)
+
+              return (
+                <div key={hour} className="contents">
+                  <div className="border-r border-b border-border px-2 py-2 text-right">
+                    <span className="text-xs text-muted-foreground">{hour.toString().padStart(2, "0")}:00</span>
+                  </div>
+                  <div className="border-b border-border p-1.5 min-h-[56px]">
+                    <div className="space-y-1">
+                      {hourEvents.map(e => (
+                        <div key={e.id} className={`rounded-xl p-3 border ${EVENT_COLORS[e.type].light} ${EVENT_COLORS[e.type].border}`}>
+                          <div className="flex items-center gap-2">
+                            {e.type === "task"
+                              ? <CheckSquare className={`w-4 h-4 ${EVENT_COLORS[e.type].text}`} />
+                              : <Zap className={`w-4 h-4 ${EVENT_COLORS[e.type].text}`} />}
+                            <p className={`text-sm font-semibold ${EVENT_COLORS[e.type].text}`}>{e.title}</p>
+                            <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />{e.timeLabel}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {view === "agenda" && (
+        <div className="flex-1 overflow-auto space-y-1 py-2">
+          {dayEventsForAgenda.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No hay eventos próximos</p>
+              <p className="text-sm mt-1">Tus tareas aparecerán aquí cuando tengan fecha</p>
+            </div>
+          ) : dayEventsForAgenda.map(([dk, dayEvts]) => {
+            const d = new Date(dk + "T12:00:00")
+            const isToday = dk === todayDK
+
+            return (
+              <div key={dk} className="flex gap-4 py-3 border-b border-border last:border-0">
+                <div className={`w-16 flex-shrink-0 text-right pt-0.5 ${isToday ? "text-[#3B82F6]" : "text-muted-foreground"}`}>
+                  <div className="text-xs font-semibold uppercase">
+                    {new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: tz }).format(d)}
+                  </div>
+                  <div className={`text-2xl font-bold leading-none mt-0.5 ${isToday ? "text-[#3B82F6]" : "text-[#0F1F63]"}`}>
+                    {d.getDate()}
+                  </div>
+                  {isToday && <div className="text-[10px] font-medium text-[#3B82F6] mt-0.5">Hoy</div>}
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  {dayEvts
+                    .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
+                    .map(e => (
+                      <div
+                        key={e.id}
+                        className={`rounded-xl px-4 py-3 border ${EVENT_COLORS[e.type].light} ${EVENT_COLORS[e.type].border} flex items-center gap-3`}
+                      >
+                        {e.type === "task"
+                          ? <CheckSquare className={`w-4 h-4 flex-shrink-0 ${EVENT_COLORS[e.type].text}`} />
+                          : <Zap className={`w-4 h-4 flex-shrink-0 ${EVENT_COLORS[e.type].text}`} />}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-semibold truncate ${EVENT_COLORS[e.type].text}`}>{e.title}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {e.type === "task" ? "Tarea" : "Automatización"} · {e.timeLabel}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {selectedEvent && (
+        <EventDetailModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+        />
+      )}
     </div>
   )
 }
