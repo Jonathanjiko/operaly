@@ -39,32 +39,27 @@ function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () =>
   const overdue = ok && d.getTime() < Date.now()
 
 
+  // Capture clientId for realtime
+  useEffect(() => {
+    getCurrentClientId().then(setRtClientId).catch(() => {})
+  }, [])
+
   // Real-time: agenda changes from WhatsApp appear instantly
   useEffect(() => {
-    if (!clientId) return
+    if (!rtClientId) return
     const ch = supabase
-      .channel(`agenda-rt-${clientId}`)
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "tasks",
-        filter: `client_id=eq.${clientId}`
-      }, async () => {
-        // Re-run the same load logic
-        const [t, r] = await Promise.all([
-          supabase.from("tasks").select("id,title,due_at,status").eq("client_id", clientId).not("due_at","is",null),
-          supabase.from("recurring_tasks").select("id,title,next_run,status").eq("client_id", clientId).not("next_run","is",null),
-        ])
-        const mapped = [...(t.data||[]), ...(r.data||[])].map(e => ({
-          id: e.id,
-          title: e.title||"Sin título",
-          date: ((e as any).due_at||(e as any).next_run||"").slice(0,10),
-          time: ((e as any).due_at||(e as any).next_run||"").slice(11,16),
-          type: (e as any).next_run ? "recurring" : "task",
-        }))
-        setEvents(mapped)
-      })
+      .channel(`agenda-rt-${rtClientId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'tasks',
+        filter: `client_id=eq.${rtClientId}`
+      }, () => setReloadKey(k => k + 1))
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'recurring_tasks',
+        filter: `client_id=eq.${rtClientId}`
+      }, () => setReloadKey(k => k + 1))
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [clientId])
+  }, [rtClientId])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -208,12 +203,13 @@ export default function AgendaPage() {
   const [tz, setTz] = useState("America/Lima")
   const [locale, setLocale] = useState("es-PE")
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
+  const [rtClientId, setRtClientId]        = useState("")  // for realtime
+
 
   useEffect(() => {
     const init = async () => {
       try {
         const cid = await getCurrentClientId()
-        setClientId(cid)
         const { data: cl } = await supabase
           .from("clients")
           .select("timezone, timezone_auto, preferred_language, language")
@@ -280,7 +276,7 @@ export default function AgendaPage() {
     }
 
     init()
-  }, [])
+  }, [reloadKey])  // reloadKey changes on WA updates
 
   const weekDates = useMemo(() => getWeekDates(current), [current])
   const monthCells = useMemo(() => getMonthGrid(current), [current])
