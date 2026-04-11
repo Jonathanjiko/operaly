@@ -359,6 +359,23 @@ export default function TareasPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [detail, setDetail]       = useState<TaskRow | null>(null)
   const [editing, setEditing]     = useState<TaskRow | null>(null)
+
+  // Real-time: changes from WhatsApp appear instantly
+  useEffect(() => {
+    if (!clientId) return
+    const ch = supabase
+      .channel(`tasks-rt-${clientId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "tasks",
+        filter: `client_id=eq.${clientId}`
+      }, () => load())
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "recurring_tasks",
+        filter: `client_id=eq.${clientId}`
+      }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [clientId])
   const [toast, setToast]         = useState<Toast>({ open: false, msg: "", type: "info" })
 
   const show = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
