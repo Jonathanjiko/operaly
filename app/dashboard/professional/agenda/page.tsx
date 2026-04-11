@@ -38,6 +38,34 @@ function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () =>
   }) : event.timeLabel
   const overdue = ok && d.getTime() < Date.now()
 
+
+  // Real-time: agenda changes from WhatsApp appear instantly
+  useEffect(() => {
+    if (!clientId) return
+    const ch = supabase
+      .channel(`agenda-rt-${clientId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "tasks",
+        filter: `client_id=eq.${clientId}`
+      }, async () => {
+        // Re-run the same load logic
+        const [t, r] = await Promise.all([
+          supabase.from("tasks").select("id,title,due_at,status").eq("client_id", clientId).not("due_at","is",null),
+          supabase.from("recurring_tasks").select("id,title,next_run,status").eq("client_id", clientId).not("next_run","is",null),
+        ])
+        const mapped = [...(t.data||[]), ...(r.data||[])].map(e => ({
+          id: e.id,
+          title: e.title||"Sin título",
+          date: ((e as any).due_at||(e as any).next_run||"").slice(0,10),
+          time: ((e as any).due_at||(e as any).next_run||"").slice(11,16),
+          type: (e as any).next_run ? "recurring" : "task",
+        }))
+        setEvents(mapped)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [clientId])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -185,6 +213,7 @@ export default function AgendaPage() {
     const init = async () => {
       try {
         const cid = await getCurrentClientId()
+        setClientId(cid)
         const { data: cl } = await supabase
           .from("clients")
           .select("timezone, timezone_auto, preferred_language, language")
