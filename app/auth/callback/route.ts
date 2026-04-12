@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { createSupabaseRouteClient } from "@/lib/supabase/server"
 
 function sanitizeNext(nextValue: string | null): string {
   if (!nextValue) return "/dashboard"
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin))
-  const supabase = createSupabaseServerClient(request, redirectResponse)
+  const supabase = createSupabaseRouteClient(request, redirectResponse)
 
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
