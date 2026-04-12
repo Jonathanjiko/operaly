@@ -38,29 +38,6 @@ function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () =>
   }) : event.timeLabel
   const overdue = ok && d.getTime() < Date.now()
 
-
-  // Capture clientId for realtime
-  useEffect(() => {
-    getCurrentClientId().then(setRtClientId).catch(() => {})
-  }, [])
-
-  // Real-time: agenda changes from WhatsApp appear instantly
-  useEffect(() => {
-    if (!rtClientId) return
-    const ch = supabase
-      .channel(`agenda-rt-${rtClientId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'tasks',
-        filter: `client_id=eq.${rtClientId}`
-      }, () => setReloadKey(k => k + 1))
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'recurring_tasks',
-        filter: `client_id=eq.${rtClientId}`
-      }, () => setReloadKey(k => k + 1))
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [rtClientId])
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -203,8 +180,8 @@ export default function AgendaPage() {
   const [tz, setTz] = useState("America/Lima")
   const [locale, setLocale] = useState("es-PE")
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
-  const [rtClientId, setRtClientId]        = useState("")  // for realtime
-
+  const [reloadKey, setReloadKey]          = useState(0)
+  const [rtClientId, setRtClientId]        = useState("")
 
   useEffect(() => {
     const init = async () => {
@@ -276,7 +253,7 @@ export default function AgendaPage() {
     }
 
     init()
-  }, [reloadKey])  // reloadKey changes on WA updates
+  }, [reloadKey])
 
   const weekDates = useMemo(() => getWeekDates(current), [current])
   const monthCells = useMemo(() => getMonthGrid(current), [current])
@@ -343,6 +320,29 @@ export default function AgendaPage() {
       </div>
     )
   }
+
+
+  // Capture clientId once
+  useEffect(() => {
+    getCurrentClientId().then(setRtClientId).catch(() => {})
+  }, [])
+
+  // Real-time: changes from WhatsApp update the calendar instantly
+  useEffect(() => {
+    if (!rtClientId) return
+    const ch = supabase
+      .channel(`agenda-rt-${rtClientId}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "tasks",
+        filter: `client_id=eq.${rtClientId}`
+      }, () => setReloadKey(k => k + 1))
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "recurring_tasks",
+        filter: `client_id=eq.${rtClientId}`
+      }, () => setReloadKey(k => k + 1))
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [rtClientId])
 
   return (
     <div className="flex flex-col gap-0 h-full">
