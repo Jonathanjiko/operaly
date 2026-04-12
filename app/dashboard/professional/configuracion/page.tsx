@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
+import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
 
 type ClientRow = {
@@ -281,10 +282,17 @@ export default function ProfessionalSettingsPage() {
       }
 
       const metadata = (user.user_metadata || {}) as AuthMetadata
-      const resolvedClientId = String(metadata.client_id || "").trim()
+
+      let resolvedClientId = ""
+      try {
+        const ctx = await getClientContext()
+        resolvedClientId = ctx.clientId
+      } catch {
+        resolvedClientId = ""
+      }
 
       if (!resolvedClientId) {
-        throw new Error("No encontramos el client_id de esta cuenta.")
+        throw new Error("No encontramos el client_id seguro de esta cuenta.")
       }
 
       setClientId(resolvedClientId)
