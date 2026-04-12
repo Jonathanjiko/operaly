@@ -25,7 +25,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
-import { getClientContext, isOwnerAccount } from "@/lib/client-context"
 import OwnerPaymentsMetricsPanel from "./_components/OwnerPaymentsMetricsPanel"
 
 type SummaryRow = {
@@ -280,6 +279,25 @@ export default function OwnerDashboardPage() {
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
+
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const { data, error } = await supabase.auth.getSession()
+
+    if (error) {
+      throw error
+    }
+
+    const token = data.session?.access_token
+    if (!token) {
+      throw new Error("Tu sesión expiró. Vuelve a iniciar sesión.")
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }
+  }
+
   const loadOwnerDashboard = async (useRefreshing = false) => {
     if (useRefreshing) {
       setRefreshing(true)
@@ -287,17 +305,8 @@ export default function OwnerDashboardPage() {
       setLoading(true)
     }
 
-    const withTimeout = async <T,>(promise: Promise<T>, ms = 12000): Promise<T> => {
-      return await Promise.race([
-        promise,
-        new Promise<T>((_, reject) => {
-          setTimeout(() => reject(new Error("timeout")), ms)
-        }),
-      ])
-    }
-
     try {
-      const { data: authData, error: authError } = await withTimeout(supabase.auth.getUser())
+      const { data: authData, error: authError } = await supabase.auth.getUser()
 
       if (authError) {
         throw authError
@@ -309,172 +318,30 @@ export default function OwnerDashboardPage() {
         throw new Error("No hay sesión activa.")
       }
 
-      const { clientId } = await getClientContext()
-      const ownerAllowed = await isOwnerAccount(clientId)
-
-      if (!ownerAllowed) {
-        throw new Error("No tienes permisos para ver este panel.")
-      }
-
-      const metadata = user.user_metadata || {}
-
       setOwnerProfile({
-        fullName: String(metadata.full_name || "Operaly Owner"),
+        fullName: String(user.user_metadata?.full_name || "Operaly Owner"),
         email: String(user.email || ""),
       })
 
-      let nextSummary: SummaryRow | null = null
-      let nextPayments: PaymentRow[] = []
-      let nextSubscriptions: SubscriptionRow[] = []
-      let nextClients: ClientRow[] = []
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/dashboard", {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
 
-      try {
-        const [summaryResponse, paymentsResponse, subscriptionsResponse, clientsResponse] = await Promise.all([
-          withTimeout(supabase.rpc("owner_dashboard_summary"), 12000),
-          withTimeout(supabase.rpc("owner_recent_payments", { p_limit: 50 }), 12000),
-          withTimeout(supabase.rpc("owner_recent_subscriptions", { p_limit: 50 }), 12000),
-          withTimeout(supabase.rpc("owner_clients_list", { p_limit: 100 }), 12000),
-        ])
+      const payload = await response.json().catch(() => ({}))
 
-        if (summaryResponse.error) throw summaryResponse.error
-        if (paymentsResponse.error) throw paymentsResponse.error
-        if (subscriptionsResponse.error) throw subscriptionsResponse.error
-        if (clientsResponse.error) throw clientsResponse.error
-
-        nextSummary = (summaryResponse.data || null) as SummaryRow | null
-        nextPayments = (paymentsResponse.data || []) as PaymentRow[]
-        nextSubscriptions = (subscriptionsResponse.data || []) as SubscriptionRow[]
-        nextClients = (clientsResponse.data || []) as ClientRow[]
-      } catch {
-        const [directClientsResponse, directPaymentsResponse, directSubscriptionsResponse] = await Promise.all([
-          withTimeout(
-            supabase
-              .from("clients")
-              .select("id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ),
-          withTimeout(
-            supabase
-              .from("payments")
-              .select("id, client_id, status, amount_usd, currency, provider, provider_ref, paid_at, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ),
-          withTimeout(
-            supabase
-              .from("subscriptions")
-              .select("id, client_id, plan_code, status, current_period_end, started_at, created_at")
-              .order("created_at", { ascending: false })
-              .limit(100),
-            12000
-          ),
-        ])
-
-        if (directClientsResponse.error) throw directClientsResponse.error
-        if (directPaymentsResponse.error) throw directPaymentsResponse.error
-        if (directSubscriptionsResponse.error) throw directSubscriptionsResponse.error
-
-        nextClients = ((directClientsResponse.data || []) as any[]).map((row) => ({
-          id: String(row.id),
-          name: row.name ?? null,
-          email: row.email ?? null,
-          phone: row.phone ?? null,
-          country_code: row.country_code ?? null,
-          city: row.city ?? null,
-          timezone: row.timezone ?? null,
-          plan_code: row.plan_code ?? null,
-          plan_status: row.plan_status ?? null,
-          status: row.status ?? null,
-          created_at: row.created_at,
-        }))
-
-        const clientMap = new Map(nextClients.map((client) => [client.id, client]))
-
-        nextPayments = ((directPaymentsResponse.data || []) as any[]).map((row) => {
-          const client = clientMap.get(String(row.client_id))
-          return {
-            id: String(row.id),
-            client_id: String(row.client_id),
-            client_name: client?.name ?? null,
-            client_phone: client?.phone ?? null,
-            country_code: client?.country_code ?? null,
-            city: client?.city ?? null,
-            plan_code: client?.plan_code ?? null,
-            status: String(row.status || ""),
-            amount: Number(row.amount_usd || 0),
-            currency_code: String(row.currency || "PEN"),
-            payment_method: row.provider ?? null,
-            payment_method_brand: null,
-            order_number: row.provider_ref ?? null,
-            transaction_id: row.provider_ref ?? null,
-            created_at: row.paid_at || row.created_at,
-          }
-        })
-
-        nextSubscriptions = ((directSubscriptionsResponse.data || []) as any[]).map((row) => {
-          const client = clientMap.get(String(row.client_id))
-          return {
-            id: String(row.id),
-            client_id: String(row.client_id),
-            client_name: client?.name ?? null,
-            client_phone: client?.phone ?? null,
-            country_code: client?.country_code ?? null,
-            city: client?.city ?? null,
-            plan_code: String(row.plan_code || ""),
-            status: String(row.status || ""),
-            amount: 0,
-            currency_code: String(row.currency || "PEN"),
-            current_period_start: row.started_at ?? null,
-            current_period_end: row.current_period_end ?? null,
-            created_at: row.created_at,
-          }
-        })
-
-        const approvedPayments = nextPayments.filter((payment) =>
-          ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
-        )
-        const pendingPayments = nextPayments.filter(
-          (payment) => String(payment.status || "").toLowerCase() === "pending"
-        )
-        const failedPayments = nextPayments.filter((payment) =>
-          ["failed", "declined"].includes(String(payment.status || "").toLowerCase())
-        )
-
-        const now = new Date()
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const weekStart = new Date(now)
-        const day = now.getDay()
-        const diff = day === 0 ? 6 : day - 1
-        weekStart.setDate(now.getDate() - diff)
-        weekStart.setHours(0, 0, 0, 0)
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-
-        nextSummary = {
-          total_clients: nextClients.length,
-          active_clients: nextClients.filter((client) => String(client.status || "").toLowerCase() === "active").length,
-          trial_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "trial").length,
-          paid_clients: nextClients.filter((client) => ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())).length,
-          pro_plus_clients: nextClients.filter((client) => String(client.plan_code || "").toLowerCase() === "pro_plus").length,
-          payments_approved_total: approvedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_pending_total: pendingPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_failed_total: failedPayments.reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_today_total: approvedPayments.filter((item) => new Date(item.created_at) >= todayStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_week_total: approvedPayments.filter((item) => new Date(item.created_at) >= weekStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          payments_month_total: approvedPayments.filter((item) => new Date(item.created_at) >= monthStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-          subscriptions_active: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "active").length,
-          subscriptions_pending: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "pending").length,
-          subscriptions_cancelled: nextSubscriptions.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length,
-        }
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo cargar el panel owner.")
       }
 
-      setSummary(nextSummary)
-      setPayments(nextPayments)
-      setSubscriptions(nextSubscriptions)
-      setClients(nextClients)
+      setSummary((payload.summary || null) as SummaryRow | null)
+      setPayments((payload.payments || []) as PaymentRow[])
+      setSubscriptions((payload.subscriptions || []) as SubscriptionRow[])
+      setClients((payload.clients || []) as ClientRow[])
 
+      const nextClients = (payload.clients || []) as ClientRow[]
       if (nextClients.length > 0) {
         setSelectedClientId((current) => {
           if (current && nextClients.some((client) => client.id === current)) {
@@ -542,14 +409,16 @@ export default function OwnerDashboardPage() {
     setActionLoadingKey(loadingKey)
 
     try {
-      const { error } = await supabase.rpc("owner_set_client_plan", {
-        p_client_id: clientId,
-        p_plan_code: planCode,
-        p_plan_status: "active",
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/client/plan", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ clientId, planCode }),
       })
 
-      if (error) {
-        throw error
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo actualizar el plan.")
       }
 
       await loadOwnerDashboard(true)
@@ -568,13 +437,16 @@ export default function OwnerDashboardPage() {
     setActionLoadingKey(loadingKey)
 
     try {
-      const { error } = await supabase.rpc("owner_set_client_status", {
-        p_client_id: clientId,
-        p_status: nextStatus,
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/client/status", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ clientId, status: nextStatus }),
       })
 
-      if (error) {
-        throw error
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo actualizar el estado del cliente.")
       }
 
       await loadOwnerDashboard(true)
