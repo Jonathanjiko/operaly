@@ -1,35 +1,32 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
-import { ShoppingCart, Briefcase, User, FileText, List, Plus, Check, Trash2, RefreshCw, ChevronDown, ChevronRight, Pencil, X, Save } from "lucide-react"
+import { useEffect, useState, useCallback } from "react"
+import { User, Phone, Plus, Pencil, Trash2, RefreshCw, X, Save, Search, Users } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 
-type ListItem      = { id: string; content: string; is_checked: boolean; position: number }
-type ListRow       = { id: string; title: string; list_type: string; status: string; created_at: string; items?: ListItem[]; expanded?: boolean; loadingItems?: boolean }
-type ChecklistItem = { id: string; content: string; is_checked: boolean; position: number }
-type ChecklistRow  = { id: string; title: string; status: string; created_at: string; items?: ChecklistItem[]; expanded?: boolean }
-
-const TYPE_ICONS: Record<string, any> = { shopping: ShoppingCart, project: Briefcase, personal: User, work: Briefcase, free: List }
-const TYPE_LABELS: Record<string, string> = { shopping: "Compras", project: "Proyecto", personal: "Personal", work: "Trabajo", free: "Lista libre" }
-const TYPE_COLORS: Record<string, string> = { shopping: "#F59E0B", project: "#7C3AED", personal: "#10B981", work: "#3B82F6", free: "#64748B" }
-
-function ProgressBar({ checked, total, color }: { checked: number; total: number; color: string }) {
-  if (total === 0) return null
-  const pct = Math.round((checked / total) * 100)
-  return (
-    <div className="flex items-center gap-2 mt-1.5">
-      <div className="flex-1 h-1.5 bg-[#E2E8F0] rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-[10px] font-medium text-muted-foreground tabular-nums">{checked}/{total}</span>
-    </div>
-  )
+type ContactRow = {
+  id: string
+  name: string
+  phone: string
+  relationship?: string
+  notes?: string
+  birthday?: string
+  created_at: string
 }
+
+type ContactForm = {
+  name: string
+  phone: string
+  relationship: string
+  notes: string
+}
+
+const BLANK_FORM: ContactForm = { name: "", phone: "", relationship: "", notes: "" }
 
 function WAButtonBar({ buttons }: { buttons: { label: string; danger?: boolean; primary?: boolean; onClick: () => void }[] }) {
   return (
-    <div className="flex gap-1.5 px-4 py-2.5 border-t border-[#F1F5F9] bg-[#F8FAFC]/60 flex-wrap">
+    <div className="flex gap-1.5 flex-wrap">
       {buttons.map((b, i) => (
         <button key={i} onClick={b.onClick}
           className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 active:scale-95 ${
@@ -44,341 +41,217 @@ function WAButtonBar({ buttons }: { buttons: { label: string; danger?: boolean; 
   )
 }
 
-export default function ListasPage() {
-  const [clientId, setClientId]     = useState<string | null>(null)
-  const [lists, setLists]           = useState<ListRow[]>([])
-  const [checklists, setChecklists] = useState<ChecklistRow[]>([])
+export default function ContactosPage() {
+  const [clientId, setClientId]     = useState("")
+  const [contacts, setContacts]     = useState<ContactRow[]>([])
   const [loading, setLoading]       = useState(true)
-  const [tab, setTab]               = useState<"listas" | "checklists">("listas")
-  const [showNew, setShowNew]       = useState(false)
-  const [newTitle, setNewTitle]     = useState("")
-  const [newType, setNewType]       = useState("free")
-  const [newItems, setNewItems]     = useState("")
-  const [creating, setCreating]     = useState(false)
-  const [addingTo, setAddingTo]     = useState<string | null>(null)
-  const [addText, setAddText]       = useState("")
-  const [editId, setEditId]         = useState<string | null>(null)
-  const [editVal, setEditVal]       = useState("")
-  const addRef = useRef<HTMLInputElement>(null)
+  const [search, setSearch]         = useState("")
+  const [showForm, setShowForm]     = useState(false)
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [form, setForm]             = useState<ContactForm>(BLANK_FORM)
+  const [saving, setSaving]         = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
-  useEffect(() => { getCurrentClientId().then(setClientId).catch(console.error) }, [])
-  useEffect(() => { if (clientId) loadAll() }, [clientId])
+  useEffect(() => { getCurrentClientId().then(cid => { setClientId(cid); loadContacts(cid) }).catch(console.error) }, [])
 
-  const loadAll = useCallback(async () => {
-    if (!clientId) return
+  const loadContacts = useCallback(async (cid?: string) => {
+    const id = cid || clientId
+    if (!id) return
     setLoading(true)
-    const [lr, cr] = await Promise.all([
-      supabase.from("lists").select("id,title,list_type,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
-      supabase.from("checklists").select("id,title,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
-    ])
-    setLists((lr.data || []).map(l => ({ ...l, expanded: false })))
-    setChecklists((cr.data || []).map(c => ({ ...c, expanded: false })))
+    const { data } = await supabase.from("contacts").select("id,name,phone,relationship,notes,birthday,created_at")
+      .eq("client_id", id).order("name", { ascending: true })
+    setContacts((data || []) as ContactRow[])
     setLoading(false)
   }, [clientId])
 
+  // Real-time sync
   useEffect(() => {
     if (!clientId) return
-    const ch = supabase.channel(`lists-rt-${clientId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lists", filter: `client_id=eq.${clientId}` }, () => loadAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "checklists", filter: `client_id=eq.${clientId}` }, () => loadAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "list_items", filter: `client_id=eq.${clientId}` }, (p) => {
-        const lid = (p.new as any)?.list_id || (p.old as any)?.list_id
-        if (lid) setLists(prev => prev.map(l => l.id === lid ? { ...l, items: undefined } : l))
-      })
+    const ch = supabase.channel(`contacts-rt-${clientId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts", filter: `client_id=eq.${clientId}` },
+        () => loadContacts())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [clientId, loadAll])
+  }, [clientId, loadContacts])
 
-  const loadItems = async (id: string) =>
-    ((await supabase.from("list_items").select("id,content,is_checked,position").eq("list_id", id).order("position")).data || []) as ListItem[]
+  const filtered = contacts.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.phone || "").includes(search) ||
+    (c.relationship || "").toLowerCase().includes(search.toLowerCase())
+  )
 
-  const loadCLItems = async (id: string) =>
-    ((await supabase.from("checklist_items").select("id,content,is_checked,position").eq("checklist_id", id).order("position")).data || []) as ChecklistItem[]
-
-  const toggleList = async (id: string) => {
-    const lst = lists.find(l => l.id === id)
-    if (!lst) return
-    if (!lst.expanded && !lst.items) {
-      setLists(prev => prev.map(l => l.id === id ? { ...l, expanded: true, loadingItems: true } : l))
-      const items = await loadItems(id)
-      setLists(prev => prev.map(l => l.id === id ? { ...l, items, loadingItems: false } : l))
-    } else {
-      setLists(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
-    }
+  const openAdd = () => { setForm(BLANK_FORM); setEditingId(null); setShowForm(true) }
+  const openEdit = (c: ContactRow) => {
+    setForm({ name: c.name, phone: c.phone || "", relationship: c.relationship || "", notes: c.notes || "" })
+    setEditingId(c.id); setShowForm(true)
   }
 
-  const toggleCL = async (id: string) => {
-    const cl = checklists.find(c => c.id === id)
-    if (!cl) return
-    if (!cl.expanded && !cl.items) {
-      const items = await loadCLItems(id)
-      setChecklists(prev => prev.map(c => c.id === id ? { ...c, expanded: true, items } : c))
-    } else {
-      setChecklists(prev => prev.map(c => c.id === id ? { ...c, expanded: !c.expanded } : c))
-    }
-  }
-
-  const toggleItem = async (itemId: string, checked: boolean, listId: string) => {
-    setLists(prev => prev.map(l => l.id === listId ? { ...l, items: l.items?.map(i => i.id === itemId ? { ...i, is_checked: !checked } : i) } : l))
-    await supabase.from("list_items").update({ is_checked: !checked }).eq("id", itemId)
-  }
-
-  const toggleCLItem = async (itemId: string, checked: boolean, clId: string) => {
-    setChecklists(prev => prev.map(c => c.id === clId ? { ...c, items: c.items?.map(i => i.id === itemId ? { ...i, is_checked: !checked } : i) } : c))
-    await supabase.from("checklist_items").update({ is_checked: !checked }).eq("id", itemId)
-  }
-
-  const addItem = async (listId: string) => {
-    if (!addText.trim() || !clientId) return
-    const pos = lists.find(l => l.id === listId)?.items?.length || 0
-    const { data } = await supabase.from("list_items").insert({ list_id: listId, client_id: clientId, content: addText.trim(), position: pos }).select("id,content,is_checked,position").single()
-    if (data) setLists(prev => prev.map(l => l.id === listId ? { ...l, items: [...(l.items || []), data] } : l))
-    setAddText(""); setAddingTo(null)
-  }
-
-  const clearChecked = async (listId: string) => {
-    const ids = lists.find(l => l.id === listId)?.items?.filter(i => i.is_checked).map(i => i.id) || []
-    if (!ids.length) return
-    await supabase.from("list_items").delete().in("id", ids)
-    setLists(prev => prev.map(l => l.id === listId ? { ...l, items: l.items?.filter(i => !i.is_checked) } : l))
-  }
-
-  const createNew = async () => {
-    if (!clientId || !newTitle.trim()) return
-    setCreating(true)
+  const save = async () => {
+    if (!form.name.trim() || !clientId) return
+    setSaving(true)
     try {
-      if (tab === "listas") {
-        const { data } = await supabase.from("lists").insert({ client_id: clientId, title: newTitle.trim(), list_type: newType, status: "active", source: "dashboard" }).select("id").single()
-        if (data && newItems.trim()) {
-          const rows = newItems.split(/[\n,]/).map((x, i) => ({ list_id: data.id, client_id: clientId, content: x.trim(), position: i })).filter(r => r.content)
-          if (rows.length) await supabase.from("list_items").insert(rows)
-        }
+      if (editingId) {
+        await supabase.from("contacts").update({ name: form.name.trim(), phone: form.phone.trim(), relationship: form.relationship.trim() || null, notes: form.notes.trim() || null, updated_at: new Date().toISOString() }).eq("id", editingId)
       } else {
-        await supabase.from("checklists").insert({ client_id: clientId, title: newTitle.trim(), status: "active", source: "dashboard" })
+        let phone = form.phone.trim()
+        if (phone && !phone.startsWith("+")) phone = "+51" + phone.replace(/^0/, "")
+        await supabase.from("contacts").insert({ client_id: clientId, name: form.name.trim(), phone, relationship: form.relationship.trim() || null, notes: form.notes.trim() || null })
       }
-      setNewTitle(""); setNewItems(""); setShowNew(false); await loadAll()
-    } finally { setCreating(false) }
+      setShowForm(false); setEditingId(null); setForm(BLANK_FORM)
+      await loadContacts()
+    } finally { setSaving(false) }
   }
 
-  const saveTitle = async (id: string) => {
-    if (!editVal.trim()) return
-    await supabase.from("lists").update({ title: editVal.trim() }).eq("id", id)
-    setLists(prev => prev.map(l => l.id === id ? { ...l, title: editVal.trim() } : l))
-    setEditId(null)
+  const del = async (id: string) => {
+    await supabase.from("contacts").delete().eq("id", id)
+    setContacts(prev => prev.filter(c => c.id !== id))
+    setConfirmDelete(null)
   }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <RefreshCw className="w-5 h-5 animate-spin text-[#3B82F6]" />
-        <p className="text-xs text-muted-foreground">Sincronizando...</p>
+        <p className="text-xs text-muted-foreground">Cargando contactos...</p>
       </div>
     </div>
   )
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F1F63]">Listas y Checklists</h1>
+          <h1 className="text-2xl font-bold text-[#0F1F63]">Contactos</h1>
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
             <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            En tiempo real con WhatsApp
+            {contacts.length} contacto{contacts.length !== 1 ? "s" : ""} · en tiempo real
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={loadAll} className="p-2 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F1F5F9] transition-colors">
+          <button onClick={() => loadContacts()} className="p-2 rounded-xl border border-[#E2E8F0] bg-white hover:bg-[#F1F5F9] transition-colors">
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
           </button>
-          <button onClick={() => setShowNew(!showNew)} className="flex items-center gap-1.5 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl text-sm font-medium transition-all active:scale-95">
-            <Plus className="w-4 h-4" />Nueva
+          <button onClick={openAdd} className="flex items-center gap-1.5 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl text-sm font-medium transition-all active:scale-95">
+            <Plus className="w-4 h-4" />Agregar
           </button>
         </div>
       </div>
 
-      {showNew && (
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nombre, teléfono o relación..."
+          className="w-full h-10 pl-9 pr-4 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20 bg-white" />
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      {/* Add/Edit Form */}
+      {showForm && (
         <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 shadow-sm space-y-3">
-          <p className="text-sm font-semibold text-[#0F1F63]">{tab === "listas" ? "Nueva lista" : "Nuevo checklist"}</p>
-          <input value={newTitle} onChange={e => setNewTitle(e.target.value)} autoFocus
-            placeholder={tab === "listas" ? "Ej: Lista del mercado" : "Ej: Pasos para la reunión"}
-            className="w-full h-10 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]"
-            onKeyDown={e => e.key === "Enter" && createNew()} />
-          {tab === "listas" && (
-            <>
-              <select value={newType} onChange={e => setNewType(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-[#D9E1EC] text-sm bg-white focus:outline-none">
-                {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-              <textarea value={newItems} onChange={e => setNewItems(e.target.value)} rows={3}
-                placeholder="Ítems (uno por línea o coma) — opcional"
+          <p className="text-sm font-semibold text-[#0F1F63]">{editingId ? "Editar contacto" : "Nuevo contacto"}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Nombre *</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Ej: Cole Viajero" autoFocus
+                className="w-full h-9 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]"
+                onKeyDown={e => e.key === "Enter" && save()} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+              <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="+51 999 123 456"
+                className="w-full h-9 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Relación</label>
+              <input value={form.relationship} onChange={e => setForm(f => ({ ...f, relationship: e.target.value }))}
+                placeholder="Ej: proveedor, amigo"
+                className="w-full h-9 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Notas</label>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Notas adicionales..." rows={2}
                 className="w-full px-3 py-2 rounded-xl border border-[#D9E1EC] text-sm resize-none focus:outline-none focus:border-[#3B82F6]" />
-            </>
-          )}
+            </div>
+          </div>
           <div className="flex gap-2">
-            <button onClick={createNew} disabled={creating || !newTitle.trim()}
+            <button onClick={save} disabled={saving || !form.name.trim()}
               className="flex-1 h-9 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 active:scale-95">
-              {creating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" />Crear</>}
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4" />{editingId ? "Guardar" : "Agregar"}</>}
             </button>
-            <button onClick={() => setShowNew(false)} className="h-9 px-4 rounded-xl border border-[#E2E8F0] text-sm hover:bg-[#F1F5F9]">
+            <button onClick={() => { setShowForm(false); setEditingId(null) }}
+              className="h-9 px-4 rounded-xl border border-[#E2E8F0] text-sm hover:bg-[#F1F5F9] transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      <div className="flex gap-1 p-1 bg-[#F1F5F9] rounded-xl">
-        {(["listas", "checklists"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${tab === t ? "bg-white shadow-sm text-[#0F1F63]" : "text-[#5F6B7A] hover:text-[#0F1F63]"}`}>
-            {t === "listas" ? `Listas (${lists.length})` : `Checklists (${checklists.length})`}
-          </button>
-        ))}
-      </div>
-
-      {tab === "listas" && (
-        <div className="space-y-3">
-          {lists.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#D9E1EC] rounded-2xl">
-              <List className="w-10 h-10 mx-auto mb-3 text-[#D9E1EC]" />
-              <p className="font-medium text-[#64748B]">Sin listas activas</p>
-              <p className="text-sm text-muted-foreground mt-1">Di <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-xs">hazme una lista de compras</code> por WhatsApp</p>
-            </div>
-          ) : lists.map(lst => {
-            const Icon = TYPE_ICONS[lst.list_type] || List
-            const color = TYPE_COLORS[lst.list_type] || "#64748B"
-            const chk = lst.items?.filter(i => i.is_checked).length ?? 0
-            const tot = lst.items?.length ?? 0
-
-            return (
-              <div key={lst.id} className="bg-white border border-[#E2E8F0] rounded-2xl shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 p-4 cursor-pointer select-none" onClick={() => toggleList(lst.id)}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color + "15" }}>
-                    <Icon className="w-5 h-5" style={{ color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {editId === lst.id ? (
-                      <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-                        <input value={editVal} onChange={e => setEditVal(e.target.value)} autoFocus
-                          className="flex-1 h-7 px-2 text-sm rounded-lg border border-[#D9E1EC] focus:outline-none focus:border-[#3B82F6]"
-                          onKeyDown={e => { if (e.key === "Enter") saveTitle(lst.id); if (e.key === "Escape") setEditId(null) }} />
-                        <button onClick={() => saveTitle(lst.id)} className="text-[#3B82F6] p-1"><Save className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setEditId(null)} className="text-muted-foreground p-1"><X className="w-3.5 h-3.5" /></button>
-                      </div>
-                    ) : (
-                      <p className="font-semibold text-[#0F1F63] truncate">{lst.title}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">{TYPE_LABELS[lst.list_type] || "Lista"}</p>
-                    {lst.items && <ProgressBar checked={chk} total={tot} color={color} />}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => { setEditId(lst.id); setEditVal(lst.title) }}
-                      className="p-1.5 rounded-lg hover:bg-[#EFF6FF] text-muted-foreground hover:text-[#3B82F6] transition-colors">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    {lst.expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                  </div>
-                </div>
-
-                {lst.expanded && (
-                  <div className="border-t border-[#F1F5F9]">
-                    {lst.loadingItems ? (
-                      <div className="p-4 text-center"><RefreshCw className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
-                    ) : (
-                      <>
-                        {(lst.items || []).length === 0 && <p className="text-sm text-muted-foreground p-4 text-center">Lista vacía</p>}
-                        {(lst.items || []).map(item => (
-                          <div key={item.id}
-                            className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[#F8FAFC] border-b border-[#F8FAFC] last:border-0 transition-all ${item.is_checked ? "opacity-50" : ""}`}>
-                            <button
-                              onClick={() => toggleItem(item.id, item.is_checked, lst.id)}
-                              className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all duration-200 hover:scale-110 active:scale-95"
-                              style={item.is_checked ? { backgroundColor: color, borderColor: color } : { borderColor: "#D9E1EC" }}>
-                              {item.is_checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-                            </button>
-                            <span className={`text-sm flex-1 transition-all ${item.is_checked ? "line-through text-muted-foreground" : "text-[#1D2A3B]"}`}>
-                              {item.content}
-                            </span>
-                          </div>
-                        ))}
-                        {addingTo === lst.id && (
-                          <div className="flex gap-2 p-3 bg-[#F8FAFC] border-t border-[#F1F5F9]">
-                            <input ref={addRef} value={addText} onChange={e => setAddText(e.target.value)}
-                              placeholder="Nuevo ítem..." autoFocus
-                              className="flex-1 h-8 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]"
-                              onKeyDown={e => { if (e.key === "Enter") addItem(lst.id); if (e.key === "Escape") setAddingTo(null) }} />
-                            <button onClick={() => addItem(lst.id)} className="px-3 h-8 bg-[#3B82F6] text-white rounded-xl text-xs font-medium hover:bg-[#2563EB] active:scale-95">OK</button>
-                            <button onClick={() => setAddingTo(null)} className="h-8 px-2 rounded-xl hover:bg-[#E2E8F0]"><X className="w-3 h-3 text-muted-foreground" /></button>
-                          </div>
-                        )}
-                        <WAButtonBar buttons={[
-                          { label: "➕ Agregar ítem", onClick: () => { setAddingTo(lst.id); setAddText(""); setTimeout(() => addRef.current?.focus(), 50) } },
-                          ...(chk > 0 ? [{ label: `🗑️ Limpiar ${chk} ✓`, danger: true, onClick: () => clearChecked(lst.id) }] : []),
-                          { label: "✏️ Renombrar", onClick: () => { setEditId(lst.id); setEditVal(lst.title) } },
-                          { label: "🗂️ Archivar", danger: true, onClick: () => { supabase.from("lists").update({ status: "archived" }).eq("id", lst.id).then(loadAll) } },
-                        ]} />
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between">
+          <p className="text-sm text-red-700 font-medium">¿Eliminar este contacto? No se puede deshacer.</p>
+          <div className="flex gap-2">
+            <button onClick={() => del(confirmDelete)} className="px-3 py-1.5 bg-red-500 text-white rounded-xl text-xs font-medium hover:bg-red-600 active:scale-95">Eliminar</button>
+            <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 bg-white border border-[#E2E8F0] rounded-xl text-xs font-medium hover:bg-[#F1F5F9]">Cancelar</button>
+          </div>
         </div>
       )}
 
-      {tab === "checklists" && (
-        <div className="space-y-3">
-          {checklists.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#D9E1EC] rounded-2xl">
-              <FileText className="w-10 h-10 mx-auto mb-3 text-[#D9E1EC]" />
-              <p className="font-medium text-[#64748B]">Sin checklists activos</p>
-              <p className="text-sm text-muted-foreground mt-1">Di <code className="bg-[#F1F5F9] px-1.5 py-0.5 rounded text-xs">hazme un checklist para X</code> por WhatsApp</p>
-            </div>
-          ) : checklists.map(cl => {
-            const chk = cl.items?.filter(i => i.is_checked).length ?? 0
-            const tot = cl.items?.length ?? 0
-            const done = tot > 0 && chk === tot
-            return (
-              <div key={cl.id} className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${done ? "border-emerald-200" : "border-[#E2E8F0]"}`}>
-                <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => toggleCL(cl.id)}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${done ? "bg-[#DCFCE7]" : "bg-[#F0FDF4]"}`}>
-                    <Check className={`w-5 h-5 ${done ? "text-[#16A34A]" : "text-[#10B981]"}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#0F1F63] truncate">{cl.title}</p>
-                    <ProgressBar checked={chk} total={tot} color="#10B981" />
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => { supabase.from("checklists").update({ status: "archived" }).eq("id", cl.id).then(loadAll) }}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    {cl.expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                  </div>
+      {/* Contacts list */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 border border-dashed border-[#D9E1EC] rounded-2xl">
+          <Users className="w-10 h-10 mx-auto mb-3 text-[#D9E1EC]" />
+          <p className="font-medium text-[#64748B]">{search ? "Sin resultados" : "Sin contactos guardados"}</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {search ? `No hay coincidencias para "${search}"` : 'Di "guarda a [nombre] con número [tel]" por WhatsApp'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(c => (
+            <div key={c.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-4 hover:border-[#BFDBFE] hover:shadow-sm transition-all duration-200 group">
+              <div className="flex items-start gap-3">
+                {/* Avatar */}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B82F6]/20 to-[#7C3AED]/20 flex items-center justify-center shrink-0 text-sm font-bold text-[#3B82F6]">
+                  {c.name.charAt(0).toUpperCase()}
                 </div>
-                {cl.expanded && (
-                  <div className="border-t border-[#F1F5F9]">
-                    {!cl.items ? (
-                      <div className="p-4 text-center"><RefreshCw className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
-                    ) : cl.items.map((item, idx) => (
-                      <div key={item.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-[#F8FAFC] border-b border-[#F8FAFC] last:border-0 ${item.is_checked ? "opacity-50" : ""}`}>
-                        <button onClick={() => toggleCLItem(item.id, item.is_checked, cl.id)}
-                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 hover:scale-110 ${item.is_checked ? "bg-[#10B981] border-[#10B981]" : "border-[#D9E1EC] hover:border-[#10B981]"}`}>
-                          {item.is_checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-                        </button>
-                        <span className={`text-sm flex-1 ${item.is_checked ? "line-through text-muted-foreground" : "text-[#1D2A3B]"}`}>
-                          <span className="text-xs text-muted-foreground mr-1.5 font-mono">{idx + 1}.</span>{item.content}
-                        </span>
-                      </div>
-                    ))}
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-[#0F1F63]">{c.name}</p>
+                    {c.relationship && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#64748B]">{c.relationship}</span>
+                    )}
+                  </div>
+                  {c.phone && (
+                    <a href={`tel:${c.phone}`} className="flex items-center gap-1 mt-0.5 text-sm text-[#3B82F6] hover:underline">
+                      <Phone className="w-3 h-3" />{c.phone}
+                    </a>
+                  )}
+                  {c.notes && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{c.notes}</p>}
+
+                  {/* WA-style action buttons */}
+                  <div className="mt-3">
                     <WAButtonBar buttons={[
-                      { label: "🗂️ Archivar", danger: true, onClick: () => { supabase.from("checklists").update({ status: "archived" }).eq("id", cl.id).then(loadAll) } },
+                      { label: "✏️ Editar", onClick: () => openEdit(c) },
+                      ...(c.phone ? [{ label: "📞 Llamar", onClick: () => window.open(`tel:${c.phone}`) }] : []),
+                      ...(c.phone ? [{ label: "💬 WhatsApp", onClick: () => window.open(`https://wa.me/${c.phone.replace(/\D/g, "")}`) }] : []),
+                      { label: "🗑️ Eliminar", danger: true, onClick: () => setConfirmDelete(c.id) },
                     ]} />
                   </div>
-                )}
+                </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>
