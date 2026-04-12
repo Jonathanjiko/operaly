@@ -1,75 +1,49 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-/**
- * POST /api/auth/sync-app-metadata
- *
- * Escribe el client_id en app_metadata del usuario de Supabase Auth.
- * app_metadata solo puede escribirse con service_role (nunca desde el cliente).
- *
- * Body: { clientId: string, userId: string }
- *
- * SEGURIDAD:
- * - Solo acepta requests del propio usuario autenticado
- * - Valida que el userId del JWT coincida con el userId del body
- * - Usa service_role_key para escribir en app_metadata
- */
-export async function POST(req: NextRequest) {
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+)
+
+const BACKEND_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || ""
+const BACKEND_KEY = process.env.BACKEND_API_KEY || ""
+
+export async function POST(request: Request) {
   try {
-    const body = await req.json()
-    const { clientId, userId } = body
+    const { clientId, authUserId } = await request.json()
+    if (!clientId || !authUserId)
+      return NextResponse.json({ ok: false, error: "Missing clientId or authUserId" }, { status: 400 })
 
-    if (!clientId || !userId) {
-      return NextResponse.json({ error: "missing_fields" }, { status: 400 })
+    // 1. Write client_id to app_metadata via Admin API (cannot be done from client SDK)
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+      app_metadata: { client_id: clientId },
+    })
+    if (updateError) console.error("[sync-app-metadata] updateUserById:", updateError.message)
+
+    // 2. Ensure welcome message preference is set
+    await supabaseAdmin.from("client_preferences").upsert({
+      client_id:  clientId,
+      pref_key:   "pending_welcome_message",
+      pref_value: "true",
+      source:     "registration",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "client_id,pref_key" })
+
+    // 3. Notify backend to send WhatsApp welcome message immediately
+    if (BACKEND_URL) {
+      try {
+        await fetch(`${BACKEND_URL}/internal/send-welcome`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json", "X-Internal-Key": BACKEND_KEY },
+          body:    JSON.stringify({ client_id: clientId }),
+        })
+      } catch { /* cron will pick it up */ }
     }
 
-    // Verificar que el request viene de un usuario autenticado
-    const authHeader = req.headers.get("authorization")
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 })
-    }
-
-    // Crear cliente con JWT del usuario para verificar identidad
-    const userSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
-
-    const { data: { user }, error: authError } = await userSupabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: "invalid_token" }, { status: 401 })
-    }
-
-    // Verificar que el userId del JWT coincide con el del body
-    if (user.id !== userId) {
-      return NextResponse.json({ error: "user_mismatch" }, { status: 403 })
-    }
-
-    // Usar service_role para escribir app_metadata
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    const { error: updateError } = await adminSupabase.auth.admin.updateUserById(
-      userId,
-      {
-        app_metadata: {
-          ...((user.app_metadata as Record<string, unknown>) || {}),
-          client_id: clientId,
-        },
-      }
-    )
-
-    if (updateError) {
-      console.error("[sync-app-metadata] updateUserById error:", updateError)
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, client_id: clientId })
-  } catch (err: unknown) {
-    console.error("[sync-app-metadata] unexpected error:", err)
-    return NextResponse.json({ error: "internal_error" }, { status: 500 })
+    return NextResponse.json({ ok: true, clientId, appMetaSet: !updateError })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 })
   }
 }
