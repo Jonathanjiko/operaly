@@ -13,16 +13,18 @@ export async function GET(request: NextRequest) {
   const next = sanitizeNext(requestUrl.searchParams.get("next"))
 
   if (!code) {
-    return NextResponse.redirect(new URL("/register", requestUrl.origin))
+    return NextResponse.redirect(new URL("/register?oauth=missing_code", requestUrl.origin))
   }
 
-  const supabase = await createSupabaseServerClient()
+  const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin))
+  const supabase = createSupabaseServerClient(request, redirectResponse)
+
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error) {
     console.error("[auth/callback] exchangeCodeForSession error:", error.message)
-    return NextResponse.redirect(new URL("/register", requestUrl.origin))
+    return NextResponse.redirect(new URL("/register?oauth=exchange_failed", requestUrl.origin))
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl.origin))
+  return redirectResponse
 }
