@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
+import { getClientContext, isOwnerAccount } from "@/lib/client-context"
 import OwnerPaymentsMetricsPanel from "./_components/OwnerPaymentsMetricsPanel"
 
 type SummaryRow = {
@@ -308,16 +309,14 @@ export default function OwnerDashboardPage() {
         throw new Error("No hay sesión activa.")
       }
 
-      const metadata = user.user_metadata || {}
-      const appMetadata = user.app_metadata || {}
-      const isOwner =
-        Boolean(metadata.operaly_owner) ||
-        Boolean(metadata.owner_mode) ||
-        Boolean(appMetadata.operaly_owner)
+      const { clientId } = await getClientContext()
+      const ownerAllowed = await isOwnerAccount(clientId)
 
-      if (!isOwner) {
+      if (!ownerAllowed) {
         throw new Error("No tienes permisos para ver este panel.")
       }
+
+      const metadata = user.user_metadata || {}
 
       setOwnerProfile({
         fullName: String(metadata.full_name || "Operaly Owner"),
