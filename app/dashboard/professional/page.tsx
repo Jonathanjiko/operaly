@@ -20,6 +20,7 @@ import {
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
+import { getClientContext } from "@/lib/client-context"
 
 type DashboardProfile = {
   fullName: string
@@ -160,13 +161,18 @@ export default function ProfessionalDashboardPage() {
         if (!user) return
 
         const meta = user.user_metadata || {}
-        const clientId = meta.client_id || localStorage.getItem("operaly_client_id")
+        let clientId = ""
+
+        try {
+          const ctx = await getClientContext()
+          clientId = ctx.clientId
+        } catch (ctxError) {
+          console.error("Error resolviendo client context:", ctxError)
+        }
 
         let client: any = null
 
         if (clientId) {
-          localStorage.setItem("operaly_client_id", clientId)
-
           const { data: clientData, error: clientError } = await supabase
             .from("clients")
             .select(
