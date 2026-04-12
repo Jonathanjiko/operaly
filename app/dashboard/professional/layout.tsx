@@ -26,6 +26,7 @@ import {
   List,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { getClientContext } from "@/lib/client-context"
 
 const sidebarItems = [
   { href: "/dashboard/professional", label: "Dashboard", icon: LayoutDashboard },
@@ -79,9 +80,17 @@ export default function ProfessionalDashboardLayout({
           return
         }
 
-        const appMeta = user.app_metadata || {}
         const meta = user.user_metadata || {}
-        const clientId = appMeta.client_id || meta.client_id || localStorage.getItem("operaly_client_id")
+
+        let clientId = ""
+        try {
+          const ctx = await getClientContext()
+          clientId = ctx.clientId
+        } catch {
+          const selectedPlan = meta.selected_plan || "trial"
+          router.replace(`/register/setup?plan=${selectedPlan}`)
+          return
+        }
 
         if (!clientId) {
           const selectedPlan = meta.selected_plan || "trial"
