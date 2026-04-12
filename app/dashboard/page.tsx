@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { getClientContext, getClientPlanCode } from "@/lib/client-context"
 
 export default function DashboardEntryPage() {
   const router = useRouter()
@@ -11,25 +11,18 @@ export default function DashboardEntryPage() {
     let cancelled = false
 
     const resolveDashboard = async () => {
-      const { data, error } = await supabase.auth.getUser()
+      try {
+        const { clientId } = await getClientContext()
+        const planCode = await getClientPlanCode(clientId)
+        const isOwner = String(planCode || "").toLowerCase() === "owner"
 
-      if (error || !data.user) {
+        if (!cancelled) {
+          router.replace(isOwner ? "/dashboard/owner" : "/dashboard/professional")
+        }
+      } catch {
         if (!cancelled) {
           router.replace("/login")
         }
-        return
-      }
-
-      const metadata = data.user.user_metadata || {}
-      const appMetadata = data.user.app_metadata || {}
-
-      const isOwner =
-        Boolean(metadata.operaly_owner) ||
-        Boolean(metadata.owner_mode) ||
-        Boolean(appMetadata.operaly_owner)
-
-      if (!cancelled) {
-        router.replace(isOwner ? "/dashboard/owner" : "/dashboard/professional")
       }
     }
 
