@@ -1,0 +1,28 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+
+function sanitizeNext(nextValue: string | null): string {
+  if (!nextValue) return "/dashboard"
+  if (!nextValue.startsWith("/")) return "/dashboard"
+  return nextValue
+}
+
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get("code")
+  const next = sanitizeNext(requestUrl.searchParams.get("next"))
+
+  if (!code) {
+    return NextResponse.redirect(new URL("/register", requestUrl.origin))
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+  if (error) {
+    console.error("[auth/callback] exchangeCodeForSession error:", error.message)
+    return NextResponse.redirect(new URL("/register", requestUrl.origin))
+  }
+
+  return NextResponse.redirect(new URL(next, requestUrl.origin))
+}
