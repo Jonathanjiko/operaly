@@ -60,12 +60,21 @@ export default function RegisterClient() {
 
   const handleOAuth = async (provider: "google") => {
     try {
-      const redirectTo = `${window.location.origin}/register/setup?plan=${planCode}`
+      localStorage.setItem(
+        "operaly_register_auth",
+        JSON.stringify({
+          planCode,
+          method: provider,
+        })
+      )
+
+      const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set("next", `/register/setup?plan=${planCode}`)
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo,
+          redirectTo: callbackUrl.toString(),
           queryParams: {
             access_type: "offline",
             prompt: "consent",
