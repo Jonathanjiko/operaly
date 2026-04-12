@@ -187,7 +187,7 @@ export default function SetupClient() {
       // ── Step 4: Sync client_id to app_metadata via API ─────────────────
       // Belt-and-suspenders: also call the API route to ensure app_metadata is set
       try {
-        await fetch("/api/sync-app-metadata", {
+        await fetch("/api/auth/sync-app-metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ clientId, authUserId: user.id }),
