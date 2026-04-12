@@ -16,6 +16,17 @@ export async function GET(req: NextRequest) {
   }
 
   const days = String(req.nextUrl.searchParams.get("days") || "30").trim()
+  const backendKey = String(process.env.INTERNAL_WORKER_KEY || "").trim()
+
+  if (!backendKey) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "missing_internal_worker_key",
+      },
+      { status: 500 }
+    )
+  }
 
   try {
     const response = await fetch(
@@ -24,6 +35,7 @@ export async function GET(req: NextRequest) {
         method: "GET",
         headers: {
           Accept: "application/json",
+          "X-Internal-Key": backendKey,
         },
         cache: "no-store",
       }
