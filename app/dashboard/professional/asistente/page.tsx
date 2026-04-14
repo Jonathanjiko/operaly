@@ -81,6 +81,7 @@ export default function AsistentePage() {
   const [style, setStyle] = useState("balanceado")
   const [customContext, setCustomContext] = useState("")
   const [saved, setSaved] = useState(false)
+  const [loadError, setLoadError] = useState("")
 
   useEffect(() => {
     loadConfig()
@@ -88,6 +89,7 @@ export default function AsistentePage() {
 
   const loadConfig = async () => {
     setLoading(true)
+    setLoadError("")
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
@@ -96,7 +98,7 @@ export default function AsistentePage() {
         .from("clients")
         .select("profession_code, preferred_name, treatment, preferred_style, plan_code")
         .eq("id", cid)
-        .single()
+        .maybeSingle()
 
       if (client) {
         setProfessionCode(client.profession_code || "consultor")
@@ -115,14 +117,17 @@ export default function AsistentePage() {
         .from("client_preferences")
         .select("pref_key, pref_value")
         .eq("client_id", cid)
-        .in("pref_key", ["assistant_tone", "assistant_context"])
+        .in("pref_key", ["assistant_tone", "assistant_context", "assistant_profession", "assistant_style"])
 
       prefs?.forEach((pref: any) => {
         if (pref.pref_key === "assistant_tone") setTone(pref.pref_value || "profesional")
         if (pref.pref_key === "assistant_context") setCustomContext(pref.pref_value || "")
+        if (pref.pref_key === "assistant_profession" && !client?.profession_code) setProfessionCode(pref.pref_value || "consultor")
+        if (pref.pref_key === "assistant_style" && !client?.preferred_style) setStyle(pref.pref_value || "balanceado")
       })
     } catch (err) {
       console.error(err)
+      setLoadError("No se pudo cargar la configuracion del asistente.")
     } finally {
       setLoading(false)
     }
@@ -130,7 +135,7 @@ export default function AsistentePage() {
 
   const upsertPref = async (key: string, value: string) => {
     await supabase.from("client_preferences").upsert(
-      { client_id: clientId, pref_key: key, pref_value: value, source: "dashboard" },
+      { client_id: clientId, pref_key: key, pref_value: value, source: "dashboard", updated_at: new Date().toISOString() },
       { onConflict: "client_id,pref_key" },
     )
   }
@@ -234,6 +239,27 @@ export default function AsistentePage() {
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6]">
           <Bot className="h-5 w-5 text-white" />
+        </div>
+      </div>
+
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">plan actual</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">tono activo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{tone}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo activo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{style}</p>
         </div>
       </div>
 

@@ -1,8 +1,19 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Plug, ExternalLink, Check, AlertCircle, RefreshCw, Lock } from "lucide-react"
+import {
+  AlertCircle,
+  Check,
+  Clock3,
+  ExternalLink,
+  FolderOpen,
+  Lock,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getDisplayPlanName } from "@/lib/plans"
@@ -35,37 +46,93 @@ const GoogleCalendarIcon = () => (
   </svg>
 )
 
-const INTEGRATIONS = [
+type IntegrationCard = {
+  id: "google_drive" | "google_calendar" | "gmail"
+  name: string
+  description: string
+  icon: () => JSX.Element
+  color: string
+  useCases: string[]
+}
+
+const INTEGRATIONS: IntegrationCard[] = [
   {
     id: "google_drive",
     name: "Google Drive",
-    desc: "Accede a tus archivos desde Operaly. Sube, busca, comparte y analiza documentos desde el flujo operativo.",
+    description:
+      "Consultar, descargar y analizar archivos del Drive desde Operaly, incluso para compartirlos o usarlos en flujos por WhatsApp.",
     icon: GoogleDriveIcon,
-    features: ["Subir archivos a Drive", "Buscar documentos por nombre", "Analizar PDFs y hojas de calculo"],
-    comingSoon: false,
-  },
-  {
-    id: "gmail",
-    name: "Gmail",
-    desc: "Lee y responde correos desde Operaly. Recibe resumenes de tu bandeja y prepara borradores con IA.",
-    icon: GmailIcon,
-    features: ["Leer correos importantes", "Redactar respuestas con IA", "Resumenes diarios de bandeja"],
-    comingSoon: true,
+    color: "#34A853",
+    useCases: [
+      "Buscar archivos por nombre o contexto",
+      "Analizar PDFs, hojas y documentos",
+      "Enviar archivos a terceros desde Operaly",
+    ],
   },
   {
     id: "google_calendar",
     name: "Google Calendar",
-    desc: "Sincroniza tu agenda de Google con Operaly para crear eventos, revisar agenda y disparar recordatorios.",
+    description:
+      "Sincronizar tu agenda real con Operaly para verla desde WhatsApp, crear eventos y mantener recordatorios consistentes.",
     icon: GoogleCalendarIcon,
-    features: ["Crear eventos desde dashboard", "Ver agenda del dia", "Recordatorios inteligentes"],
-    comingSoon: true,
+    color: "#1A73E8",
+    useCases: [
+      "Ver agenda del dia desde WhatsApp",
+      "Crear y mover eventos",
+      "Sincronizar cambios con Operaly",
+    ],
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    description:
+      "Preparar borradores, confirmar el contenido y luego enviar correos finales con o sin adjuntos desde Operaly.",
+    icon: GmailIcon,
+    color: "#EA4335",
+    useCases: [
+      "Redactar correos con confirmacion previa",
+      "Adjuntar archivos y enviar a contactos",
+      "Trabajar respuestas desde el dashboard o WhatsApp",
+    ],
   },
 ]
+
+type IntegrationRuntimeStatus = "blocked" | "ready_for_backend" | "backend_pending"
+
+function StatusPill({
+  status,
+}: {
+  status: IntegrationRuntimeStatus
+}) {
+  if (status === "blocked") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#7C3AED]">
+        <Lock className="h-3 w-3" />
+        Requiere add-on
+      </span>
+    )
+  }
+
+  if (status === "ready_for_backend") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+        <Clock3 className="h-3 w-3" />
+        Backend pendiente
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+      <Check className="h-3 w-3" />
+      Lista para conectar
+    </span>
+  )
+}
 
 export default function IntegracionesPage() {
   const [loading, setLoading] = useState(true)
   const [googleEnabled, setGoogleEnabled] = useState(false)
-  const [connecting, setConnecting] = useState<string | null>(null)
   const [planCode, setPlanCode] = useState("trial")
 
   useEffect(() => {
@@ -96,12 +163,12 @@ export default function IntegracionesPage() {
     }
   }
 
-  const handleConnect = async (id: string) => {
-    setConnecting(id)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    alert("Google OAuth estara disponible en breve. La conexion se gestionara desde este dashboard.")
-    setConnecting(null)
-  }
+  const integrationStatuses = useMemo(() => {
+    return INTEGRATIONS.map((integration) => ({
+      ...integration,
+      runtimeStatus: googleEnabled ? "ready_for_backend" : "blocked" as IntegrationRuntimeStatus,
+    }))
+  }, [googleEnabled])
 
   if (loading) {
     return (
@@ -115,108 +182,118 @@ export default function IntegracionesPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Conecta tus herramientas de trabajo con Operaly desde el dashboard administrativo</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Conecta tus herramientas de trabajo desde el dashboard administrativo, sin convertir este espacio en un chat.
+          </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">
-          <Plug className="h-5 w-5 text-white" />
+          <Sparkles className="h-5 w-5 text-white" />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[#4285F4]/20 bg-gradient-to-r from-[#4285F4]/5 via-[#34A853]/5 to-[#EA4335]/5 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center -space-x-1">
-            {["#4285F4", "#34A853", "#FBBC05", "#EA4335"].map((color) => (
-              <div key={color} className="h-3 w-3 rounded-full border border-white" style={{ backgroundColor: color }} />
-            ))}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
-            <p className="text-xs text-muted-foreground">Drive, Gmail y Calendar se habilitan segun tu plan o add-ons, y se conectan desde aqui.</p>
-          </div>
-          {googleEnabled ? (
-            <div className="ml-auto flex items-center gap-1.5 rounded-full border border-[#10B981]/20 bg-[#10B981]/10 px-3 py-1 text-xs font-medium text-[#10B981]">
-              <Check className="h-3 w-3" /> Add-on activo
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[28px] border border-[#4285F4]/15 bg-gradient-to-r from-[#4285F4]/5 via-[#34A853]/5 to-[#EA4335]/5 p-5">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex items-center -space-x-1">
+              {["#4285F4", "#34A853", "#FBBC05", "#EA4335"].map((color) => (
+                <div key={color} className="h-3.5 w-3.5 rounded-full border border-white" style={{ backgroundColor: color }} />
+              ))}
             </div>
-          ) : (
-            <div className="ml-auto flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-              <Lock className="h-3 w-3" /> Requiere add-on
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                Operaly usara estas conexiones para consultar agenda, trabajar con archivos de Drive y preparar correos con confirmacion antes de enviarlos.
+              </p>
             </div>
-          )}
+            {googleEnabled ? (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Google habilitado por plan/add-on
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600">
+                <Lock className="h-3.5 w-3.5" />
+                Falta habilitacion comercial
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Estado actual</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">plan actual</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">google suite</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleEnabled ? "Activa" : "Bloqueada"}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Pendiente</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {INTEGRATIONS.map((integration) => {
+      <div className="grid gap-4 xl:grid-cols-3">
+        {integrationStatuses.map((integration) => {
           const Icon = integration.icon
-          const isBlocked = !googleEnabled && !integration.comingSoon
+          const runtimeStatus = integration.runtimeStatus
 
           return (
             <div
               key={integration.id}
-              className={`rounded-2xl border bg-card p-5 transition-all ${
-                isBlocked ? "border-border opacity-75" : "border-border hover:border-[#3B82F6]/20 hover:shadow-sm"
-              }`}
+              className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-border bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <Icon />
                 </div>
+                <StatusPill status={runtimeStatus} />
+              </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <h3 className="font-semibold text-[#0F1F63]">{integration.name}</h3>
-                    {integration.comingSoon ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                        Proximo
-                      </span>
-                    ) : googleEnabled ? (
-                      <span className="rounded-full border border-[#10B981]/20 bg-[#10B981]/5 px-2 py-0.5 text-[10px] font-bold text-[#10B981]">
-                        Disponible
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#7C3AED]">
-                        Add-on
-                      </span>
-                    )}
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold text-[#0F1F63]">{integration.name}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{integration.description}</p>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {integration.useCases.map((useCase) => (
+                  <div key={useCase} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    {useCase}
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{integration.desc}</p>
+                ))}
+              </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {integration.features.map((feature) => (
-                      <span key={feature} className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs text-muted-foreground">
-                        {feature}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+              <div className="mt-5 space-y-2">
+                {runtimeStatus === "blocked" ? (
+                  <Link href="/precios" className="block">
+                    <button className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#7C3AED]/25 bg-[#7C3AED]/5 text-sm font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/10">
+                      Activar add-on Google
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  </Link>
+                ) : (
+                  <button
+                    disabled
+                    className="flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 text-sm font-medium text-amber-700"
+                  >
+                    Backend OAuth en implementacion
+                    <Clock3 className="h-3.5 w-3.5" />
+                  </button>
+                )}
 
-                <div className="flex-shrink-0">
-                  {integration.comingSoon ? (
-                    <button disabled className="h-9 cursor-not-allowed rounded-xl border border-border bg-secondary px-4 text-xs font-medium text-muted-foreground">
-                      Proximamente
-                    </button>
-                  ) : isBlocked ? (
-                    <Link href="/precios">
-                      <button className="h-9 rounded-xl border border-[#7C3AED]/30 bg-[#7C3AED]/5 px-4 text-xs font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/10">
-                        Activar add-on
-                      </button>
-                    </Link>
-                  ) : connecting === integration.id ? (
-                    <button disabled className="h-9 rounded-xl bg-[#3B82F6] px-4 text-xs font-medium text-white opacity-70">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleConnect(integration.id)}
-                      className="flex h-9 items-center gap-1.5 rounded-xl bg-[#0F1F63] px-4 text-xs font-medium text-white transition-colors hover:bg-[#1a2f7a]"
-                    >
-                      Conectar <ExternalLink className="h-3 w-3" />
-                    </button>
-                  )}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                  {runtimeStatus === "blocked"
+                    ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
+                    : "Tu cuenta ya puede usar Google Suite a nivel de contrato. Lo siguiente es activar el backend de OAuth, sincronizacion y acciones reales por WhatsApp."}
                 </div>
               </div>
             </div>
@@ -224,12 +301,42 @@ export default function IntegracionesPage() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-border bg-secondary/50 p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Las integraciones de Google se conectan mediante OAuth seguro y se administran desde este dashboard. Tu plan actual es {getDisplayPlanName(planCode)}.
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
+            <AlertCircle className="h-4 w-4 text-[#0F1F63]" />
+          </div>
+          <h2 className="font-semibold text-[#0F1F63]">Ruta real de activacion</h2>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-[#34A853]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Drive</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Descargar, analizar y compartir archivos desde Operaly, incluso cuando el usuario lo pida por WhatsApp.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#1A73E8]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Calendar</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Mostrar tu agenda real en Operaly y sincronizar eventos para que agenda y recordatorios no se contradigan.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-[#EA4335]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Gmail</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Preparar el correo, mostrarte el borrador, pedir confirmacion y recien ahi enviarlo con adjunto o sin adjunto.
             </p>
           </div>
         </div>

@@ -59,6 +59,7 @@ export default function VozPage() {
   const [callStyle, setCallStyle] = useState("breve")
   const [preferAudio, setPreferAudio] = useState(true)
   const [voiceLang, setVoiceLang] = useState("es")
+  const [loadError, setLoadError] = useState("")
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
@@ -92,6 +93,7 @@ export default function VozPage() {
 
   const loadConfig = async () => {
     setLoading(true)
+    setLoadError("")
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
@@ -106,10 +108,14 @@ export default function VozPage() {
         .from("user_voice_settings")
         .select("*")
         .eq("client_id", cid)
-        .single()
+        .maybeSingle()
 
       if (vs) {
-        setVoiceId(vs.voice_id || "")
+        const savedVoiceId = String(vs.voice_id || "")
+        const builtInVoice = ELEVENLABS_VOICES.find((voice) => voice.id === savedVoiceId)
+        setVoiceId(builtInVoice ? savedVoiceId : "")
+        setCustomVoiceId(!builtInVoice && savedVoiceId ? savedVoiceId : "")
+        setUseCustomVoice(Boolean(savedVoiceId && !builtInVoice))
         setToneStyle(vs.tone_style || "profesional")
         setCallStyle(vs.call_style || "breve")
         setPreferAudio(vs.prefer_audio_over_call ?? true)
@@ -119,6 +125,7 @@ export default function VozPage() {
       setMinutesUsed(await loadUsageForCurrentPeriod(cid))
     } catch (err) {
       console.error(err)
+      setLoadError("No se pudo cargar la configuracion de voz.")
     } finally {
       setLoading(false)
     }
@@ -126,6 +133,10 @@ export default function VozPage() {
 
   const handleSave = async () => {
     if (!clientId) return
+    if (useCustomVoice && !customVoiceId.trim()) {
+      alert("Pega el Voice ID de ElevenLabs para usar una voz clonada.")
+      return
+    }
     setSaving(true)
     try {
       const resolvedVoiceId = useCustomVoice ? customVoiceId.trim() : voiceId
@@ -209,6 +220,9 @@ export default function VozPage() {
 
   const filteredVoices = ELEVENLABS_VOICES.filter((voice) => !voiceLang || voice.lang === voiceLang)
   const selectedVoice = ELEVENLABS_VOICES.find((voice) => voice.id === voiceId)
+  const resolvedVoiceLabel = useCustomVoice
+    ? customVoiceId.trim() || "Pendiente"
+    : selectedVoice?.name || "Sin voz seleccionada"
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -221,6 +235,12 @@ export default function VozPage() {
           <Mic className="h-5 w-5 text-white" />
         </div>
       </div>
+
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -252,6 +272,23 @@ export default function VozPage() {
             <Sparkles className="h-3 w-3" /> Tu plan actual no incluye minutos de voz.
           </p>
         )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">modo activo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {useCustomVoice ? "Voz clonada" : "Biblioteca ElevenLabs"}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz actual</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63] break-all">{resolvedVoiceLabel}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo de llamada</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{callStyle}</p>
+        </div>
       </div>
 
       <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
