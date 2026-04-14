@@ -18,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Search,
   Menu,
   Bot,
   Mic,
