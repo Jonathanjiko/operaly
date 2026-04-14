@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type PaymentProvider = "mercadopago" | "stripe"
 
@@ -24,21 +25,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const clientId = String(body.clientId || "").trim()
   const planCode = String(body.planCode || "").trim().toLowerCase()
   const provider = (String(body.provider || "mercadopago").trim().toLowerCase() ||
     "mercadopago") as PaymentProvider
-  const email = String(body.email || "").trim().toLowerCase()
-
-  if (!clientId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "missing_client_id",
-      },
-      { status: 400 }
-    )
-  }
 
   if (!planCode) {
     return NextResponse.json(
@@ -65,17 +54,45 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const supabase = await createSupabaseServerClient()
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "session_lookup_failed",
+          detail: sessionError.message,
+        },
+        { status: 401 }
+      )
+    }
+
+    const accessToken = String(session?.access_token || "").trim()
+
+    if (!accessToken) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "missing_session",
+        },
+        { status: 401 }
+      )
+    }
+
     const response = await fetch(`${backendUrl}/billing/checkout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
-        client_id: clientId,
         item_code: planCode,
         provider,
-        ...(email ? { email, client_email: email } : {}),
       }),
       cache: "no-store",
     })

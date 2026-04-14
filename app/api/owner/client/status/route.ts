@@ -5,6 +5,17 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const ALLOWED_STATUSES = new Set(["active", "blocked", "inactive"])
+const OWNER_ACTIVITY_PREF_KEY = "owner_console_activity"
+
+type OwnerActivityEntry = {
+  id: string
+  action: "plan_change" | "status_change"
+  clientId: string
+  clientName: string
+  previousValue: string | null
+  nextValue: string | null
+  createdAt: string
+}
 
 class HttpError extends Error {
   status: number
@@ -73,9 +84,48 @@ async function requireOwner(request: Request) {
   return { admin, ownerClientId }
 }
 
+async function appendOwnerActivity(
+  admin: ReturnType<typeof getAdminClient>,
+  ownerClientId: string,
+  entry: OwnerActivityEntry
+) {
+  const { data: prefRow } = await admin
+    .from("client_preferences")
+    .select("pref_value")
+    .eq("client_id", ownerClientId)
+    .eq("pref_key", OWNER_ACTIVITY_PREF_KEY)
+    .maybeSingle()
+
+  let history: OwnerActivityEntry[] = []
+
+  try {
+    history = JSON.parse(String(prefRow?.pref_value || "[]"))
+    if (!Array.isArray(history)) history = []
+  } catch {
+    history = []
+  }
+
+  const nextHistory = [entry, ...history].slice(0, 100)
+
+  const { error: prefError } = await admin
+    .from("client_preferences")
+    .upsert(
+      {
+        client_id: ownerClientId,
+        pref_key: OWNER_ACTIVITY_PREF_KEY,
+        pref_value: JSON.stringify(nextHistory),
+        source: "owner_console",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "client_id,pref_key" }
+    )
+
+  if (prefError) throw new HttpError(500, prefError.message)
+}
+
 export async function POST(request: Request) {
   try {
-    const { admin } = await requireOwner(request)
+    const { admin, ownerClientId } = await requireOwner(request)
     const { clientId, status } = await request.json()
 
     const normalizedClientId = String(clientId || "").trim()
@@ -83,6 +133,17 @@ export async function POST(request: Request) {
 
     if (!normalizedClientId) throw new HttpError(400, "missing_client_id")
     if (!ALLOWED_STATUSES.has(normalizedStatus)) throw new HttpError(400, "invalid_status")
+
+    const { data: currentClient, error: currentClientError } = await admin
+      .from("clients")
+      .select("id, name, status")
+      .eq("id", normalizedClientId)
+      .maybeSingle()
+
+    if (currentClientError) throw new HttpError(500, currentClientError.message)
+    if (!currentClient) throw new HttpError(404, "client_not_found")
+
+    const previousStatus = String(currentClient.status || "").trim().toLowerCase() || null
 
     const { error } = await admin
       .from("clients")
@@ -93,6 +154,16 @@ export async function POST(request: Request) {
       .eq("id", normalizedClientId)
 
     if (error) throw new HttpError(500, error.message)
+
+    await appendOwnerActivity(admin, ownerClientId, {
+      id: crypto.randomUUID(),
+      action: "status_change",
+      clientId: normalizedClientId,
+      clientName: String(currentClient.name || "Cliente sin nombre"),
+      previousValue: previousStatus,
+      nextValue: normalizedStatus,
+      createdAt: new Date().toISOString(),
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error: any) {

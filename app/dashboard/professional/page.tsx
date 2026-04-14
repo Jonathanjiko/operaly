@@ -21,6 +21,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
+import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type DashboardProfile = {
   fullName: string
@@ -60,6 +61,15 @@ type FeatureAccess = {
   voiceEnabled: boolean
   googleEnabled: boolean
   customAgentEnabled: boolean
+}
+
+type EffectiveLimitsRow = {
+  max_messages_month?: number | null
+  max_audio_minutes?: number | null
+  max_automations?: number | null
+  voice_enabled?: boolean | null
+  google_enabled?: boolean | null
+  custom_agent_enabled?: boolean | null
 }
 
 function getUsagePercent(used: number, limit: number) {
@@ -211,35 +221,31 @@ export default function ProfessionalDashboardPage() {
             .eq("period_yyyymm", periodYYYYMM)
             .maybeSingle()
 
-          const limitsResp = await supabase
-            .from("tenant_effective_limits")
-            .select(
-              "max_messages_month, max_audio_minutes, max_automations, voice_enabled, google_enabled, custom_agent_enabled"
-            )
-            .eq("client_id", clientId)
-            .maybeSingle()
+          const limitsResp = await supabase.rpc("get_my_effective_limits")
 
           if (usageResp.error) {
             console.error("Error cargando usage_monthly:", usageResp.error)
           }
 
           if (limitsResp.error) {
-            console.error("Error cargando tenant_effective_limits:", limitsResp.error)
+            console.error("Error cargando get_my_effective_limits:", limitsResp.error)
           }
+
+          const effectiveLimits = (limitsResp.data || {}) as EffectiveLimitsRow
 
           setUsageSummary({
             messagesUsed: Number(usageResp.data?.messages_used ?? 0),
-            messagesLimit: Number(limitsResp.data?.max_messages_month ?? 0),
+            messagesLimit: Number(effectiveLimits.max_messages_month ?? 0),
             audioUsed: Number(usageResp.data?.audio_minutes_used ?? 0),
-            audioLimit: Number(limitsResp.data?.max_audio_minutes ?? 0),
+            audioLimit: Number(effectiveLimits.max_audio_minutes ?? 0),
             automationsUsed: Number(usageResp.data?.automations_used ?? 0),
-            automationsLimit: Number(limitsResp.data?.max_automations ?? 0),
+            automationsLimit: Number(effectiveLimits.max_automations ?? 0),
           })
 
           setFeatureAccess({
-            voiceEnabled: Boolean(limitsResp.data?.voice_enabled ?? false),
-            googleEnabled: Boolean(limitsResp.data?.google_enabled ?? false),
-            customAgentEnabled: Boolean(limitsResp.data?.custom_agent_enabled ?? false),
+            voiceEnabled: Boolean(effectiveLimits.voice_enabled ?? false),
+            googleEnabled: Boolean(effectiveLimits.google_enabled ?? false),
+            customAgentEnabled: Boolean(effectiveLimits.custom_agent_enabled ?? false),
           })
 
           const documentsResp = await supabase
@@ -324,7 +330,7 @@ export default function ProfessionalDashboardPage() {
     return [
       {
         label: "Plan",
-        value: profile?.planCode || "-",
+        value: getDisplayPlanName(profile?.planCode),
         icon: Sparkles,
         color: "#3B82F6",
         change: "Cuenta activa",
@@ -496,7 +502,7 @@ export default function ProfessionalDashboardPage() {
             <div className="mb-1 flex items-center justify-between text-sm">
               <span>Mensajes</span>
               <span>
-                {usageSummary.messagesUsed} / {usageSummary.messagesLimit || "∞"}
+                {usageSummary.messagesUsed} / {formatLimit(usageSummary.messagesLimit)}
               </span>
             </div>
             <div className="h-2 rounded-full bg-secondary/40">
@@ -516,7 +522,7 @@ export default function ProfessionalDashboardPage() {
             <div className="mb-1 flex items-center justify-between text-sm">
               <span>Audio</span>
               <span>
-                {usageSummary.audioUsed} / {usageSummary.audioLimit || "∞"}
+                {usageSummary.audioUsed} / {formatLimit(usageSummary.audioLimit, featureAccess.voiceEnabled)}
               </span>
             </div>
             <div className="h-2 rounded-full bg-secondary/40">
@@ -536,7 +542,7 @@ export default function ProfessionalDashboardPage() {
             <div className="mb-1 flex items-center justify-between text-sm">
               <span>Automatizaciones</span>
               <span>
-                {usageSummary.automationsUsed} / {usageSummary.automationsLimit || "∞"}
+                {usageSummary.automationsUsed} / {formatLimit(usageSummary.automationsLimit)}
               </span>
             </div>
             <div className="h-2 rounded-full bg-secondary/40">
@@ -597,7 +603,10 @@ export default function ProfessionalDashboardPage() {
                 <p className="mt-1 text-sm text-muted-foreground">{item.state.message}</p>
 
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Consumo actual: {item.used} / {item.limit || "∞"}
+                  Consumo actual: {item.used} / {formatLimit(
+                    item.limit,
+                    item.label !== "Audio" || featureAccess.voiceEnabled
+                  )}
                 </p>
               </div>
             ))}

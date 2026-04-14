@@ -16,6 +16,14 @@ type ClientRow = {
   plan_status: string | null
   status: string | null
   created_at: string
+  subscription_started_at: string | null
+  current_period_end: string | null
+  latest_payment_at: string | null
+  messages_used: number
+  audio_minutes_used: number
+  automations_used: number
+  storage_used_mb: number
+  docs_count: number
 }
 
 type PaymentRow = {
@@ -51,6 +59,18 @@ type SubscriptionRow = {
   current_period_end: string | null
   created_at: string
 }
+
+type OwnerActivityEntry = {
+  id: string
+  action: "plan_change" | "status_change"
+  clientId: string
+  clientName: string
+  previousValue: string | null
+  nextValue: string | null
+  createdAt: string
+}
+
+const OWNER_ACTIVITY_PREF_KEY = "owner_console_activity"
 
 class HttpError extends Error {
   status: number
@@ -131,11 +151,35 @@ async function requireOwner(request: Request) {
   return { admin, authUser: authData.user, ownerClientId: clientId }
 }
 
+async function loadUsageRows(admin: ReturnType<typeof getAdminClient>) {
+  const period = new Date().toISOString().slice(0, 7).replace("-", "")
+
+  const runtimeRes = await admin
+    .from("usage_monthly")
+    .select("client_id, messages_used, audio_minutes_used, automations_used, storage_used_mb, docs_count")
+    .eq("period_month", period)
+
+  if (!runtimeRes.error) {
+    return runtimeRes.data || []
+  }
+
+  const legacyRes = await admin
+    .from("usage_monthly")
+    .select("client_id, messages_used, audio_minutes_used, automations_used, storage_used_mb, docs_count")
+    .eq("period_yyyymm", period)
+
+  if (legacyRes.error) {
+    throw new HttpError(500, legacyRes.error.message)
+  }
+
+  return legacyRes.data || []
+}
+
 export async function GET(request: Request) {
   try {
-    const { admin, authUser } = await requireOwner(request)
+    const { admin, authUser, ownerClientId } = await requireOwner(request)
 
-    const [clientsRes, paymentsRes, subscriptionsRes] = await Promise.all([
+    const [clientsRes, paymentsRes, subscriptionsRes, usageRows, ownerActivityPrefRes] = await Promise.all([
       admin
         .from("clients")
         .select("id, name, email, phone, country_code, city, timezone, plan_code, plan_status, status, created_at")
@@ -150,26 +194,74 @@ export async function GET(request: Request) {
         .from("subscriptions")
         .select("id, client_id, plan_code, status, current_period_start, current_period_end, started_at, created_at")
         .order("created_at", { ascending: false })
-        .limit(100),
+        .limit(200),
+      loadUsageRows(admin),
+      admin
+        .from("client_preferences")
+        .select("pref_value")
+        .eq("client_id", ownerClientId)
+        .eq("pref_key", OWNER_ACTIVITY_PREF_KEY)
+        .maybeSingle(),
     ])
 
     if (clientsRes.error) throw new HttpError(500, clientsRes.error.message)
     if (paymentsRes.error) throw new HttpError(500, paymentsRes.error.message)
     if (subscriptionsRes.error) throw new HttpError(500, subscriptionsRes.error.message)
 
-    const clients: ClientRow[] = ((clientsRes.data || []) as any[]).map((row) => ({
-      id: String(row.id),
-      name: row.name ?? null,
-      email: row.email ?? null,
-      phone: row.phone ?? null,
-      country_code: row.country_code ?? null,
-      city: row.city ?? null,
-      timezone: row.timezone ?? null,
-      plan_code: row.plan_code ?? null,
-      plan_status: row.plan_status ?? null,
-      status: row.status ?? null,
-      created_at: row.created_at,
-    }))
+    if (ownerActivityPrefRes.error) throw new HttpError(500, ownerActivityPrefRes.error.message)
+
+    const usageMap = new Map(
+      ((usageRows || []) as any[]).map((row) => [
+        String(row.client_id),
+        {
+          messages_used: Number(row.messages_used || 0),
+          audio_minutes_used: Number(row.audio_minutes_used || 0),
+          automations_used: Number(row.automations_used || 0),
+          storage_used_mb: Number(row.storage_used_mb || 0),
+          docs_count: Number(row.docs_count || 0),
+        },
+      ])
+    )
+
+    const latestSubscriptionByClient = new Map<string, any>()
+    ;((subscriptionsRes.data || []) as any[]).forEach((row) => {
+      const key = String(row.client_id)
+      if (!latestSubscriptionByClient.has(key)) latestSubscriptionByClient.set(key, row)
+    })
+
+    const latestPaymentByClient = new Map<string, any>()
+    ;((paymentsRes.data || []) as any[]).forEach((row) => {
+      const key = String(row.client_id)
+      if (!latestPaymentByClient.has(key)) latestPaymentByClient.set(key, row)
+    })
+
+    const clients: ClientRow[] = ((clientsRes.data || []) as any[]).map((row) => {
+      const usage = usageMap.get(String(row.id))
+      const latestSubscription = latestSubscriptionByClient.get(String(row.id))
+      const latestPayment = latestPaymentByClient.get(String(row.id))
+
+      return {
+        id: String(row.id),
+        name: row.name ?? null,
+        email: row.email ?? null,
+        phone: row.phone ?? null,
+        country_code: row.country_code ?? null,
+        city: row.city ?? null,
+        timezone: row.timezone ?? null,
+        plan_code: row.plan_code ?? null,
+        plan_status: row.plan_status ?? null,
+        status: row.status ?? null,
+        created_at: row.created_at,
+        subscription_started_at: latestSubscription?.current_period_start ?? latestSubscription?.started_at ?? null,
+        current_period_end: latestSubscription?.current_period_end ?? null,
+        latest_payment_at: latestPayment?.paid_at ?? latestPayment?.created_at ?? null,
+        messages_used: usage?.messages_used ?? 0,
+        audio_minutes_used: usage?.audio_minutes_used ?? 0,
+        automations_used: usage?.automations_used ?? 0,
+        storage_used_mb: usage?.storage_used_mb ?? 0,
+        docs_count: usage?.docs_count ?? 0,
+      }
+    })
 
     const clientMap = new Map(clients.map((client) => [client.id, client]))
 
@@ -212,6 +304,17 @@ export async function GET(request: Request) {
         created_at: row.created_at,
       }
     })
+
+    let activityLog: OwnerActivityEntry[] = []
+    try {
+      const raw = String(ownerActivityPrefRes.data?.pref_value || "[]")
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        activityLog = parsed.slice(0, 100)
+      }
+    } catch {
+      activityLog = []
+    }
 
     const approvedPayments = payments.filter((payment) =>
       ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
@@ -259,6 +362,7 @@ export async function GET(request: Request) {
       payments,
       subscriptions,
       clients,
+      activityLog,
     })
   } catch (error: any) {
     const status = typeof error?.status === "number" ? error.status : 500
