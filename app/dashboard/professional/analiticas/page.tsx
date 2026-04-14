@@ -8,9 +8,9 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { getDefaultOwnerCatalog, type OwnerCatalogAddon } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type EffectiveLimits = {
@@ -105,8 +105,10 @@ export default function ProfessionalAnalyticsPage() {
   const [clientId, setClientId]       = useState("")
   const [limits, setLimits]           = useState<EffectiveLimits | null>(null)
   const [addons, setAddons]           = useState<AddOnRow[]>([])
+  const [catalogAddons, setCatalogAddons] = useState<OwnerCatalogAddon[]>(
+    getDefaultOwnerCatalog().addons.filter((addon) => addon.active !== false)
+  )
   const [addonLoading, setAddonLoading] = useState<string | null>(null)
-  const { pricing } = usePricingCurrency()
   const [addonError, setAddonError]   = useState("")
   const [documentsCount, setDocumentsCount] = useState(0)
   const [contactsCount, setContactsCount]   = useState(0)
@@ -162,6 +164,23 @@ export default function ProfessionalAnalyticsPage() {
         .order("created_at", { ascending: false })
       setAddons((addonsData || []) as AddOnRow[])
 
+      try {
+        const catalogResponse = await fetch("/api/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const catalogPayload = await catalogResponse.json().catch(() => ({}))
+        if (catalogResponse.ok && catalogPayload?.ok) {
+          setCatalogAddons(
+            ((catalogPayload.catalog?.addons || []) as OwnerCatalogAddon[]).filter(
+              (addon) => addon.active !== false
+            )
+          )
+        }
+      } catch (catalogError) {
+        console.warn("Error cargando catálogo dinámico:", catalogError)
+      }
+
       // Entity counts
       const [docsRes, contactsRes, casesRes, tasksRes, recurringRes, notifRes] =
         await Promise.all([
@@ -204,6 +223,24 @@ export default function ProfessionalAnalyticsPage() {
     { label: "Automatizaciones",     value: activeRecurringCount,            helper: "tareas recurrentes activas",   icon: Zap,          color: "#8B5CF6" },
     { label: "Notificaciones",       value: unreadNotifications,             helper: "sin leer",                     icon: Bell,         color: "#14B8A6" },
   ], [usage, documentsCount, contactsCount, casesCount, tasksCount, activeRecurringCount, unreadNotifications])
+
+  const catalogAddonsMap = useMemo(() => {
+    return new Map(catalogAddons.map((addon) => [addon.code, addon]))
+  }, [catalogAddons])
+
+  const formatAddonPrice = (addon: OwnerCatalogAddon) => {
+    const currency = String(addon.currency || "USD").toUpperCase()
+    try {
+      return new Intl.NumberFormat(currency === "PEN" ? "es-PE" : "en-US", {
+        style: "currency",
+        currency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(Number(addon.price || 0))
+    } catch {
+      return `${currency} ${addon.price || 0}`
+    }
+  }
 
   const handleAddonCheckout = async (addonCode: string) => {
     if (!clientId) return
@@ -320,32 +357,43 @@ export default function ProfessionalAnalyticsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {addons.map((addon) => (
-                <div key={addon.id} className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-[#F0FDF4]/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#10B981]/10 flex items-center justify-center">
-                      <Star className="w-4 h-4 text-[#10B981]" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm text-[#0F1F63]">{addon.addon_type || addon.code}</p>
-                      <div className="flex gap-2 mt-0.5 text-xs text-muted-foreground">
-                        {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
-                        {addon.storage_gb_extra    ? <span>+{addon.storage_gb_extra} GB</span>         : null}
-                        {addon.enables_voice       ? <span>🎙️ Voz</span>                              : null}
-                        {addon.enables_google      ? <span>📁 Google</span>                            : null}
+              {addons.map((addon) => {
+                const catalogAddon = catalogAddonsMap.get(addon.code)
+                const addonName = catalogAddon?.name || addon.addon_type || addon.code
+
+                return (
+                  <div
+                    key={addon.id}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-[#F0FDF4]/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-[#10B981]/10 flex items-center justify-center">
+                        <Star className="w-4 h-4 text-[#10B981]" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm text-[#0F1F63]">{addonName}</p>
+                        <div className="flex gap-2 mt-0.5 text-xs text-muted-foreground">
+                          {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
+                          {addon.storage_gb_extra ? <span>+{addon.storage_gb_extra} GB</span> : null}
+                          {addon.enables_voice ? <span>🎙️ Voz</span> : null}
+                          {addon.enables_google ? <span>📁 Google</span> : null}
+                        </div>
                       </div>
                     </div>
+                    <div className="text-right">
+                      <span className="text-xs font-medium px-2 py-1 rounded-lg bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20">
+                        Activo
+                      </span>
+                      {addon.expires_at ? (
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 justify-end">
+                          <Clock className="w-3 h-3" />
+                          Vence {new Date(addon.expires_at).toLocaleDateString("es-PE")}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-medium px-2 py-1 rounded-lg bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20">Activo</span>
-                    {addon.expires_at && (
-                      <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 justify-end">
-                        <Clock className="w-3 h-3" />Vence {new Date(addon.expires_at).toLocaleDateString("es-PE")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -356,26 +404,45 @@ export default function ProfessionalAnalyticsPage() {
             <h3 className="font-semibold text-[#0F1F63]">Amplía tu plan</h3>
           </div>
           <div className="grid md:grid-cols-3 gap-3">
-            {[
-              { code: "addon_voice_100", icon: "🎙️", name: "Minutos de voz", desc: "+100 min para audios y llamadas", priceUSD: 10, pricePEN: 50, color: "#7C3AED" },
-              { code: "addon_storage_5gb", icon: "💾", name: "Almacenamiento", desc: "+10 GB para documentos",         priceUSD: 5,  pricePEN: 25, color: "#3B82F6" },
-              { code: "addon_google",      icon: "📁", name: "Google Suite",   desc: "Drive, Gmail y Calendar",        priceUSD: 8,  pricePEN: 40, color: "#34A853" },
-            ].map(addon => {
-              const displayPrice = pricing.currency === "PEN" ? addon.pricePEN : addon.priceUSD
-              const displayLabel = pricing.fmt(displayPrice)
+            {catalogAddons.map((addon) => {
+              const displayLabel = formatAddonPrice(addon)
               const isLoading = addonLoading === addon.code
+              const color =
+                addon.enables_google
+                  ? "#34A853"
+                  : addon.enables_voice
+                    ? "#7C3AED"
+                    : addon.extra_storage_gb > 0
+                      ? "#3B82F6"
+                      : "#F59E0B"
+              const accentIcon =
+                addon.enables_google
+                  ? "📁"
+                  : addon.enables_voice
+                    ? "🎙️"
+                    : addon.extra_storage_gb > 0
+                      ? "💾"
+                      : "✨"
               return (
                 <div key={addon.code} className="rounded-xl border border-border bg-background p-4 hover:border-[#3B82F6]/30 hover:shadow-sm transition-all">
-                  <div className="text-2xl mb-2">{addon.icon}</div>
+                  <div className="text-2xl mb-2">{accentIcon}</div>
                   <p className="font-semibold text-sm text-[#0F1F63]">{addon.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{addon.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                    {addon.description}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                    {addon.extra_minutes > 0 ? <span>+{addon.extra_minutes} min</span> : null}
+                    {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB</span> : null}
+                    {addon.extra_messages > 0 ? <span>+{addon.extra_messages} msgs</span> : null}
+                    {addon.extra_automations > 0 ? <span>+{addon.extra_automations} auto</span> : null}
+                  </div>
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-base font-bold text-[#0F1F63]">{displayLabel}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
                     <button
                       onClick={() => handleAddonCheckout(addon.code)}
                       disabled={isLoading}
                       className="h-7 px-3 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-1.5"
-                      style={{ backgroundColor: addon.color }}
+                      style={{ backgroundColor: color }}
                     >
                       {isLoading && (
                         <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">

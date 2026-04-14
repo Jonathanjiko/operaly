@@ -8,7 +8,8 @@ import {
   Check, Lock, ShieldCheck, Sparkles, ArrowRight,
   RefreshCw, AlertCircle, CreditCard, CheckCircle2, Star,
 } from "lucide-react"
-import { getPlanByCode, type OperalyPlanCode, OPERLAY_PLANS } from "@/lib/plans"
+import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
+import { getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 type PaymentProvider = "mercadopago" | "stripe"
@@ -55,9 +56,13 @@ export default function IniciarPagoClient() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
+  const [catalogPlans, setCatalogPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
 
   const { pricing, loading: pricingLoading, isPeru } = usePricingCurrency()
-  const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
+  const selectedPlan = useMemo(
+    () => catalogPlans.find((entry) => entry.code === plan) || getPlanByCode(plan),
+    [catalogPlans, plan]
+  )
 
   // Display price for selected plan
   const displayPrice = selectedPlan
@@ -71,6 +76,17 @@ export default function IniciarPagoClient() {
 
   useEffect(() => {
     const load = async () => {
+      try {
+        const catalogResponse = await fetch("/api/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const catalogPayload = await catalogResponse.json().catch(() => ({}))
+        if (catalogResponse.ok && catalogPayload?.catalog?.plans) {
+          setCatalogPlans(catalogPayload.catalog.plans as OwnerCatalogPlan[])
+        }
+      } catch {}
+
       // Try to get email from multiple localStorage sources
       const keys = ["operaly_pending_signup", "operaly_assistant_profile", "operaly_register_auth"]
       let email = ""
@@ -192,7 +208,7 @@ export default function IniciarPagoClient() {
             {/* Plan cards */}
             <div className="space-y-3">
               {PAID_PLANS.map(code => {
-                const p = getPlanByCode(code)
+                const p = catalogPlans.find((entry) => entry.code === code) || getPlanByCode(code)
                 if (!p) return null
                 const isSelected = plan === code
                 const price = pricing.display[code as keyof typeof pricing.display] ?? p.price

@@ -15,13 +15,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { getDefaultOwnerCatalog, type OwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
 import {
   getDisplayPlanName,
   getDisplayPlanPeriodicity,
-  getDisplayPlanPrice,
 } from "@/lib/plans"
 
 type ClientRow = {
@@ -99,13 +99,6 @@ type AuthMetadata = {
 
 const BILLING_CURRENCY_CODE = "PEN"
 
-const PLAN_LABELS: Record<string, string> = {
-  trial: "Trial",
-  core: "Core",
-  pro: "Pro",
-  pro_plus: "Pro Plus",
-}
-
 const LANGUAGE_OPTIONS = [
   { code: "es", label: "Español" },
   { code: "en", label: "English" },
@@ -113,12 +106,6 @@ const LANGUAGE_OPTIONS = [
   { code: "fr", label: "Français" },
   { code: "de", label: "Deutsch" },
   { code: "it", label: "Italiano" },
-]
-
-const PAID_PLANS = [
-  { code: "core", label: "Core" },
-  { code: "pro", label: "Pro" },
-  { code: "pro_plus", label: "Pro Plus" },
 ]
 
 export default function ProfessionalSettingsPage() {
@@ -148,6 +135,7 @@ export default function ProfessionalSettingsPage() {
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [catalog, setCatalog] = useState<OwnerCatalog>(getDefaultOwnerCatalog())
 
   // Voice settings state
   const [voiceSettings, setVoiceSettings] = useState<any>(null)
@@ -169,7 +157,16 @@ export default function ProfessionalSettingsPage() {
 
   const effectivePlanCode = subscription?.plan_code || clientPlanCode || "trial"
   const effectivePlanStatus = subscription?.status || clientPlanStatus || "trialing"
-  const currentPlanLabel = getDisplayPlanName(effectivePlanCode) || PLAN_LABELS[effectivePlanCode] || effectivePlanCode
+  const effectivePlanCatalog = useMemo(
+    () => catalog.plans.find((plan) => plan.code === effectivePlanCode) || null,
+    [catalog, effectivePlanCode]
+  )
+  const paidPlans = useMemo(
+    () => catalog.plans.filter((plan) => plan.code !== "trial"),
+    [catalog]
+  )
+  const currentPlanLabel =
+    effectivePlanCatalog?.name || getDisplayPlanName(effectivePlanCode) || effectivePlanCode
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -198,6 +195,11 @@ export default function ProfessionalSettingsPage() {
     } catch {
       return `${safeCode} ${numericAmount}`
     }
+  }
+
+  const formatPlanDisplayPrice = (plan: OwnerCatalogPlan | null) => {
+    if (!plan) return formatMoney(BILLING_CURRENCY_CODE, 0)
+    return formatMoney(plan.currency || BILLING_CURRENCY_CODE, plan.price)
   }
 
   const getPlanStatusBadgeClass = (status: string | null | undefined) => {
@@ -418,6 +420,19 @@ export default function ProfessionalSettingsPage() {
       }
 
       setPayments((paymentsData || []) as PaymentRow[])
+
+      try {
+        const catalogResponse = await fetch("/api/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const catalogPayload = await catalogResponse.json().catch(() => ({}))
+        if (catalogResponse.ok && catalogPayload?.catalog) {
+          setCatalog(catalogPayload.catalog as OwnerCatalog)
+        }
+      } catch (catalogError) {
+        console.warn("catalog query error:", catalogError)
+      }
 
       // Load voice settings
       try {
@@ -871,7 +886,7 @@ export default function ProfessionalSettingsPage() {
                     Importe
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {formatMoney(BILLING_CURRENCY_CODE, getDisplayPlanPrice(effectivePlanCode))}
+                    {formatPlanDisplayPrice(effectivePlanCatalog)}
                   </p>
                 </div>
 
@@ -974,7 +989,7 @@ export default function ProfessionalSettingsPage() {
             </div>
 
             <div className="grid gap-4">
-              {PAID_PLANS.map((plan) => {
+              {paidPlans.map((plan) => {
                 const isCurrent = effectivePlanCode === plan.code
 
                 return (
@@ -988,12 +1003,12 @@ export default function ProfessionalSettingsPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="font-semibold text-[#0F1F63]">{plan.label}</p>
+                        <p className="font-semibold text-[#0F1F63]">{plan.name}</p>
                         <p className="text-sm text-muted-foreground mt-1">
                           Código del plan: {plan.code}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Cobro {getDisplayPlanPeriodicity(plan.code)} en {BILLING_CURRENCY_CODE}
+                          {formatPlanDisplayPrice(plan)} · Cobro {getDisplayPlanPeriodicity(plan.code)}
                         </p>
                       </div>
 

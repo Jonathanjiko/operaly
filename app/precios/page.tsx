@@ -1,18 +1,37 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Check, Sparkles, Zap } from "lucide-react"
-import { OPERLAY_PLANS } from "@/lib/plans"
+import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
 
 export default function PricingPage() {
   const router = useRouter()
+  const [plans, setPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
 
   const goToRegister = (planCode: string) => {
     router.push(`/register?plan=${planCode}`)
   }
+
+  useEffect(() => {
+    const loadCatalog = async () => {
+      try {
+        const response = await fetch("/api/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (response.ok && payload?.catalog?.plans) {
+          setPlans(payload.catalog.plans as OwnerCatalogPlan[])
+        }
+      } catch {}
+    }
+
+    void loadCatalog()
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,16 +73,16 @@ export default function PricingPage() {
 
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            {OPERLAY_PLANS.map((plan) => (
+            {plans.map((plan) => (
               <div
                 key={plan.code}
                 className={`bg-card rounded-3xl border p-8 relative ${
-                  plan.popular
+                  plan.code === "pro"
                     ? "border-[#34D399] shadow-xl shadow-[#34D399]/10"
                     : "border-border"
                 }`}
               >
-                {plan.popular && (
+                {plan.code === "pro" && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                     <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-[#34D399] to-[#06B6D4] text-white text-sm font-medium">
                       <Zap className="w-4 h-4" />
@@ -96,11 +115,11 @@ export default function PricingPage() {
                 <Button
                   onClick={() => goToRegister(plan.code)}
                   className={`w-full rounded-xl h-12 ${
-                    plan.popular
+                    plan.code === "pro"
                       ? "bg-gradient-to-r from-[#34D399] to-[#06B6D4] hover:opacity-90 text-white"
                       : ""
                   }`}
-                  variant={plan.popular ? "default" : "outline"}
+                  variant={plan.code === "pro" ? "default" : "outline"}
                 >
                   {plan.cta}
                 </Button>

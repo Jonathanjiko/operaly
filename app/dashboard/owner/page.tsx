@@ -19,14 +19,18 @@ import {
   Settings,
   ArrowRight,
   Lock,
+  LogOut,
   X,
   CalendarDays,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import type { OwnerCatalog, OwnerTargets } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getDisplayPlanName } from "@/lib/plans"
+import OwnerCatalogManager from "./_components/OwnerCatalogManager"
 import OwnerPaymentsMetricsPanel from "./_components/OwnerPaymentsMetricsPanel"
+import OwnerTargetsManager from "./_components/OwnerTargetsManager"
 
 type SummaryRow = {
   total_clients: number
@@ -302,7 +306,13 @@ export default function OwnerDashboardPage() {
   const [notifications, setNotifications] = useState<Array<{id:string;title:string;body:string;amount_pen?:number;created_at:string;read:boolean}>>([])
   const [showNotifs, setShowNotifs] = useState(false)
   const [activityLog, setActivityLog] = useState<OwnerActivityEntry[]>([])
-  const [profitTargetPen, setProfitTargetPen] = useState(4000)
+  const [catalog, setCatalog] = useState<OwnerCatalog | null>(null)
+  const [targets, setTargets] = useState<OwnerTargets | null>(null)
+  const [catalogSaving, setCatalogSaving] = useState(false)
+  const [targetsSaving, setTargetsSaving] = useState(false)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [catalogNotice, setCatalogNotice] = useState("")
+  const [targetsNotice, setTargetsNotice] = useState("")
 
   // Revenue always shown in PEN (what MP deposits)
   const formatMoney = (amount: number | null | undefined, currency = "PEN") => {
@@ -476,16 +486,36 @@ export default function OwnerDashboardPage() {
       })
 
       const headers = await getAuthHeaders()
-      const response = await fetch("/api/owner/dashboard", {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      })
+      const [dashboardResponse, catalogResponse, targetsResponse] = await Promise.all([
+        fetch("/api/owner/dashboard", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+        fetch("/api/owner/catalog", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+        fetch("/api/owner/targets", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+      ])
 
-      const payload = await response.json().catch(() => ({}))
+      const payload = await dashboardResponse.json().catch(() => ({}))
+      const catalogPayload = await catalogResponse.json().catch(() => ({}))
+      const targetsPayload = await targetsResponse.json().catch(() => ({}))
 
-      if (!response.ok || !payload?.ok) {
+      if (!dashboardResponse.ok || !payload?.ok) {
         throw new Error(payload?.error || "No se pudo cargar el panel owner.")
+      }
+      if (!catalogResponse.ok || !catalogPayload?.ok) {
+        throw new Error(catalogPayload?.error || "No se pudo cargar el catálogo owner.")
+      }
+      if (!targetsResponse.ok || !targetsPayload?.ok) {
+        throw new Error(targetsPayload?.error || "No se pudieron cargar las metas owner.")
       }
 
       setSummary((payload.summary || null) as SummaryRow | null)
@@ -493,6 +523,8 @@ export default function OwnerDashboardPage() {
       setSubscriptions((payload.subscriptions || []) as SubscriptionRow[])
       setClients((payload.clients || []) as ClientRow[])
       setActivityLog((payload.activityLog || []) as OwnerActivityEntry[])
+      setCatalog((catalogPayload.catalog || null) as OwnerCatalog | null)
+      setTargets((targetsPayload.targets || null) as OwnerTargets | null)
 
       const nextClients = (payload.clients || []) as ClientRow[]
       if (nextClients.length > 0) {
@@ -512,6 +544,8 @@ export default function OwnerDashboardPage() {
       setSubscriptions([])
       setClients([])
       setActivityLog([])
+      setCatalog(null)
+      setTargets(null)
       setSelectedClientId("")
     } finally {
       setLoading(false)
@@ -557,23 +591,6 @@ export default function OwnerDashboardPage() {
 
     return () => { supabase.removeChannel(channel) }
   }, [])
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("owner_profit_target_pen")
-      if (!raw) return
-      const parsed = Number(raw)
-      if (Number.isFinite(parsed) && parsed > 0) {
-        setProfitTargetPen(parsed)
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("owner_profit_target_pen", String(profitTargetPen))
-    } catch {}
-  }, [profitTargetPen])
 
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
     const loadingKey = `plan:${clientId}:${planCode}`
@@ -634,6 +651,147 @@ export default function OwnerDashboardPage() {
 
   const openProfessionalSettings = () => {
     window.open("/dashboard/professional/configuracion", "_blank", "noopener,noreferrer")
+  }
+
+  const handleOwnerLogout = async () => {
+    setSessionBusy(true)
+    try {
+      await supabase.auth.signOut()
+    } finally {
+      window.location.href = "/login"
+    }
+  }
+
+  const handlePlanPriceChange = (planCode: string, field: "price", value: number) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        plans: current.plans.map((plan) =>
+          plan.code === planCode ? { ...plan, [field]: Math.max(0, value) } : plan
+        ),
+      }
+    })
+  }
+
+  const handlePlanLimitChange = (planCode: string, limitKey: string, value: number) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        plans: current.plans.map((plan) =>
+          plan.code === planCode
+            ? {
+                ...plan,
+                limits: {
+                  ...plan.limits,
+                  [limitKey]: Math.max(0, value),
+                },
+              }
+            : plan
+        ),
+      }
+    })
+  }
+
+  const handleAddonFieldChange = (
+    addonCode: string,
+    field:
+      | "price"
+      | "name"
+      | "description"
+      | "extra_messages"
+      | "extra_minutes"
+      | "extra_storage_gb"
+      | "extra_automations",
+    value: string | number
+  ) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        addons: current.addons.map((addon) =>
+          addon.code === addonCode
+            ? {
+                ...addon,
+                [field]: typeof value === "number" ? Math.max(0, value) : value,
+              }
+            : addon
+        ),
+      }
+    })
+  }
+
+  const saveCatalog = async () => {
+    if (!catalog) return
+    setCatalogSaving(true)
+    setCatalogNotice("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/catalog", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ catalog }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo guardar el catálogo owner.")
+      }
+      setCatalog((payload.catalog || catalog) as OwnerCatalog)
+      setCatalogNotice("Catálogo guardado correctamente.")
+    } catch (error: any) {
+      setCatalogNotice(error.message || "No se pudo guardar el catálogo owner.")
+    } finally {
+      setCatalogSaving(false)
+    }
+  }
+
+  const handleTargetsChange = (
+    windowKey: "week" | "month",
+    field: "profitPen" | "salesPen" | "subscribers",
+    value: number
+  ) => {
+    setTargets((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        [windowKey]: {
+          ...current[windowKey],
+          [field]: Math.max(0, value),
+        },
+      }
+    })
+  }
+
+  const saveTargets = async () => {
+    if (!targets) return
+    setTargetsSaving(true)
+    setTargetsNotice("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/targets", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ targets }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudieron guardar las metas owner.")
+      }
+      setTargets((payload.targets || targets) as OwnerTargets)
+      setTargetsNotice("Metas owner guardadas correctamente.")
+    } catch (error: any) {
+      setTargetsNotice(error.message || "No se pudieron guardar las metas owner.")
+    } finally {
+      setTargetsSaving(false)
+    }
+  }
+
+  const activeTargetWindow: "week" | "month" = timeFilter === "month" ? "month" : "week"
+  const activeTargets = targets?.[activeTargetWindow] || {
+    profitPen: 4000,
+    salesPen: 12000,
+    subscribers: 12,
   }
 
   const filteredPayments = useMemo(() => {
@@ -767,7 +925,7 @@ export default function OwnerDashboardPage() {
     const totalCostsPen = fixedCostsPen + variableCostsPen
     const profitPen = approvedRevenuePen - totalCostsPen
     const breakEvenPen = fixedCostsPen / Math.max(0.0001, 1 - MP_FEE_PCT)
-    const targetRevenuePen = breakEvenPen + profitTargetPen
+    const targetRevenuePen = Math.max(activeTargets.salesPen, breakEvenPen)
     const paidClients = filteredClients.filter((client) =>
       ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())
     ).length
@@ -785,10 +943,12 @@ export default function OwnerDashboardPage() {
       paidClients,
       totalClients,
       subscriberPct: clampPercentage((paidClients / totalClients) * 100),
-      targetProfitPct: clampPercentage((profitPen / Math.max(profitTargetPen, 1)) * 100),
+      subscriberTargetPct: clampPercentage((paidClients / Math.max(activeTargets.subscribers, 1)) * 100),
+      targetProfitPct: clampPercentage((Math.max(profitPen, 0) / Math.max(activeTargets.profitPen, 1)) * 100),
+      salesTargetPct: clampPercentage((approvedRevenuePen / Math.max(activeTargets.salesPen, 1)) * 100),
       breakEvenPct: clampPercentage((approvedRevenuePen / Math.max(breakEvenPen, 1)) * 100),
     }
-  }, [filteredClients, filteredOverview, profitTargetPen])
+  }, [activeTargets, filteredClients, filteredOverview])
 
   const filteredPlanDistribution = useMemo(() => {
     return filteredClients.reduce(
@@ -899,6 +1059,23 @@ export default function OwnerDashboardPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                  onClick={openProfessionalSettings}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configuración
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                  onClick={handleOwnerLogout}
+                  disabled={sessionBusy}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  {sessionBusy ? "Saliendo..." : "Cerrar sesión"}
+                </Button>
                 {/* Realtime notification bell */}
                 <div className="relative">
                   <Button variant="secondary" size="icon"
@@ -1138,11 +1315,112 @@ export default function OwnerDashboardPage() {
                   <p className="text-2xl font-semibold text-[#0F1F63]">Activos</p>
                 </div>
               </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lock className="h-5 w-5 text-[#0F1F63]" />
+                    <h3 className="text-xl font-semibold text-[#0F1F63]">
+                      Cuenta y seguridad
+                    </h3>
+                  </div>
+                  <p className="text-sm leading-6 text-slate-500">
+                    Mantén la sesión owner bajo control, entra a configuración cuando lo
+                    necesites y sal de forma segura desde este mismo panel.
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl"
+                      onClick={openProfessionalSettings}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      Abrir configuración
+                    </Button>
+                    <Button
+                      className="rounded-2xl bg-[#0F1F63] text-white hover:bg-[#132672]"
+                      onClick={handleOwnerLogout}
+                      disabled={sessionBusy}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      {sessionBusy ? "Cerrando sesión..." : "Cerrar sesión owner"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Wallet className="h-5 w-5 text-[#10B981]" />
+                    <h3 className="text-xl font-semibold text-[#0F1F63]">
+                      Estado ejecutivo
+                    </h3>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">meta activa</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargetWindow === "week" ? "Semana" : "Mes"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ventas objetivo</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {fmtPEN(activeTargets.salesPen)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">suscriptores objetivo</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargets.subscribers}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <OwnerCatalogManager
+                catalog={catalog}
+                saving={catalogSaving}
+                onPlanFieldChange={handlePlanPriceChange}
+                onPlanLimitChange={handlePlanLimitChange}
+                onAddonFieldChange={handleAddonFieldChange}
+                onSave={saveCatalog}
+              />
+              {catalogNotice ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    catalogNotice.toLowerCase().includes("no se pudo")
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {catalogNotice}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {activeSection === "overview" ? (
             <div className="space-y-8">
+              <OwnerTargetsManager
+                targets={targets}
+                saving={targetsSaving}
+                activeWindow={activeTargetWindow}
+                onChange={handleTargetsChange}
+                onSave={saveTargets}
+              />
+              {targetsNotice ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    targetsNotice.toLowerCase().includes("no se pudo")
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {targetsNotice}
+                </div>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {overviewCards.map((card) => (
                   <MetricCard key={card.title} {...card} />
@@ -1160,42 +1438,35 @@ export default function OwnerDashboardPage() {
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        utilidad objetivo
+                        ventana activa
                       </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-lg font-semibold text-[#0F1F63]">S/</span>
-                        <Input
-                          value={profitTargetPen}
-                          onChange={(e) => setProfitTargetPen(Math.max(0, Number(e.target.value || 0)))}
-                          type="number"
-                          min={0}
-                          className="h-10 w-36 rounded-xl border-slate-200 bg-white"
-                        />
-                      </div>
+                      <p className="mt-1 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargetWindow === "week" ? "Semana" : "Mes"}
+                      </p>
                     </div>
                   </div>
 
                   <div className="mt-6 grid gap-4 lg:grid-cols-3">
                     <RadialGauge
-                      label="Suscriptores pagos"
+                      label="Meta de suscriptores"
                       value={filteredBusinessMetrics.paidClients}
-                      max={filteredBusinessMetrics.totalClients}
+                      max={Math.max(activeTargets.subscribers, 1)}
                       tone="blue"
-                      detail={`${filteredClients.length} clientes visibles en este filtro`}
+                      detail={`Penetración actual: ${Math.round(filteredBusinessMetrics.subscriberPct)}%`}
                     />
                     <RadialGauge
                       label="Meta de utilidad"
                       value={Math.max(filteredBusinessMetrics.profitPen, 0)}
-                      max={Math.max(profitTargetPen, 1)}
+                      max={Math.max(activeTargets.profitPen, 1)}
                       tone="emerald"
                       detail={`Utilidad estimada: ${fmtPEN(filteredBusinessMetrics.profitPen)}`}
                     />
                     <RadialGauge
-                      label="Punto de equilibrio"
+                      label="Meta de ventas"
                       value={filteredBusinessMetrics.approvedRevenuePen}
-                      max={Math.max(filteredBusinessMetrics.breakEvenPen, 1)}
+                      max={Math.max(activeTargets.salesPen, 1)}
                       tone="amber"
-                      detail={`Break-even: ${fmtPEN(filteredBusinessMetrics.breakEvenPen)}`}
+                      detail={`Break-even operativo: ${fmtPEN(filteredBusinessMetrics.breakEvenPen)}`}
                     />
                   </div>
 
@@ -1207,21 +1478,42 @@ export default function OwnerDashboardPage() {
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos fijos</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ventas objetivo</p>
                       <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
-                        {fmtPEN(filteredBusinessMetrics.fixedCostsPen)}
+                        {fmtPEN(activeTargets.salesPen)}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos variables</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">utilidad objetivo</p>
                       <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
-                        {fmtPEN(filteredBusinessMetrics.variableCostsPen)}
+                        {fmtPEN(activeTargets.profitPen)}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">utilidad estimada</p>
-                      <p className={`mt-2 text-2xl font-semibold ${filteredBusinessMetrics.profitPen >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {fmtPEN(filteredBusinessMetrics.profitPen)}
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">suscriptores objetivo</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                        {activeTargets.subscribers}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-blue-500">avance suscriptores</p>
+                      <p className="mt-2 text-2xl font-semibold text-blue-900">
+                        {Math.round(filteredBusinessMetrics.subscriberTargetPct)}%
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-500">avance utilidad</p>
+                      <p className="mt-2 text-2xl font-semibold text-emerald-900">
+                        {Math.round(filteredBusinessMetrics.targetProfitPct)}%
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-amber-500">avance ventas</p>
+                      <p className="mt-2 text-2xl font-semibold text-amber-900">
+                        {Math.round(filteredBusinessMetrics.salesTargetPct)}%
                       </p>
                     </div>
                   </div>
@@ -1251,9 +1543,15 @@ export default function OwnerDashboardPage() {
                   <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400">proyeccion rapida</p>
                     <p className="mt-2 text-sm text-slate-600">
-                      Ingresos objetivo para lograr la utilidad meta:{" "}
+                      Ingresos objetivo activos para esta ventana:{" "}
                       <span className="font-semibold text-[#0F1F63]">
                         {fmtPEN(filteredBusinessMetrics.targetRevenuePen)}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Costos fijos visibles:{" "}
+                      <span className="font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.fixedCostsPen)}
                       </span>
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
