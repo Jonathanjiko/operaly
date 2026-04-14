@@ -7,10 +7,12 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Check, Sparkles, Zap } from "lucide-react"
 import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 export default function PricingPage() {
   const router = useRouter()
   const [plans, setPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
+  const { pricing, isPeru } = usePricingCurrency()
 
   const goToRegister = (planCode: string) => {
     router.push(`/register?plan=${planCode}`)
@@ -97,10 +99,15 @@ export default function PricingPage() {
 
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-4xl font-bold text-[#0F1F63]">
-                      {plan.currency} {plan.price}
+                      {pricing.formatCatalogMoney(plan.price, plan.currency)}
                     </span>
                     <span className="text-muted-foreground">/ mes</span>
                   </div>
+                  {!isPeru && plan.price > 0 && (
+                    <p className="mt-2 text-xs text-[#0369A1]">
+                      Cobro real en Mercado Pago: {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-3 mb-8">

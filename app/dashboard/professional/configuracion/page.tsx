@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 import { getDefaultOwnerCatalog, type OwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
@@ -109,6 +110,7 @@ const LANGUAGE_OPTIONS = [
 ]
 
 export default function ProfessionalSettingsPage() {
+  const { pricing, isPeru } = usePricingCurrency()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -198,8 +200,8 @@ export default function ProfessionalSettingsPage() {
   }
 
   const formatPlanDisplayPrice = (plan: OwnerCatalogPlan | null) => {
-    if (!plan) return formatMoney(BILLING_CURRENCY_CODE, 0)
-    return formatMoney(plan.currency || BILLING_CURRENCY_CODE, plan.price)
+    if (!plan) return pricing.formatPen(0)
+    return pricing.formatCatalogMoney(plan.price, plan.currency)
   }
 
   const getPlanStatusBadgeClass = (status: string | null | undefined) => {
@@ -888,6 +890,11 @@ export default function ProfessionalSettingsPage() {
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
                     {formatPlanDisplayPrice(effectivePlanCatalog)}
                   </p>
+                  {!isPeru && effectivePlanCatalog && (
+                    <p className="text-xs text-[#0369A1] mt-1">
+                      Cobro real {pricing.formatPen(pricing.toPenAmount(effectivePlanCatalog.price, effectivePlanCatalog.currency))}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -953,7 +960,7 @@ export default function ProfessionalSettingsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
-                          {formatMoney(BILLING_CURRENCY_CODE, payment.amount_usd)}
+                          {formatMoney(payment.currency || BILLING_CURRENCY_CODE, payment.amount_usd)}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
                           {payment.provider || "MercadoPago"}
@@ -1010,6 +1017,11 @@ export default function ProfessionalSettingsPage() {
                         <p className="text-sm text-muted-foreground mt-1">
                           {formatPlanDisplayPrice(plan)} · Cobro {getDisplayPlanPeriodicity(plan.code)}
                         </p>
+                        {!isPeru && (
+                          <p className="text-xs text-[#0369A1] mt-1">
+                            Mercado Pago debita {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                          </p>
+                        )}
                       </div>
 
                       <Button

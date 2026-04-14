@@ -64,15 +64,10 @@ export default function IniciarPagoClient() {
     [catalogPlans, plan]
   )
 
-  // Display price for selected plan
-  const displayPrice = selectedPlan
-    ? pricing.display[selectedPlan.code as keyof typeof pricing.display] ?? selectedPlan.price
-    : 0
-
-  // Internal charge in PEN (what MP actually charges)
   const chargePEN = selectedPlan
-    ? pricing.charge_pen[selectedPlan.code as keyof typeof pricing.charge_pen] ?? displayPrice * 5
+    ? pricing.toPenAmount(selectedPlan.price, selectedPlan.currency)
     : 0
+  const displayPrice = pricing.toDisplayAmountFromPen(chargePEN)
 
   useEffect(() => {
     const load = async () => {
@@ -211,7 +206,7 @@ export default function IniciarPagoClient() {
                 const p = catalogPlans.find((entry) => entry.code === code) || getPlanByCode(code)
                 if (!p) return null
                 const isSelected = plan === code
-                const price = pricing.display[code as keyof typeof pricing.display] ?? p.price
+                const displayPriceForPlan = pricing.formatCatalogMoney(p.price, p.currency)
                 const features = PLAN_FEATURES[code] || p.features
 
                 return (
@@ -241,8 +236,13 @@ export default function IniciarPagoClient() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-2xl font-bold text-[#0F1F63]">{pricing.fmt(price)}</p>
+                        <p className="text-2xl font-bold text-[#0F1F63]">{displayPriceForPlan}</p>
                         <p className="text-xs text-muted-foreground">{pricing.currency}/mes</p>
+                        {!isPeru && (
+                          <p className="text-[11px] text-[#0369A1] mt-1">
+                            Cobro real {pricing.formatPen(pricing.toPenAmount(p.price, p.currency))}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -287,7 +287,7 @@ export default function IniciarPagoClient() {
                     <p className="text-sm text-white/70 mt-0.5">Suscripción mensual</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-white">{pricing.fmt(displayPrice)}</p>
+                    <p className="text-3xl font-bold text-white">{pricing.formatDisplayFromPen(chargePEN)}</p>
                     <p className="text-xs text-white/60">por mes</p>
                   </div>
                 </div>
@@ -297,7 +297,7 @@ export default function IniciarPagoClient() {
               <div className="px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Plan {selectedPlan?.name}</span>
-                  <span className="font-semibold text-[#0F1F63]">{pricing.fmt(displayPrice)}/mes</span>
+                  <span className="font-semibold text-[#0F1F63]">{pricing.formatDisplayFromPen(chargePEN)}/mes</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Facturación</span>
@@ -307,17 +307,17 @@ export default function IniciarPagoClient() {
                 {!isPeru && (
                   <div className="flex items-center justify-between text-xs bg-[#F0F9FF] rounded-lg px-3 py-2">
                     <span className="text-[#0369A1]">Cobro en MercadoPago</span>
-                    <span className="font-semibold text-[#0369A1]">S/{chargePEN} PEN</span>
+                    <span className="font-semibold text-[#0369A1]">{pricing.formatPen(chargePEN)}</span>
                   </div>
                 )}
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#0F1F63]">Total a pagar</span>
-                  <span className="font-bold text-2xl text-[#0F1F63]">{pricing.fmt(displayPrice)}</span>
+                  <span className="font-bold text-2xl text-[#0F1F63]">{pricing.formatDisplayFromPen(chargePEN)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Se cobra {pricing.fmt(displayPrice)} {pricing.currency}/mes.
-                  {!isPeru && " El cargo se procesa en soles peruanos (S/{chargePEN}) a través de Mercado Pago."}
+                  Se cobra {pricing.formatDisplayFromPen(chargePEN)} {pricing.currency}/mes.
+                  {!isPeru && ` El cargo se procesa en soles peruanos (${pricing.formatPen(chargePEN)}) a través de Mercado Pago.`}
                   {" "}Cancela cuando quieras desde tu dashboard.
                 </p>
               </div>

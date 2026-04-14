@@ -40,14 +40,7 @@ const PLAN_FEATURES: Record<string, string[]> = {
 }
 
 export function Pricing() {
-  const { pricing, loading } = usePricingCurrency()
-
-  // Safe price getter - handles SSR and loading states
-  const getPrice = (planCode: string, fallback: number): number => {
-    return pricing?.prices?.[planCode as keyof typeof pricing.prices] ?? fallback
-  }
-
-  const getCurrency = (): string => pricing?.currency ?? "USD"
+  const { pricing, loading, isPeru } = usePricingCurrency()
 
   return (
     <section id="precios" className="py-24 md:py-32">
@@ -91,14 +84,18 @@ export function Pricing() {
                       <span className="text-4xl font-bold text-[#0F1F63]">Gratis</span>
                     ) : (
                       <>
-                        <span className="text-xs font-medium text-muted-foreground">{getCurrency()}</span>
                         <span className="text-4xl font-bold text-[#0F1F63]">
-                          {getPrice(plan.code, plan.price)}
+                          {loading ? "..." : pricing.formatCatalogMoney(plan.price, plan.currency)}
                         </span>
                         <span className="text-sm text-muted-foreground">/mes</span>
                       </>
                     )}
                   </div>
+                  {!loading && !isPeru && plan.price > 0 && (
+                    <p className="mt-2 text-xs text-[#0369A1]">
+                      Cobro real en Mercado Pago: {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                    </p>
+                  )}
                 </div>
 
                 <ul className="flex-1 space-y-2.5 mb-7">

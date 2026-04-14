@@ -3,6 +3,7 @@
 import { Layers3, Plus, Save, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 import type { OwnerCatalog } from "@/lib/owner-catalog"
 
 type OwnerCatalogManagerProps = {
@@ -48,10 +49,12 @@ export default function OwnerCatalogManager({
   onAddonFieldChange,
   onSave,
 }: OwnerCatalogManagerProps) {
+  const { pricing, isPeru } = usePricingCurrency()
+
   if (!catalog) {
     return (
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm text-slate-500">Cargando catálogo editable...</p>
+        <p className="text-sm text-slate-500">Cargando catalogo editable...</p>
       </div>
     )
   }
@@ -66,11 +69,12 @@ export default function OwnerCatalogManager({
               Owner catalog control
             </div>
             <h2 className="mt-3 text-2xl font-semibold text-[#0F1F63]">
-              Catálogo editable de planes y add-ons
+              Catalogo editable de planes y add-ons
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              Ajusta precios y límites desde este panel. Los add-ons visibles en analíticas
-              profesionales salen de este catálogo dinámico.
+              Este panel escribe en Supabase y desde ahi leen owner, professional y backend.
+              El monto canonico se guarda en PEN; fuera de Peru la vitrina se muestra en USD
+              usando tipo de cambio operativo S/5 por $1.
             </p>
           </div>
 
@@ -80,7 +84,7 @@ export default function OwnerCatalogManager({
             disabled={saving}
           >
             <Save className="mr-2 h-4 w-4" />
-            {saving ? "Guardando..." : "Guardar catálogo"}
+            {saving ? "Guardando..." : "Guardar catalogo"}
           </Button>
         </div>
       </div>
@@ -101,8 +105,8 @@ export default function OwnerCatalogManager({
                     {plan.code}
                   </p>
                 </div>
-                <div className="w-32">
-                  <p className="mb-2 text-xs font-medium text-slate-500">Precio</p>
+                <div className="w-40">
+                  <p className="mb-2 text-xs font-medium text-slate-500">Precio canonico (PEN)</p>
                   <Input
                     type="number"
                     min={0}
@@ -112,6 +116,10 @@ export default function OwnerCatalogManager({
                     }
                     className="h-10 rounded-xl border-slate-200 bg-white"
                   />
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Vitrina: {pricing.formatCatalogMoney(plan.price, plan.currency)}
+                    {!isPeru ? ` · Cobro real ${pricing.formatPen(plan.price)}` : ""}
+                  </p>
                 </div>
               </div>
 
@@ -166,7 +174,7 @@ export default function OwnerCatalogManager({
                       />
                     </div>
                     <div>
-                      <p className="mb-2 text-xs font-medium text-slate-500">Precio</p>
+                      <p className="mb-2 text-xs font-medium text-slate-500">Precio canonico (PEN)</p>
                       <Input
                         type="number"
                         min={0}
@@ -180,11 +188,15 @@ export default function OwnerCatalogManager({
                         }
                         className="h-10 rounded-xl border-slate-200"
                       />
+                      <p className="mt-2 text-[11px] text-slate-400">
+                        Vitrina: {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                        {!isPeru ? ` · Cobro real ${pricing.formatPen(addon.price)}` : ""}
+                      </p>
                     </div>
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-medium text-slate-500">Descripción</p>
+                    <p className="mb-2 text-xs font-medium text-slate-500">Descripcion</p>
                     <Input
                       value={addon.description}
                       onChange={(event) =>

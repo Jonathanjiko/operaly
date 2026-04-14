@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 import { getDefaultOwnerCatalog, type OwnerCatalogAddon } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
@@ -101,6 +102,7 @@ function StatCard({ label, value, helper, icon: Icon, color }: {
 }
 
 export default function ProfessionalAnalyticsPage() {
+  const { pricing, isPeru } = usePricingCurrency()
   const [loading, setLoading]         = useState(true)
   const [clientId, setClientId]       = useState("")
   const [limits, setLimits]           = useState<EffectiveLimits | null>(null)
@@ -228,19 +230,8 @@ export default function ProfessionalAnalyticsPage() {
     return new Map(catalogAddons.map((addon) => [addon.code, addon]))
   }, [catalogAddons])
 
-  const formatAddonPrice = (addon: OwnerCatalogAddon) => {
-    const currency = String(addon.currency || "USD").toUpperCase()
-    try {
-      return new Intl.NumberFormat(currency === "PEN" ? "es-PE" : "en-US", {
-        style: "currency",
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(Number(addon.price || 0))
-    } catch {
-      return `${currency} ${addon.price || 0}`
-    }
-  }
+  const formatAddonPrice = (addon: OwnerCatalogAddon) =>
+    pricing.formatCatalogMoney(addon.price, addon.currency)
 
   const handleAddonCheckout = async (addonCode: string) => {
     if (!clientId) return
@@ -437,7 +428,14 @@ export default function ProfessionalAnalyticsPage() {
                     {addon.extra_automations > 0 ? <span>+{addon.extra_automations} auto</span> : null}
                   </div>
                   <div className="mt-3 flex items-center justify-between">
-                    <span className="text-base font-bold text-[#0F1F63]">{displayLabel}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                    <div className="text-right">
+                      <span className="text-base font-bold text-[#0F1F63]">{displayLabel}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                      {!isPeru ? (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Cobro real {pricing.formatPen(addon.price)}
+                        </p>
+                      ) : null}
+                    </div>
                     <button
                       onClick={() => handleAddonCheckout(addon.code)}
                       disabled={isLoading}
@@ -466,7 +464,7 @@ export default function ProfessionalAnalyticsPage() {
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-3 text-center">
-            El pago se procesa de forma segura con Mercado Pago. Se activa inmediatamente al confirmar.
+            El pago se procesa con Mercado Pago en soles. Fuera de Peru mostramos el equivalente en USD solo como vitrina.
           </p>
         </div>
       </div>
