@@ -1,28 +1,41 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import NotificationBell from "@/components/dashboard/NotificationBell"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
-  LayoutDashboard,
-  FileText,
-  Users,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  BarChart3,
+  Bot,
   Calendar,
   CheckSquare,
-  FolderOpen,
-  Zap,
-  BarChart3,
-  Settings,
   ChevronLeft,
-  ChevronRight,
-  Sparkles,
-  Menu,
-  Bot,
-  Mic,
-  Plug,
+  CreditCard,
+  FileText,
+  FolderOpen,
+  LayoutDashboard,
   List,
+  LogOut,
+  Menu,
+  Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plug,
+  Settings,
+  Sparkles,
+  UserRound,
+  Users,
+  Zap,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
@@ -36,11 +49,11 @@ const sidebarItems = [
   { href: "/dashboard/professional/contactos", label: "Contactos", icon: Users },
   { href: "/dashboard/professional/documentos", label: "Documentos", icon: FileText },
   { href: "/dashboard/professional/automatizaciones", label: "Automatizaciones", icon: Zap },
-  { href: "/dashboard/professional/analiticas", label: "Analíticas", icon: BarChart3 },
+  { href: "/dashboard/professional/analiticas", label: "Analiticas", icon: BarChart3 },
 ]
 
 const settingsItems = [
-  { href: "/dashboard/professional/configuracion", label: "Perfil & Plan", icon: Settings },
+  { href: "/dashboard/professional/configuracion", label: "Perfil y plan", icon: Settings },
   { href: "/dashboard/professional/asistente", label: "Asistente", icon: Bot },
   { href: "/dashboard/professional/voz", label: "Voz", icon: Mic },
   { href: "/dashboard/professional/integraciones", label: "Integraciones", icon: Plug },
@@ -49,6 +62,144 @@ const settingsItems = [
 type SidebarProfile = {
   fullName: string
   initials: string
+  email: string
+  preferredLanguage: string
+}
+
+const pageTitles: Record<string, { title: string; subtitle: string }> = {
+  "/dashboard/professional": {
+    title: "Centro operativo",
+    subtitle: "Tu panel administrativo para controlar agenda, tareas, archivos y seguimiento.",
+  },
+  "/dashboard/professional/agenda": {
+    title: "Agenda",
+    subtitle: "Visualiza y organiza compromisos, horarios y continuidad diaria.",
+  },
+  "/dashboard/professional/tareas": {
+    title: "Tareas",
+    subtitle: "Gestiona pendientes reales con claridad, prioridad y seguimiento.",
+  },
+  "/dashboard/professional/listas": {
+    title: "Listas",
+    subtitle: "Agrupa pendientes libres, checklists y contextos operativos.",
+  },
+  "/dashboard/professional/casos": {
+    title: "Casos",
+    subtitle: "Centraliza contexto profesional, seguimiento y documentos asociados.",
+  },
+  "/dashboard/professional/contactos": {
+    title: "Contactos",
+    subtitle: "Manten relacion, idioma, notas y contexto util por persona.",
+  },
+  "/dashboard/professional/documentos": {
+    title: "Documentos",
+    subtitle: "Ordena, analiza y reutiliza archivos dentro de tu operacion diaria.",
+  },
+  "/dashboard/professional/automatizaciones": {
+    title: "Automatizaciones",
+    subtitle: "Controla rutinas, recordatorios y ejecucion programada de Operaly.",
+  },
+  "/dashboard/professional/analiticas": {
+    title: "Analiticas",
+    subtitle: "Entiende consumo, actividad y capacidad disponible de un vistazo.",
+  },
+  "/dashboard/professional/configuracion": {
+    title: "Perfil y plan",
+    subtitle: "Administra identidad, facturacion y configuracion de tu cuenta.",
+  },
+  "/dashboard/professional/asistente": {
+    title: "Asistente",
+    subtitle: "Ajusta profesion, tono, contexto y estilo operativo de Operaly.",
+  },
+  "/dashboard/professional/voz": {
+    title: "Voz",
+    subtitle: "Configura audio, llamadas y la personalidad hablada del asistente.",
+  },
+  "/dashboard/professional/integraciones": {
+    title: "Integraciones",
+    subtitle: "Conecta herramientas externas desde el dashboard administrativo.",
+  },
+}
+
+function UserMenu({
+  profile,
+  onLogout,
+}: {
+  profile: SidebarProfile
+  onLogout: () => Promise<void>
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-2.5 py-2 shadow-sm transition-all hover:border-slate-300 hover:shadow-md">
+          <Avatar className="h-10 w-10 border border-white shadow-sm">
+            <AvatarFallback className="bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-sm font-semibold text-white">
+              {profile.initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="hidden min-w-0 text-left md:block">
+            <p className="truncate text-sm font-semibold text-[#0F1F63]">{profile.fullName}</p>
+            <p className="truncate text-xs text-slate-500">{profile.email || "Cuenta de Operaly"}</p>
+          </div>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 rounded-2xl border-slate-200 p-2 shadow-xl">
+        <DropdownMenuLabel className="px-3 py-3">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-[#0F1F63]">{profile.fullName}</p>
+            <p className="text-xs text-slate-500">{profile.email || "Cuenta activa"}</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+              Idioma base: {profile.preferredLanguage || "es"}
+            </p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/professional/configuracion" className="rounded-xl px-3 py-2">
+              <Settings className="h-4 w-4" />
+              Configuracion
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/professional/asistente" className="rounded-xl px-3 py-2">
+              <Bot className="h-4 w-4" />
+              Asistente
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/professional/voz" className="rounded-xl px-3 py-2">
+              <Mic className="h-4 w-4" />
+              Voz
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/professional/integraciones" className="rounded-xl px-3 py-2">
+              <Plug className="h-4 w-4" />
+              Integraciones
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/precios" className="rounded-xl px-3 py-2">
+              <CreditCard className="h-4 w-4" />
+              Planes y add-ons
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          className="rounded-xl px-3 py-2"
+          onClick={() => {
+            void onLogout()
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+          Cerrar sesion
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export default function ProfessionalDashboardLayout({
@@ -65,7 +216,18 @@ export default function ProfessionalDashboardLayout({
   const [profile, setProfile] = useState<SidebarProfile>({
     fullName: "Tu cuenta",
     initials: "OP",
+    email: "",
+    preferredLanguage: "es",
   })
+
+  const currentPage = useMemo(() => {
+    return (
+      pageTitles[pathname] ?? {
+        title: "Panel profesional",
+        subtitle: "Administra tu operacion diaria con una experiencia clara y rapida.",
+      }
+    )
+  }, [pathname])
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -97,15 +259,20 @@ export default function ProfessionalDashboardLayout({
           return
         }
 
-        const fullName = meta.full_name || "Tu cuenta"
-        const parts = String(fullName).trim().split(/\s+/)
+        const fullName = String(meta.full_name || user.email || "Tu cuenta")
+        const parts = fullName.trim().split(/\s+/)
         const initials =
           parts
             .slice(0, 2)
-            .map((p) => p[0]?.toUpperCase())
+            .map((part) => part[0]?.toUpperCase())
             .join("") || "OP"
 
-        setProfile({ fullName, initials })
+        setProfile({
+          fullName,
+          initials,
+          email: String(user.email || ""),
+          preferredLanguage: String(meta.preferred_language || meta.language || "es"),
+        })
       } catch (err) {
         console.error(err)
         router.replace("/login")
@@ -114,147 +281,191 @@ export default function ProfessionalDashboardLayout({
       }
     }
 
-    loadProfile()
+    void loadProfile()
   }, [router])
+
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+    } finally {
+      router.replace("/login")
+    }
+  }
 
   if (checkingAccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC]">
-        <p className="text-[#5F6B7A]">Validando tu acceso...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,#F8FAFC_0%,#EEF2FF_100%)]">
+        <div className="rounded-3xl border border-white/70 bg-white/80 px-6 py-5 shadow-lg backdrop-blur">
+          <p className="text-sm font-medium text-[#0F1F63]">Validando tu acceso...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 flex items-center justify-between px-4">
-        <button onClick={() => setMobileOpen(true)} className="p-2">
-          <Menu className="w-6 h-6" />
-        </button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.10),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(6,182,212,0.10),_transparent_26%),linear-gradient(180deg,#F8FAFC_0%,#F1F5F9_100%)]">
+      <div className="fixed inset-x-0 top-0 z-50 border-b border-white/70 bg-white/85 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <Menu className="h-5 w-5 text-slate-700" />
+          </button>
 
-        <Image
-          src="/images/operaly-logo.png"
-          alt="Operaly"
-          width={100}
-          height={100}
-          className="h-8 w-auto"
-        />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] shadow-sm">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[#0F1F63]">{currentPage.title}</p>
+              <p className="truncate text-xs text-slate-500">{profile.fullName}</p>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <NotificationBell />
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] flex items-center justify-center text-white font-semibold text-sm">
-            {profile.initials}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <UserMenu profile={profile} onLogout={handleLogout} />
           </div>
         </div>
       </div>
 
-      {mobileOpen && (
+      {mobileOpen ? (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
-      )}
+      ) : null}
 
       <aside
-        className={`fixed top-0 left-0 h-full bg-card border-r border-border z-50 transition-all duration-300 ${
-          collapsed ? "w-20" : "w-64"
+        className={`fixed top-0 left-0 z-50 h-full border-r border-white/70 bg-white/88 shadow-xl backdrop-blur-xl transition-all duration-300 ${
+          collapsed ? "w-[92px]" : "w-[290px]"
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-          {!collapsed && (
-            <Link href="/dashboard/professional">
-              <Image
-                src="/images/operaly-logo.png"
-                alt="Operaly"
-                width={120}
-                height={120}
-                className="h-9 w-auto"
-              />
+        <div className="flex h-20 items-center justify-between border-b border-slate-100 px-5">
+          {!collapsed ? (
+            <Link href="/dashboard/professional" className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] shadow-sm">
+                <Sparkles className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#0F1F63]">Operaly</p>
+                <p className="text-xs text-slate-500">Panel profesional</p>
+              </div>
+            </Link>
+          ) : (
+            <Link
+              href="/dashboard/professional"
+              className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] shadow-sm"
+            >
+              <Sparkles className="h-5 w-5 text-white" />
             </Link>
           )}
 
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg hover:bg-secondary transition-colors"
-          >
-            {collapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <ChevronLeft className="w-4 h-4" />
-            )}
-          </button>
-
-          <button onClick={() => setMobileOpen(false)} className="lg:hidden p-2">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className={`px-4 py-4 border-b border-border ${collapsed ? "px-2" : ""}`}>
-          <div
-            className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-[#7C3AED]/10 via-[#3B82F6]/10 to-[#06B6D4]/10 ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            <div className="relative">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#34D399] rounded-full border-2 border-card" />
-            </div>
-
-            {!collapsed && (
-              <div>
-                <p className="text-sm font-semibold text-[#0F1F63]">Operaly</p>
-                <p className="text-xs text-[#34D399]">Activa</p>
-              </div>
-            )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCollapsed((prev) => !prev)}
+              className="hidden h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 lg:inline-flex"
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm lg:hidden"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        <nav className="p-4 space-y-1">
-          {sidebarItems.map((item) => {
-            const isActive = pathname === item.href
+        <div className={`px-4 py-4 ${collapsed ? "px-3" : ""}`}>
+          <div
+            className={`rounded-3xl border border-[#E9D5FF]/60 bg-[linear-gradient(135deg,rgba(124,58,237,0.10),rgba(59,130,246,0.10),rgba(6,182,212,0.08))] p-4 ${
+              collapsed ? "flex justify-center" : ""
+            }`}
+          >
+            <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
+              <div className="relative">
+                <Avatar className="h-11 w-11 border border-white shadow-sm">
+                  <AvatarFallback className="bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-sm font-semibold text-white">
+                    {profile.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400" />
+              </div>
+              {!collapsed ? (
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#0F1F63]">{profile.fullName}</p>
+                  <p className="truncate text-xs text-slate-500">Dashboard administrativo</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                  isActive
-                    ? "bg-gradient-to-r from-[#3B82F6]/10 to-[#06B6D4]/10 text-[#3B82F6] font-medium"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                } ${collapsed ? "justify-center px-0" : ""}`}
-              >
-                <item.icon className={`w-5 h-5 ${isActive ? "text-[#3B82F6]" : ""}`} />
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="px-4 mt-2">
-          {!collapsed && (
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-3">
-              Configuración
-            </p>
-          )}
-
-          <nav className="space-y-1">
-            {settingsItems.map((item) => {
+        <nav className="px-4 py-2">
+          <div className="space-y-1.5">
+            {sidebarItems.map((item) => {
               const isActive = pathname === item.href
-
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                  className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${
                     isActive
-                      ? "bg-gradient-to-r from-[#7C3AED]/10 to-[#3B82F6]/10 text-[#7C3AED] font-medium"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      ? "bg-gradient-to-r from-[#3B82F6]/12 to-[#06B6D4]/10 text-[#0F1F63] shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
                   } ${collapsed ? "justify-center px-0" : ""}`}
                 >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-[#7C3AED]" : ""}`} />
-                  {!collapsed && <span>{item.label}</span>}
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                      isActive ? "bg-white text-[#3B82F6] shadow-sm" : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  {!collapsed ? (
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{item.label}</p>
+                    </div>
+                  ) : null}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
+
+        <div className="mt-4 border-t border-slate-100 px-4 pt-4">
+          {!collapsed ? (
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Configuracion
+            </p>
+          ) : null}
+          <nav className="space-y-1.5">
+            {settingsItems.map((item) => {
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r from-[#7C3AED]/10 to-[#3B82F6]/10 text-[#0F1F63] shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
+                  } ${collapsed ? "justify-center px-0" : ""}`}
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                      isActive ? "bg-white text-[#7C3AED] shadow-sm" : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                  </div>
+                  {!collapsed ? <span className="truncate font-medium">{item.label}</span> : null}
                 </Link>
               )
             })}
@@ -262,28 +473,42 @@ export default function ProfessionalDashboardLayout({
         </div>
       </aside>
 
-      <div className={`transition-all duration-300 ${collapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-        <header className="hidden lg:flex h-16 bg-card border-b border-border items-center justify-between px-6 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar contactos, documentos..."
-                className="h-10 pl-10 pr-4 rounded-xl border border-border bg-secondary/50 text-sm w-80 focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]"
-              />
+      <div className={`transition-all duration-300 ${collapsed ? "lg:pl-[92px]" : "lg:pl-[290px]"}`}>
+        <header className="sticky top-0 z-40 hidden border-b border-white/70 bg-white/78 backdrop-blur-xl lg:block">
+          <div className="flex items-center justify-between gap-6 px-8 py-5">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+                <UserRound className="h-3.5 w-3.5" />
+                Dashboard profesional
+              </div>
+              <h1 className="mt-3 text-[28px] font-semibold tracking-tight text-[#0F1F63]">{currentPage.title}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500">{currentPage.subtitle}</p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <NotificationBell />
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] flex items-center justify-center text-white font-semibold text-sm">
-              {profile.initials}
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-2 xl:flex">
+                <Link
+                  href="/dashboard/professional/contactos"
+                  className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Ir a contactos
+                </Link>
+                <Link
+                  href="/dashboard/professional/documentos"
+                  className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Ir a documentos
+                </Link>
+              </div>
+              <NotificationBell />
+              <UserMenu profile={profile} onLogout={handleLogout} />
             </div>
           </div>
         </header>
 
-        <main className="p-6 pt-20 lg:pt-6">{children}</main>
+        <main className="px-4 pb-8 pt-24 sm:px-6 lg:px-8 lg:pt-8">
+          <div className="mx-auto w-full max-w-[1500px]">{children}</div>
+        </main>
       </div>
     </div>
   )
