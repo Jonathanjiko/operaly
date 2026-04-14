@@ -18,6 +18,11 @@ import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
+import {
+  getDisplayPlanName,
+  getDisplayPlanPeriodicity,
+  getDisplayPlanPrice,
+} from "@/lib/plans"
 
 type ClientRow = {
   id: string
@@ -164,7 +169,7 @@ export default function ProfessionalSettingsPage() {
 
   const effectivePlanCode = subscription?.plan_code || clientPlanCode || "trial"
   const effectivePlanStatus = subscription?.status || clientPlanStatus || "trialing"
-  const currentPlanLabel = PLAN_LABELS[effectivePlanCode] || effectivePlanCode
+  const currentPlanLabel = getDisplayPlanName(effectivePlanCode) || PLAN_LABELS[effectivePlanCode] || effectivePlanCode
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -433,12 +438,8 @@ export default function ProfessionalSettingsPage() {
         if (usageData?.[0]) {
           setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
         }
-        // Get limit from plan
-        const planLimits: Record<string, number> = {
-          trial: 0, core: 0, pro: 20, pro_plus: 60
-        }
-        const planCode = subscription?.plan_code || clientPlanCode || "trial"
-        setVoiceMinutesLimit(planLimits[planCode] || 0)
+        const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
+        setVoiceMinutesLimit(Number(myLimits?.max_audio_minutes ?? 0))
       } catch (_) {}
 
     } catch (error: any) {
@@ -535,7 +536,6 @@ export default function ProfessionalSettingsPage() {
         throw authUpdateError
       }
 
-      await upsertPreference("assistant_tone", "profesional")
 
       alert("Configuración guardada correctamente.")
       await loadData()
@@ -871,9 +871,7 @@ export default function ProfessionalSettingsPage() {
                     Importe
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {subscription
-                      ? formatMoney(BILLING_CURRENCY_CODE, subscription.plan_code === "pro_plus" ? 199 : subscription.plan_code === "pro" ? 99 : 49)
-                      : formatMoney(BILLING_CURRENCY_CODE, 0)}
+                    {formatMoney(BILLING_CURRENCY_CODE, getDisplayPlanPrice(effectivePlanCode))}
                   </p>
                 </div>
 
@@ -882,7 +880,7 @@ export default function ProfessionalSettingsPage() {
                     Periodicidad
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {subscription ? "mensual" : "mensual"}
+                    {getDisplayPlanPeriodicity(effectivePlanCode)}
                   </p>
                 </div>
 
@@ -891,7 +889,7 @@ export default function ProfessionalSettingsPage() {
                     Inicio
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {formatDateTime(subscription?.starts_at || subscription?.created_at || null)}
+                    {formatDateTime(subscription?.started_at || subscription?.created_at || null)}
                   </p>
                 </div>
 
@@ -995,7 +993,7 @@ export default function ProfessionalSettingsPage() {
                           Código del plan: {plan.code}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Cobro mensual en {BILLING_CURRENCY_CODE}
+                          Cobro {getDisplayPlanPeriodicity(plan.code)} en {BILLING_CURRENCY_CODE}
                         </p>
                       </div>
 

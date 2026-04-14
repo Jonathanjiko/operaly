@@ -5,6 +5,17 @@ export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const ADMIN_PLANS = new Set(["trial", "core", "pro", "pro_plus"])
+const OWNER_ACTIVITY_PREF_KEY = "owner_console_activity"
+
+type OwnerActivityEntry = {
+  id: string
+  action: "plan_change" | "status_change"
+  clientId: string
+  clientName: string
+  previousValue: string | null
+  nextValue: string | null
+  createdAt: string
+}
 
 class HttpError extends Error {
   status: number
@@ -73,9 +84,48 @@ async function requireOwner(request: Request) {
   return { admin, ownerClientId }
 }
 
+async function appendOwnerActivity(
+  admin: ReturnType<typeof getAdminClient>,
+  ownerClientId: string,
+  entry: OwnerActivityEntry
+) {
+  const { data: prefRow } = await admin
+    .from("client_preferences")
+    .select("pref_value")
+    .eq("client_id", ownerClientId)
+    .eq("pref_key", OWNER_ACTIVITY_PREF_KEY)
+    .maybeSingle()
+
+  let history: OwnerActivityEntry[] = []
+
+  try {
+    history = JSON.parse(String(prefRow?.pref_value || "[]"))
+    if (!Array.isArray(history)) history = []
+  } catch {
+    history = []
+  }
+
+  const nextHistory = [entry, ...history].slice(0, 100)
+
+  const { error: prefError } = await admin
+    .from("client_preferences")
+    .upsert(
+      {
+        client_id: ownerClientId,
+        pref_key: OWNER_ACTIVITY_PREF_KEY,
+        pref_value: JSON.stringify(nextHistory),
+        source: "owner_console",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "client_id,pref_key" }
+    )
+
+  if (prefError) throw new HttpError(500, prefError.message)
+}
+
 export async function POST(request: Request) {
   try {
-    const { admin } = await requireOwner(request)
+    const { admin, ownerClientId } = await requireOwner(request)
     const { clientId, planCode } = await request.json()
 
     const normalizedClientId = String(clientId || "").trim()
@@ -94,6 +144,17 @@ export async function POST(request: Request) {
 
     if (planError) throw new HttpError(500, planError.message)
     if (!planRow) throw new HttpError(400, "plan_not_found")
+
+    const { data: currentClient, error: currentClientError } = await admin
+      .from("clients")
+      .select("id, name, plan_code")
+      .eq("id", normalizedClientId)
+      .maybeSingle()
+
+    if (currentClientError) throw new HttpError(500, currentClientError.message)
+    if (!currentClient) throw new HttpError(404, "client_not_found")
+
+    const previousPlanCode = String(currentClient.plan_code || "").trim().toLowerCase() || null
 
     const { error: clientError } = await admin
       .from("clients")
@@ -129,7 +190,10 @@ export async function POST(request: Request) {
 
     const nextPeriodEnd =
       latestSubscription?.current_period_end ??
-      (normalizedPlanCode === "trial" ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null)
+      new Date(
+        Date.now() +
+          (normalizedPlanCode === "trial" ? 7 : 30) * 24 * 60 * 60 * 1000
+      ).toISOString()
 
     if (latestSubscription?.id) {
       const { error: subscriptionUpdateError } = await admin
@@ -167,6 +231,16 @@ export async function POST(request: Request) {
 
       if (subscriptionInsertError) throw new HttpError(500, subscriptionInsertError.message)
     }
+
+    await appendOwnerActivity(admin, ownerClientId, {
+      id: crypto.randomUUID(),
+      action: "plan_change",
+      clientId: normalizedClientId,
+      clientName: String(currentClient.name || "Cliente sin nombre"),
+      previousValue: previousPlanCode,
+      nextValue: normalizedPlanCode,
+      createdAt: nowIso,
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error: any) {

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
+import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type EffectiveLimits = {
   plan: Record<string, any>
@@ -49,6 +50,10 @@ function UsageBar({
 }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0
   const barColor = pct >= 90 ? "#EF4444" : pct >= warningAt ? "#F59E0B" : "#3B82F6"
+  const formattedTotal = formatLimit(total)
+  const usageLabel = formattedTotal === "No incluido"
+    ? `${used.toLocaleString()} / ${formattedTotal}`
+    : `${used.toLocaleString()} / ${formattedTotal} ${unit}`
 
   return (
     <div className="space-y-2">
@@ -57,9 +62,7 @@ function UsageBar({
           <Icon className="w-4 h-4" style={{ color: iconColor }} />
           <span className="text-sm font-medium text-[#0F1F63]">{label}</span>
         </div>
-        <span className="text-sm text-muted-foreground">
-          {used.toLocaleString()} / {total > 0 ? total.toLocaleString() : "∞"} {unit}
-        </span>
+        <span className="text-sm text-muted-foreground">{usageLabel}</span>
       </div>
       <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
         <div
@@ -118,14 +121,14 @@ export default function ProfessionalAnalyticsPage() {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      // Effective limits — RPC con fallback a tenant_effective_limits directo
+      // Effective limits from RPC only; avoid direct tenant_effective_limits reads in frontend.
       try {
         const { data: limitsData, error: limitsError } = await supabase
           .rpc("get_client_effective_limits", { p_client_id: cid })
         if (!limitsError && limitsData) {
           setLimits(limitsData as EffectiveLimits)
         } else {
-          // Fallback via RPC segura (evita 403 en tenant_effective_limits)
+          // Fallback via user-scoped RPC segura
           try {
             const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
             if (myLimits) {
@@ -207,17 +210,10 @@ export default function ProfessionalAnalyticsPage() {
     setAddonLoading(addonCode)
     setAddonError("")
     try {
-      // Get email from Supabase session for backend fallback
-      let clientEmail = ""
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        clientEmail = user?.email || ""
-      } catch {}
-
       const res = await fetch("/api/payments/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, planCode: addonCode, provider: "mercadopago", email: clientEmail || undefined }),
+        body: JSON.stringify({ planCode: addonCode, provider: "mercadopago" }),
       })
       const data = await res.json()
       if (!res.ok || !data?.ok) throw new Error(data?.error || data?.detail || "checkout_failed")
@@ -246,7 +242,7 @@ export default function ProfessionalAnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold text-[#0F1F63]">Analíticas y consumo</h1>
           <p className="text-muted-foreground mt-1">
-            Plan <strong>{(plan.plan_type || "trial").toUpperCase()}</strong> · Período {period.slice(0, 4)}/{period.slice(4)}
+            Plan <strong>{getDisplayPlanName(plan.plan_type || "trial")}</strong> · Período {period.slice(0, 4)}/{period.slice(4)}
           </p>
         </div>
         <Button variant="outline" className="rounded-xl" onClick={loadAnalytics}>
@@ -433,12 +429,12 @@ export default function ProfessionalAnalyticsPage() {
           <h2 className="text-lg font-semibold text-[#0F1F63] mb-4">Tu plan</h2>
           <div className="space-y-3">
             {[
-              ["Plan activo",         (plan.plan_type || "trial").toUpperCase()],
-              ["Límite IA",           plan.ia_limit ? `${plan.ia_limit} msgs` : "Ilimitado"],
+              ["Plan activo",         getDisplayPlanName(plan.plan_type || "trial")],
+              ["Límite IA",           formatLimit(plan.ia_limit) === "No incluido" ? "No incluido" : `${formatLimit(plan.ia_limit)} msgs`],
               ["Minutos de voz",      `${plan.calls_minutes ?? 0} min/mes`],
               ["Almacenamiento",      `${plan.storage_gb ?? 0.5} GB`],
-              ["Contactos",           plan.contacts_limit ? `hasta ${plan.contacts_limit}` : "—"],
-              ["Automatizaciones",    plan.automations_limit ? `hasta ${plan.automations_limit}` : "—"],
+              ["Contactos",           formatLimit(plan.contacts_limit) === "No incluido" ? "No incluido" : `hasta ${formatLimit(plan.contacts_limit)}`],
+              ["Automatizaciones",    formatLimit(plan.automations_limit) === "No incluido" ? "No incluido" : `hasta ${formatLimit(plan.automations_limit)}`],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border border-border">
                 <p className="text-sm text-muted-foreground">{label}</p>

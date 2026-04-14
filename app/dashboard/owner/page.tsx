@@ -25,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
+import { getDisplayPlanName } from "@/lib/plans"
 import OwnerPaymentsMetricsPanel from "./_components/OwnerPaymentsMetricsPanel"
 
 type SummaryRow = {
@@ -90,6 +91,24 @@ type ClientRow = {
   plan_status: string | null
   status: string | null
   created_at: string
+  subscription_started_at: string | null
+  current_period_end: string | null
+  latest_payment_at: string | null
+  messages_used: number
+  audio_minutes_used: number
+  automations_used: number
+  storage_used_mb: number
+  docs_count: number
+}
+
+type OwnerActivityEntry = {
+  id: string
+  action: "plan_change" | "status_change"
+  clientId: string
+  clientName: string
+  previousValue: string | null
+  nextValue: string | null
+  createdAt: string
 }
 
 type OwnerProfile = {
@@ -127,7 +146,7 @@ const TOTAL_FIXED_PEN = TOTAL_FIXED_USD * USD_TO_PEN
 
 const SECTIONS = [
   { id: "workspace",     label: "Mi Operaly",    icon: Sparkles },
-  { id: "overview",      label: "Resumen",        icon: BarChart3 },
+  { id: "overview",      label: "Alcances",       icon: BarChart3 },
   { id: "payments",      label: "Pagos",          icon: CreditCard },
   { id: "subscriptions", label: "Suscripciones",  icon: Layers3 },
   { id: "clients",       label: "Clientes",       icon: Users },
@@ -145,6 +164,124 @@ const TIME_FILTERS = [
 ] as const
 
 type TimeFilter = (typeof TIME_FILTERS)[number]["id"]
+
+function clampPercentage(value: number) {
+  return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
+}
+
+function getOwnerPlanLabel(planCode: string | null | undefined) {
+  const normalized = String(planCode || "").toLowerCase()
+  if (normalized === "owner") return "Owner interno"
+  if (normalized === "owner_unlimited") return "Owner ilimitado"
+  if (normalized === "internal") return "Interno"
+  return getDisplayPlanName(planCode)
+}
+
+function MetricCard({
+  title,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  title: string
+  value: string
+  detail?: string
+  icon: typeof DollarSign
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm text-slate-500">{title}</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-[#0F1F63]">
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="text-3xl font-semibold tracking-tight text-[#0F1F63]">{value}</p>
+      {detail ? <p className="mt-2 text-xs text-slate-500">{detail}</p> : null}
+    </div>
+  )
+}
+
+function RadialGauge({
+  label,
+  value,
+  max,
+  tone = "blue",
+  detail,
+}: {
+  label: string
+  value: number
+  max: number
+  tone?: "blue" | "emerald" | "amber" | "violet"
+  detail?: string
+}) {
+  const pct = clampPercentage(max > 0 ? (value / max) * 100 : 0)
+  const palette = {
+    blue: { ring: "#2563EB", glow: "rgba(37,99,235,0.18)" },
+    emerald: { ring: "#10B981", glow: "rgba(16,185,129,0.18)" },
+    amber: { ring: "#F59E0B", glow: "rgba(245,158,11,0.18)" },
+    violet: { ring: "#7C3AED", glow: "rgba(124,58,237,0.18)" },
+  }[tone]
+
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-slate-500">{label}</p>
+      <div className="mt-4 flex items-center gap-5">
+        <div
+          className="relative grid h-28 w-28 place-items-center rounded-full"
+          style={{
+            background: `conic-gradient(${palette.ring} ${pct}%, #E2E8F0 ${pct}% 100%)`,
+            boxShadow: `0 0 0 8px ${palette.glow}`,
+          }}
+        >
+          <div className="grid h-20 w-20 place-items-center rounded-full bg-white text-center">
+            <div>
+              <p className="text-2xl font-semibold text-[#0F1F63]">{Math.round(pct)}%</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">avance</p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <p className="text-lg font-semibold text-[#0F1F63]">{value.toLocaleString()}</p>
+          <p className="text-xs text-slate-500">Meta base: {max.toLocaleString()}</p>
+          {detail ? <p className="text-xs text-slate-500">{detail}</p> : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function UsageBar({
+  label,
+  value,
+  highlight,
+  suffix = "",
+}: {
+  label: string
+  value: number
+  highlight: string
+  suffix?: string
+}) {
+  const scaled = clampPercentage(value > 0 ? Math.min(100, 18 + Math.log10(value + 1) * 28) : 6)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium text-slate-600">{label}</span>
+        <span className="font-semibold text-[#0F1F63]">
+          {value.toLocaleString()}
+          {suffix}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${scaled}%`, backgroundColor: highlight }}
+        />
+      </div>
+    </div>
+  )
+}
 
 export default function OwnerDashboardPage() {
   const [loading, setLoading] = useState(true)
@@ -164,6 +301,8 @@ export default function OwnerDashboardPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>("")
   const [notifications, setNotifications] = useState<Array<{id:string;title:string;body:string;amount_pen?:number;created_at:string;read:boolean}>>([])
   const [showNotifs, setShowNotifs] = useState(false)
+  const [activityLog, setActivityLog] = useState<OwnerActivityEntry[]>([])
+  const [profitTargetPen, setProfitTargetPen] = useState(4000)
 
   // Revenue always shown in PEN (what MP deposits)
   const formatMoney = (amount: number | null | undefined, currency = "PEN") => {
@@ -183,6 +322,19 @@ export default function OwnerDashboardPage() {
 
     try {
       return new Date(value).toLocaleString()
+    } catch {
+      return value
+    }
+  }
+
+  const formatDateShort = (value: string | null) => {
+    if (!value) return "—"
+    try {
+      return new Date(value).toLocaleDateString("es-PE", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
     } catch {
       return value
     }
@@ -340,6 +492,7 @@ export default function OwnerDashboardPage() {
       setPayments((payload.payments || []) as PaymentRow[])
       setSubscriptions((payload.subscriptions || []) as SubscriptionRow[])
       setClients((payload.clients || []) as ClientRow[])
+      setActivityLog((payload.activityLog || []) as OwnerActivityEntry[])
 
       const nextClients = (payload.clients || []) as ClientRow[]
       if (nextClients.length > 0) {
@@ -358,6 +511,7 @@ export default function OwnerDashboardPage() {
       setPayments([])
       setSubscriptions([])
       setClients([])
+      setActivityLog([])
       setSelectedClientId("")
     } finally {
       setLoading(false)
@@ -403,6 +557,23 @@ export default function OwnerDashboardPage() {
 
     return () => { supabase.removeChannel(channel) }
   }, [])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("owner_profit_target_pen")
+      if (!raw) return
+      const parsed = Number(raw)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setProfitTargetPen(parsed)
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("owner_profit_target_pen", String(profitTargetPen))
+    } catch {}
+  }, [profitTargetPen])
 
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
     const loadingKey = `plan:${clientId}:${planCode}`
@@ -479,6 +650,11 @@ export default function OwnerDashboardPage() {
     const term = clientSearch.trim().toLowerCase()
 
     return clients.filter((client) => {
+      const filterDate = client.subscription_started_at || client.created_at
+      if (!isWithinFilter(filterDate, timeFilter)) {
+        return false
+      }
+
       if (!term) {
         return true
       }
@@ -497,7 +673,7 @@ export default function OwnerDashboardPage() {
 
       return haystack.includes(term)
     })
-  }, [clients, clientSearch])
+  }, [clients, clientSearch, timeFilter])
 
   const selectedClient = useMemo(() => {
     return clients.find((client) => client.id === selectedClientId) || null
@@ -521,6 +697,11 @@ export default function OwnerDashboardPage() {
       .slice(0, 5)
   }, [subscriptions, selectedClientId])
 
+  const selectedClientActivity = useMemo(() => {
+    if (!selectedClientId) return []
+    return activityLog.filter((item) => item.clientId === selectedClientId).slice(0, 8)
+  }, [activityLog, selectedClientId])
+
   const filteredOverview = useMemo(() => {
     const approvedPayments = filteredPayments.filter((payment) =>
       ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
@@ -539,17 +720,17 @@ export default function OwnerDashboardPage() {
     )
 
     const approvedTotal = approvedPayments.reduce(
-      (acc, payment) => acc + Number(payment.amount || 0),
+      (acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"),
       0
     )
 
     const pendingTotal = pendingPayments.reduce(
-      (acc, payment) => acc + Number(payment.amount || 0),
+      (acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"),
       0
     )
 
     const failedTotal = failedPayments.reduce(
-      (acc, payment) => acc + Number(payment.amount || 0),
+      (acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"),
       0
     )
 
@@ -563,6 +744,65 @@ export default function OwnerDashboardPage() {
       failedTotal,
     }
   }, [filteredPayments, filteredSubscriptions])
+
+  const filteredClientUsage = useMemo(() => {
+    return filteredClients.reduce(
+      (acc, client) => {
+        acc.messages += Number(client.messages_used || 0)
+        acc.minutes += Number(client.audio_minutes_used || 0)
+        acc.automations += Number(client.automations_used || 0)
+        acc.storage += Number(client.storage_used_mb || 0)
+        acc.docs += Number(client.docs_count || 0)
+        return acc
+      },
+      { messages: 0, minutes: 0, automations: 0, storage: 0, docs: 0 }
+    )
+  }, [filteredClients])
+
+  const filteredBusinessMetrics = useMemo(() => {
+    const approvedRevenuePen = filteredOverview.approvedTotal
+    const pendingRevenuePen = filteredOverview.pendingTotal
+    const fixedCostsPen = TOTAL_FIXED_PEN
+    const variableCostsPen = approvedRevenuePen * MP_FEE_PCT
+    const totalCostsPen = fixedCostsPen + variableCostsPen
+    const profitPen = approvedRevenuePen - totalCostsPen
+    const breakEvenPen = fixedCostsPen / Math.max(0.0001, 1 - MP_FEE_PCT)
+    const targetRevenuePen = breakEvenPen + profitTargetPen
+    const paidClients = filteredClients.filter((client) =>
+      ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())
+    ).length
+    const totalClients = Math.max(filteredClients.length, 1)
+
+    return {
+      approvedRevenuePen,
+      pendingRevenuePen,
+      fixedCostsPen,
+      variableCostsPen,
+      totalCostsPen,
+      profitPen,
+      breakEvenPen,
+      targetRevenuePen,
+      paidClients,
+      totalClients,
+      subscriberPct: clampPercentage((paidClients / totalClients) * 100),
+      targetProfitPct: clampPercentage((profitPen / Math.max(profitTargetPen, 1)) * 100),
+      breakEvenPct: clampPercentage((approvedRevenuePen / Math.max(breakEvenPen, 1)) * 100),
+    }
+  }, [filteredClients, filteredOverview, profitTargetPen])
+
+  const filteredPlanDistribution = useMemo(() => {
+    return filteredClients.reduce(
+      (acc, client) => {
+        const code = String(client.plan_code || "").toLowerCase()
+        if (code === "trial") acc.trial += 1
+        if (code === "core") acc.core += 1
+        if (code === "pro") acc.pro += 1
+        if (code === "pro_plus") acc.proPlus += 1
+        return acc
+      },
+      { trial: 0, core: 0, pro: 0, proPlus: 0 }
+    )
+  }, [filteredClients])
 
   const overviewCards = useMemo(() => {
     const label =
@@ -579,31 +819,37 @@ export default function OwnerDashboardPage() {
         title: `Ingresos ${label}`,
         value: formatMoney(filteredOverview.approvedTotal),
         icon: DollarSign,
+        detail: `${filteredOverview.approvedPayments.length} pagos aprobados`,
       },
       {
         title: "Pagos pendientes",
         value: formatMoney(filteredOverview.pendingTotal),
         icon: Wallet,
+        detail: `${filteredOverview.pendingPayments.length} cobros en curso`,
       },
       {
         title: "Pagos fallidos",
         value: formatMoney(filteredOverview.failedTotal),
         icon: CreditCard,
+        detail: `${filteredOverview.failedPayments.length} intentos sin cierre`,
       },
       {
         title: "Clientes visibles",
         value: String(filteredClients.length),
         icon: Users,
+        detail: "filtrados por fecha de suscripcion",
       },
       {
         title: "Pagos aprobados",
         value: String(filteredOverview.approvedPayments.length),
         icon: BarChart3,
+        detail: "movimiento comercial del filtro",
       },
       {
         title: "Suscripciones activas",
         value: String(filteredOverview.activeSubscriptions.length),
         icon: ShieldCheck,
+        detail: "estado vigente en este periodo",
       },
     ]
   }, [filteredOverview, filteredClients.length, timeFilter])
@@ -862,7 +1108,7 @@ export default function OwnerDashboardPage() {
                       Estado de owner
                     </p>
                     <p className="text-sm text-slate-600 mb-4">
-                      Tu cuenta está marcada como owner, con plan Pro Plus interno activo.
+                      Tu cuenta esta marcada como owner, con acceso interno ilimitado y exento de cobro para operar y administrar.
                     </p>
                     <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                       Owner activo
@@ -874,7 +1120,7 @@ export default function OwnerDashboardPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                   <p className="text-sm text-slate-500 mb-2">Tu plan interno</p>
-                  <p className="text-2xl font-semibold text-[#0F1F63]">Pro Plus</p>
+                  <p className="text-2xl font-semibold text-[#0F1F63]">Owner ilimitado</p>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -898,24 +1144,126 @@ export default function OwnerDashboardPage() {
           {activeSection === "overview" ? (
             <div className="space-y-8">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {overviewCards.map((card) => {
-                  const Icon = card.icon
+                {overviewCards.map((card) => (
+                  <MetricCard key={card.title} {...card} />
+                ))}
+              </div>
 
-                  return (
-                    <div
-                      key={card.title}
-                      className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm text-slate-500">{card.title}</p>
-                        <Icon className="w-5 h-5 text-[#3B82F6]" />
+              <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Pulso del negocio</p>
+                      <h2 className="mt-1 text-2xl font-semibold text-[#0F1F63]">
+                        Metrica ejecutiva de Operaly
+                      </h2>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                        utilidad objetivo
+                      </p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-lg font-semibold text-[#0F1F63]">S/</span>
+                        <Input
+                          value={profitTargetPen}
+                          onChange={(e) => setProfitTargetPen(Math.max(0, Number(e.target.value || 0)))}
+                          type="number"
+                          min={0}
+                          className="h-10 w-36 rounded-xl border-slate-200 bg-white"
+                        />
                       </div>
-                      <p className="text-3xl font-semibold text-[#0F1F63]">
-                        {card.value}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                    <RadialGauge
+                      label="Suscriptores pagos"
+                      value={filteredBusinessMetrics.paidClients}
+                      max={filteredBusinessMetrics.totalClients}
+                      tone="blue"
+                      detail={`${filteredClients.length} clientes visibles en este filtro`}
+                    />
+                    <RadialGauge
+                      label="Meta de utilidad"
+                      value={Math.max(filteredBusinessMetrics.profitPen, 0)}
+                      max={Math.max(profitTargetPen, 1)}
+                      tone="emerald"
+                      detail={`Utilidad estimada: ${fmtPEN(filteredBusinessMetrics.profitPen)}`}
+                    />
+                    <RadialGauge
+                      label="Punto de equilibrio"
+                      value={filteredBusinessMetrics.approvedRevenuePen}
+                      max={Math.max(filteredBusinessMetrics.breakEvenPen, 1)}
+                      tone="amber"
+                      detail={`Break-even: ${fmtPEN(filteredBusinessMetrics.breakEvenPen)}`}
+                    />
+                  </div>
+
+                  <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ingresos reales</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.approvedRevenuePen)}
                       </p>
                     </div>
-                  )
-                })}
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos fijos</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.fixedCostsPen)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos variables</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.variableCostsPen)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">utilidad estimada</p>
+                      <p className={`mt-2 text-2xl font-semibold ${filteredBusinessMetrics.profitPen >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        {fmtPEN(filteredBusinessMetrics.profitPen)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Consumo agregado</p>
+                      <h3 className="mt-1 text-xl font-semibold text-[#0F1F63]">
+                        Uso del periodo visible
+                      </h3>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                      Clientes filtrados
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <UsageBar label="Mensajes" value={filteredClientUsage.messages} highlight="#2563EB" />
+                    <UsageBar label="Minutos de voz" value={filteredClientUsage.minutes} suffix=" min" highlight="#8B5CF6" />
+                    <UsageBar label="Automatizaciones" value={filteredClientUsage.automations} highlight="#10B981" />
+                    <UsageBar label="Almacenamiento" value={filteredClientUsage.storage} suffix=" MB" highlight="#F59E0B" />
+                    <UsageBar label="Documentos" value={filteredClientUsage.docs} highlight="#EC4899" />
+                  </div>
+
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">proyeccion rapida</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Ingresos objetivo para lograr la utilidad meta:{" "}
+                      <span className="font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.targetRevenuePen)}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Cobros pendientes visibles:{" "}
+                      <span className="font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.pendingRevenuePen)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {summary ? (
@@ -923,32 +1271,71 @@ export default function OwnerDashboardPage() {
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                     <p className="text-sm text-slate-500 mb-2">Trials</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {summary.trial_clients}
+                      {filteredPlanDistribution.trial}
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Core</p>
+                    <p className="text-2xl font-semibold text-[#0F1F63]">
+                      {filteredPlanDistribution.core}
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <p className="text-sm text-slate-500 mb-2">Pro</p>
+                    <p className="text-2xl font-semibold text-[#0F1F63]">
+                      {filteredPlanDistribution.pro}
                     </p>
                   </div>
 
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                     <p className="text-sm text-slate-500 mb-2">Pro Plus</p>
                     <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {summary.pro_plus_clients}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Pagos pendientes</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {formatMoney(filteredOverview.pendingTotal)}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <p className="text-sm text-slate-500 mb-2">Pagos fallidos</p>
-                    <p className="text-2xl font-semibold text-[#0F1F63]">
-                      {formatMoney(filteredOverview.failedTotal)}
+                      {filteredPlanDistribution.proPlus}
                     </p>
                   </div>
                 </div>
               ) : null}
+
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Huella operativa</p>
+                    <h3 className="mt-1 text-xl font-semibold text-[#0F1F63]">
+                      Registro de acciones owner
+                    </h3>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
+                    {activityLog.length} registros recientes
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {activityLog.slice(0, 8).map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <p className="font-medium text-[#0F1F63]">{entry.clientName}</p>
+                          <p className="text-sm text-slate-500">
+                            {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}:{" "}
+                            <span className="font-medium text-slate-700">{entry.previousValue || "—"}</span>
+                            {" → "}
+                            <span className="font-medium text-slate-700">{entry.nextValue || "—"}</span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {activityLog.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">
+                      Aun no hay acciones administrativas registradas.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -1110,9 +1497,24 @@ export default function OwnerDashboardPage() {
                             {client.country_code || "—"} · {client.city || "—"} ·{" "}
                             {client.timezone || "—"}
                           </p>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Suscripcion: {formatDateShort(client.subscription_started_at || client.created_at)} · Vence:{" "}
+                            {formatDateShort(client.current_period_end)}
+                          </p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              <span className="font-semibold text-[#0F1F63]">{client.messages_used.toLocaleString()}</span> mensajes
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                              <span className="font-semibold text-[#0F1F63]">{client.audio_minutes_used.toLocaleString()}</span> min voz
+                            </div>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-3">
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                            {getOwnerPlanLabel(client.plan_code)}
+                          </span>
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${clientStatusClass(
                               client.status
@@ -1170,7 +1572,7 @@ export default function OwnerDashboardPage() {
                             Plan actual
                           </p>
                           <p className="text-sm font-medium text-[#0F1F63]">
-                            {selectedClient.plan_code || "—"}
+                            {getOwnerPlanLabel(selectedClient.plan_code)}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
                             Estado plan: {selectedClient.plan_status || "—"}
@@ -1188,6 +1590,45 @@ export default function OwnerDashboardPage() {
                           >
                             {selectedClient.status || "—"}
                           </span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">mensajes</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                            {selectedClient.messages_used.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">voz</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                            {selectedClient.audio_minutes_used.toLocaleString()} min
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">storage</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                            {selectedClient.storage_used_mb.toLocaleString()} MB
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">automatizaciones</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                            {selectedClient.automations_used.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">documentos</p>
+                          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                            {selectedClient.docs_count.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ultimo cobro</p>
+                          <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                            {formatDateShort(selectedClient.latest_payment_at)}
+                          </p>
                         </div>
                       </div>
 
@@ -1262,6 +1703,40 @@ export default function OwnerDashboardPage() {
                       Selecciona un cliente de la lista para ver su detalle.
                     </div>
                   )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <h2 className="text-lg font-semibold text-[#0F1F63] mb-4">
+                    Registro de acciones sobre este cliente
+                  </h2>
+
+                  <div className="space-y-3">
+                    {selectedClientActivity.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-2xl border border-slate-200 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-medium text-[#0F1F63]">
+                              {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {entry.previousValue || "—"} → {entry.nextValue || "—"}
+                            </p>
+                          </div>
+
+                          <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {selectedClientActivity.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                        Este cliente todavía no tiene acciones owner registradas.
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
