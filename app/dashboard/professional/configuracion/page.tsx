@@ -836,10 +836,13 @@ export default function ProfessionalSettingsPage() {
               <div className="rounded-2xl border border-border p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Phone className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Teléfono activo</p>
+                  <p className="text-sm font-medium text-[#0F1F63]">WhatsApp operativo</p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {phone || "No configurado"}
+                  {phoneNormalized || phone || "No configurado"}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Este numero es la llave del Registration Gate: solo el WhatsApp registrado puede usar Operaly. Si lo cambias, el backend debe usar el nuevo numero para responder y enviar la bienvenida.
                 </p>
               </div>
 

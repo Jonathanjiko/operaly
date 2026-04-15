@@ -255,7 +255,7 @@ export default function SetupClient() {
       )
 
       if (planCode === "trial") {
-        router.push("/dashboard")
+        router.push("/connect-whatsapp")
       } else {
         router.push(`/iniciar-pago?plan=${planCode}&cid=${clientId}`)
       }
