@@ -9,12 +9,18 @@ import {
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
+import {
+  formatPeriodMonthLabel,
+  getCurrentPeriodMonth,
+  getEffectivePlanCode,
+  type EffectiveLimitsRuntime,
+} from "@/lib/effective-limits"
 import { getDefaultOwnerCatalog, type OwnerCatalogAddon } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
-type EffectiveLimits = {
+type EffectiveLimits = EffectiveLimitsRuntime & {
   plan: Record<string, any>
   addons: Record<string, any>
   usage: Record<string, any>
@@ -138,6 +144,7 @@ export default function ProfessionalAnalyticsPage() {
             if (myLimits) {
               const tel = myLimits as any
               setLimits({
+                effective_plan_code: getEffectivePlanCode(tel),
                 plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
                 addons: {},
                 usage: {},
@@ -148,7 +155,8 @@ export default function ProfessionalAnalyticsPage() {
                   voice_enabled:       tel.voice_enabled || false,
                   google_enabled:      tel.google_enabled || false,
                 },
-                period: new Date().toISOString().slice(0,7).replace("-",""),
+                usage_period_month: getCurrentPeriodMonth(),
+                period: getCurrentPeriodMonth(),
               } as EffectiveLimits)
             }
           } catch (_) {}
@@ -213,7 +221,8 @@ export default function ProfessionalAnalyticsPage() {
   const usage   = limits?.usage   || {}
   const lim     = limits?.limits  || {}
   const plan    = limits?.plan    || {}
-  const period  = limits?.period  || ""
+  const periodMonth = String(limits?.usage_period_month || limits?.period || getCurrentPeriodMonth())
+  const effectivePlanCode = getEffectivePlanCode(limits)
 
   const statsCards = useMemo(() => [
     { label: "Mensajes IA este mes", value: usage.messages_used ?? 0,       helper: "conversaciones con Operaly",   icon: MessageSquare, color: "#3B82F6" },
@@ -270,7 +279,7 @@ export default function ProfessionalAnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold text-[#0F1F63]">Analíticas y consumo</h1>
           <p className="text-muted-foreground mt-1">
-            Plan <strong>{getDisplayPlanName(plan.plan_type || "trial")}</strong> · Período {period.slice(0, 4)}/{period.slice(4)}
+            Plan <strong>{getDisplayPlanName(effectivePlanCode)}</strong> · Período {formatPeriodMonthLabel(periodMonth)}
           </p>
         </div>
         <Button variant="outline" className="rounded-xl" onClick={loadAnalytics}>
@@ -494,7 +503,7 @@ export default function ProfessionalAnalyticsPage() {
           <h2 className="text-lg font-semibold text-[#0F1F63] mb-4">Tu plan</h2>
           <div className="space-y-3">
             {[
-              ["Plan activo",         getDisplayPlanName(plan.plan_type || "trial")],
+              ["Plan activo",         getDisplayPlanName(effectivePlanCode)],
               ["Límite IA",           formatLimit(plan.ia_limit) === "No incluido" ? "No incluido" : `${formatLimit(plan.ia_limit)} msgs`],
               ["Minutos de voz",      `${plan.calls_minutes ?? 0} min/mes`],
               ["Almacenamiento",      `${plan.storage_gb ?? 0.5} GB`],

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
 import { getDisplayPlanName } from "@/lib/plans"
 
 const GoogleDriveIcon = () => (
@@ -144,17 +145,11 @@ export default function IntegracionesPage() {
     try {
       const cid = await getCurrentClientId()
 
-      const { data: client } = await supabase
-        .from("clients")
-        .select("plan_code")
-        .eq("id", cid)
-        .maybeSingle()
-
-      if (client?.plan_code) setPlanCode(client.plan_code)
-
       const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
       if (limitsError) throw limitsError
 
+      const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+      setPlanCode(getEffectivePlanCode(effectiveLimits))
       setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
     } catch (err) {
       console.error(err)
@@ -187,7 +182,7 @@ export default function IntegracionesPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Conecta tus herramientas de trabajo desde el dashboard administrativo, sin convertir este espacio en un chat.
+            Conecta tus herramientas de trabajo desde el dashboard administrativo usando la capa efectiva de capacidades, sin convertir este espacio en un chat.
           </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">

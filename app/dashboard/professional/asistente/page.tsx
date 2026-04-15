@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
 import { getDisplayPlanName } from "@/lib/plans"
 
 const PROFESSIONS = [
@@ -105,12 +106,13 @@ export default function AsistentePage() {
         setPreferredName(client.preferred_name || "")
         setTreatment(client.treatment || "")
         setStyle(client.preferred_style || "balanceado")
-        setPlanCode(client.plan_code || "trial")
       }
 
       const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
       if (limitsError) throw limitsError
 
+      const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+      setPlanCode(getEffectivePlanCode(effectiveLimits))
       setCustomAgentEnabled(Boolean(limits?.custom_agent_enabled ?? false))
 
       const { data: prefs } = await supabase

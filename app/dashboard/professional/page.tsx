@@ -21,6 +21,11 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
+import {
+  getCurrentPeriodMonth,
+  getEffectivePlanCode,
+  type EffectiveLimitsRuntime,
+} from "@/lib/effective-limits"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type DashboardProfile = {
@@ -61,15 +66,6 @@ type FeatureAccess = {
   voiceEnabled: boolean
   googleEnabled: boolean
   customAgentEnabled: boolean
-}
-
-type EffectiveLimitsRow = {
-  max_messages_month?: number | null
-  max_audio_minutes?: number | null
-  max_automations?: number | null
-  voice_enabled?: boolean | null
-  google_enabled?: boolean | null
-  custom_agent_enabled?: boolean | null
 }
 
 function getUsagePercent(used: number, limit: number) {
@@ -211,27 +207,28 @@ export default function ProfessionalDashboardPage() {
         })
 
         if (clientId) {
-          const periodYYYYMM = new Date().toISOString().slice(0, 7).replace("-", "")
+          const periodMonth = getCurrentPeriodMonth()
           const today = new Date().toISOString().slice(0, 10)
 
-          const usageResp = await supabase
-            .from("usage_monthly")
-            .select("messages_used, audio_minutes_used, automations_used")
-            .eq("client_id", clientId)
-            .eq("period_yyyymm", periodYYYYMM)
-            .maybeSingle()
-
           const limitsResp = await supabase.rpc("get_my_effective_limits")
-
-          if (usageResp.error) {
-            console.error("Error cargando usage_monthly:", usageResp.error)
-          }
 
           if (limitsResp.error) {
             console.error("Error cargando get_my_effective_limits:", limitsResp.error)
           }
 
-          const effectiveLimits = (limitsResp.data || {}) as EffectiveLimitsRow
+          const effectiveLimits = (limitsResp.data || {}) as EffectiveLimitsRuntime
+          const effectivePlanCode = getEffectivePlanCode(effectiveLimits)
+
+          const usageResp = await supabase
+            .from("usage_monthly")
+            .select("messages_used, audio_minutes_used, automations_used")
+            .eq("client_id", clientId)
+            .eq("period_month", periodMonth)
+            .maybeSingle()
+
+          if (usageResp.error) {
+            console.error("Error cargando usage_monthly:", usageResp.error)
+          }
 
           setUsageSummary({
             messagesUsed: Number(usageResp.data?.messages_used ?? 0),
@@ -247,6 +244,15 @@ export default function ProfessionalDashboardPage() {
             googleEnabled: Boolean(effectiveLimits.google_enabled ?? false),
             customAgentEnabled: Boolean(effectiveLimits.custom_agent_enabled ?? false),
           })
+
+          setProfile((current) =>
+            current
+              ? {
+                  ...current,
+                  planCode: effectivePlanCode,
+                }
+              : current
+          )
 
           const documentsResp = await supabase
             .from("documents")

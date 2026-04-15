@@ -16,6 +16,12 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
+import {
+  getCurrentPeriodMonth,
+  getEffectivePlanCode,
+  getEffectivePlanStatus,
+  type EffectiveLimitsRuntime,
+} from "@/lib/effective-limits"
 import { getDefaultOwnerCatalog, type OwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
@@ -134,6 +140,7 @@ export default function ProfessionalSettingsPage() {
   const [phoneVerificationRequestedAt, setPhoneVerificationRequestedAt] = useState<string | null>(null)
   const [clientPlanCode, setClientPlanCode] = useState("trial")
   const [clientPlanStatus, setClientPlanStatus] = useState("trialing")
+  const [effectiveLimits, setEffectiveLimits] = useState<EffectiveLimitsRuntime | null>(null)
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -157,8 +164,10 @@ export default function ProfessionalSettingsPage() {
       .join("")
   }, [fullName])
 
-  const effectivePlanCode = subscription?.plan_code || clientPlanCode || "trial"
-  const effectivePlanStatus = subscription?.status || clientPlanStatus || "trialing"
+  const effectivePlanCode =
+    getEffectivePlanCode(effectiveLimits) || subscription?.plan_code || clientPlanCode || "trial"
+  const effectivePlanStatus =
+    getEffectivePlanStatus(effectiveLimits) || subscription?.status || clientPlanStatus || "trialing"
   const effectivePlanCatalog = useMemo(
     () => catalog.plans.find((plan) => plan.code === effectivePlanCode) || null,
     [catalog, effectivePlanCode]
@@ -436,6 +445,17 @@ export default function ProfessionalSettingsPage() {
         console.warn("catalog query error:", catalogError)
       }
 
+      const { data: myLimits, error: myLimitsError } = await supabase.rpc("get_my_effective_limits")
+      if (myLimitsError) {
+        console.warn("get_my_effective_limits query error:", myLimitsError.message)
+      } else {
+        const resolvedLimits = (myLimits || {}) as EffectiveLimitsRuntime
+        setEffectiveLimits(resolvedLimits)
+        setClientPlanCode(getEffectivePlanCode(resolvedLimits))
+        setClientPlanStatus(getEffectivePlanStatus(resolvedLimits))
+        setVoiceMinutesLimit(Number(resolvedLimits.max_audio_minutes ?? 0))
+      }
+
       // Load voice settings
       try {
         const { data: vsData } = await supabase
@@ -445,18 +465,16 @@ export default function ProfessionalSettingsPage() {
 
       // Load voice minutes usage
       try {
-        const period = new Date().toISOString().slice(0, 7).replace("-", "")
+        const periodMonth = getCurrentPeriodMonth()
         const { data: usageData } = await supabase
           .from("usage_monthly")
           .select("audio_minutes_used")
           .eq("client_id", resolvedClientId)
-          .eq("period_yyyymm", period)
+          .eq("period_month", periodMonth)
           .limit(1)
         if (usageData?.[0]) {
           setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
         }
-        const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
-        setVoiceMinutesLimit(Number(myLimits?.max_audio_minutes ?? 0))
       } catch (_) {}
 
     } catch (error: any) {
@@ -1044,6 +1062,7 @@ export default function ProfessionalSettingsPage() {
         <VoiceSettingsSection
           clientId={clientId}
           planCode={effectivePlanCode}
+          voiceEnabled={Boolean(effectiveLimits?.voice_enabled ?? voiceMinutesLimit > 0)}
           voiceSettings={voiceSettings}
           minutesUsed={voiceMinutesUsed}
           minutesLimit={voiceMinutesLimit}

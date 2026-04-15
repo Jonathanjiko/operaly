@@ -20,16 +20,14 @@
  *    // Cargar configuración de voz
  *    const vsResult = await supabase.rpc("get_voice_settings", { p_client_id: resolvedClientId })
  *    if (vsResult.data) setVoiceSettings(vsResult.data)
- *    // Cargar uso de minutos
- *    const period = new Date().toISOString().slice(0,7).replace("-","")
- *    const usageResult = await supabase.from("usage_monthly")
- *      .select("audio_minutes_used").eq("client_id", resolvedClientId).eq("period_yyyymm", period).limit(1)
- *    if (usageResult.data?.[0]) setVoiceUsage({ used: usageResult.data[0].audio_minutes_used || 0, limit: voiceSettings?.calls_minutes || 0 })
+ *    // Cargar uso/límite desde runtime efectivo
+ *    // El frontend ya debe leer `period_month` y `get_my_effective_limits`
  *
  * 5. En el JSX, ANTES del cierre </div> final, agregar:
  *    <VoiceSettingsSection
  *      clientId={clientId}
  *      planCode={effectivePlanCode}
+ *      voiceEnabled={Boolean(effectiveLimits?.voice_enabled)}
  *      voiceSettings={voiceSettings}
  *      minutesUsed={voiceUsage.used}
  *      minutesLimit={voiceUsage.limit}
@@ -59,6 +57,7 @@ type VoiceSettings = {
 type VoiceSettingsSectionProps = {
   clientId: string
   planCode: string
+  voiceEnabled: boolean
   voiceSettings: VoiceSettings | null
   minutesUsed: number
   minutesLimit: number
@@ -94,25 +93,18 @@ const CALL_STYLES = [
 ]
 
 // Plan gate
-const VOICE_PLANS: Record<string, { audio: boolean; calls: boolean; ai_calls: boolean; minutes: number }> = {
-  trial:    { audio: false, calls: false, ai_calls: false, minutes: 0 },
-  core:     { audio: false, calls: false, ai_calls: false, minutes: 0 },
-  pro:      { audio: true,  calls: true,  ai_calls: false, minutes: 20 },
-  pro_plus: { audio: true,  calls: true,  ai_calls: true,  minutes: 60 },
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function VoiceSettingsSection({
   clientId,
   planCode,
+  voiceEnabled,
   voiceSettings,
   minutesUsed,
   minutesLimit,
   onSaved,
 }: VoiceSettingsSectionProps) {
-  const plan = VOICE_PLANS[planCode] || VOICE_PLANS.trial
-  const hasVoice = plan.audio
+  const hasVoice = voiceEnabled
   const minutesPercent = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
   const [saving, setSaving]         = useState(false)

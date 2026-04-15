@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { getCurrentPeriodMonth } from "@/lib/effective-limits"
 import { formatLimit } from "@/lib/plans"
 
 const ELEVENLABS_VOICES = [
@@ -68,13 +69,14 @@ export default function VozPage() {
   }, [])
 
   const loadUsageForCurrentPeriod = async (cid: string) => {
-    const period = new Date().toISOString().slice(0, 7).replace("-", "")
+    const periodMonth = getCurrentPeriodMonth()
+    const legacyPeriod = periodMonth.slice(0, 7).replace("-", "")
 
     const runtimeUsage = await supabase
       .from("usage_monthly")
       .select("audio_minutes_used")
       .eq("client_id", cid)
-      .eq("period_month", period)
+      .eq("period_month", periodMonth)
       .limit(1)
 
     if (!runtimeUsage.error) {
@@ -85,7 +87,7 @@ export default function VozPage() {
       .from("usage_monthly")
       .select("audio_minutes_used")
       .eq("client_id", cid)
-      .eq("period_yyyymm", period)
+      .eq("period_yyyymm", legacyPeriod)
       .limit(1)
 
     return Number(legacyUsage.data?.[0]?.audio_minutes_used ?? 0)
