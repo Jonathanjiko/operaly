@@ -99,6 +99,13 @@ function getAnonClient() {
   })
 }
 
+function getCurrentPeriodMonth() {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0")
+  return `${year}-${month}-01`
+}
+
 function extractBearerToken(request: Request): string {
   const authHeader = request.headers.get("authorization") || ""
   if (!authHeader.toLowerCase().startsWith("bearer ")) {
@@ -152,12 +159,13 @@ async function requireOwner(request: Request) {
 }
 
 async function loadUsageRows(admin: ReturnType<typeof getAdminClient>) {
-  const period = new Date().toISOString().slice(0, 7).replace("-", "")
+  const periodMonth = getCurrentPeriodMonth()
+  const legacyPeriod = periodMonth.slice(0, 7).replace("-", "")
 
   const runtimeRes = await admin
     .from("usage_monthly")
     .select("client_id, messages_used, audio_minutes_used, automations_used, storage_used_mb, docs_count")
-    .eq("period_month", period)
+    .eq("period_month", periodMonth)
 
   if (!runtimeRes.error) {
     return runtimeRes.data || []
@@ -166,7 +174,7 @@ async function loadUsageRows(admin: ReturnType<typeof getAdminClient>) {
   const legacyRes = await admin
     .from("usage_monthly")
     .select("client_id, messages_used, audio_minutes_used, automations_used, storage_used_mb, docs_count")
-    .eq("period_yyyymm", period)
+    .eq("period_yyyymm", legacyPeriod)
 
   if (legacyRes.error) {
     throw new HttpError(500, legacyRes.error.message)
@@ -187,7 +195,7 @@ export async function GET(request: Request) {
         .limit(100),
       admin
         .from("payments")
-        .select("id, client_id, status, amount_usd, currency, provider, provider_ref, paid_at, created_at")
+        .select("id, client_id, status, amount_pen, display_amount, display_currency, amount_usd, currency, provider, provider_ref, paid_at, created_at")
         .order("created_at", { ascending: false })
         .limit(100),
       admin
@@ -276,8 +284,8 @@ export async function GET(request: Request) {
         city: client?.city ?? null,
         plan_code: client?.plan_code ?? null,
         status: String(row.status || ""),
-        amount: Number(row.amount_usd || 0),
-        currency_code: String(row.currency || "PEN"),
+        amount: Number(row.amount_pen ?? row.display_amount ?? row.amount_usd || 0),
+        currency_code: String(row.currency || row.display_currency || "PEN"),
         payment_method: row.provider ?? null,
         payment_method_brand: null,
         order_number: row.provider_ref ?? null,

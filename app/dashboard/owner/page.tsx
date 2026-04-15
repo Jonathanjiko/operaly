@@ -562,7 +562,7 @@ export default function OwnerDashboardPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" },
         (payload: any) => {
           const p = payload.new || {}
-          const pen = toPEN(Number(p.amount_usd || 0), p.currency || "PEN")
+          const pen = Number(p.amount_pen || toPEN(Number(p.amount_usd || 0), p.currency || "PEN"))
           const note = {
             id: p.id || Date.now().toString(),
             title: "💰 Nuevo pago recibido",
