@@ -7,11 +7,8 @@ import Image from "next/image"
 
 const navItems = [
   { label: "Cómo funciona", href: "#como-funciona" },
-  { label: "Casos de uso", href: "#soluciones" },
-  { label: "Operaly", href: "#operaly" },
   { label: "Funciones", href: "#funciones" },
-  { label: "Precios", href: "/precios" },
-  { label: "Contacto", href: "#contacto" },
+  { label: "Precios", href: "#precios" },
 ]
 
 export function Header() {
