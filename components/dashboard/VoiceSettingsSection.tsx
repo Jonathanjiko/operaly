@@ -105,6 +105,9 @@ export function VoiceSettingsSection({
   onSaved,
 }: VoiceSettingsSectionProps) {
   const hasVoice = voiceEnabled
+  const hasAiCalls = ["pro_plus", "owner", "owner_unlimited", "internal"].includes(
+    String(planCode || "").toLowerCase()
+  )
   const minutesPercent = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
   const [saving, setSaving]         = useState(false)
@@ -340,7 +343,7 @@ export function VoiceSettingsSection({
           </div>
 
           {/* Pro Plus badge */}
-          {plan.ai_calls && (
+          {hasAiCalls && (
             <div className="flex items-center gap-2 p-3 rounded-xl border border-[#7C3AED]/20 bg-[#7C3AED]/5">
               <Sparkles className="w-4 h-4 text-[#7C3AED]" />
               <p className="text-sm text-[#7C3AED] font-medium">
