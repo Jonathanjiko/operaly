@@ -22,21 +22,32 @@ import { getDisplayPlanName } from "@/lib/plans"
 
 type GoogleStatusPayload = {
   ok?: boolean
+  google_enabled?: boolean
   capability?: {
     google_enabled?: boolean
   }
   connection?: {
     status?: string | null
+    connection_status?: string | null
     external_account_email?: string | null
     connected_at?: string | null
+    granted_scopes?: string[] | null
+    authorized_products?: string[] | null
   } | null
-  sync_state?: {
-    enabled?: boolean | null
-    sync_status?: string | null
-    last_synced_at?: string | null
-    last_error?: string | null
-    metadata?: Record<string, any> | null
-  } | null
+  products?: Partial<Record<GoogleProduct, GoogleProductState>>
+  calendar?: GoogleProductState
+  drive?: GoogleProductState
+  gmail?: GoogleProductState
+}
+
+type GoogleProduct = "calendar" | "drive" | "gmail"
+
+type GoogleProductState = {
+  enabled?: boolean | null
+  sync_status?: string | null
+  last_synced_at?: string | null
+  last_error?: string | null
+  metadata?: Record<string, any> | null
 }
 
 const GoogleDriveIcon = () => (
@@ -69,6 +80,7 @@ const GoogleCalendarIcon = () => (
 
 type IntegrationCard = {
   id: "google_drive" | "google_calendar" | "gmail"
+  product: GoogleProduct
   name: string
   description: string
   icon: () => JSX.Element
@@ -79,6 +91,7 @@ type IntegrationCard = {
 const INTEGRATIONS: IntegrationCard[] = [
   {
     id: "google_drive",
+    product: "drive",
     name: "Google Drive",
     description:
       "Consultar, descargar y analizar archivos del Drive desde Operaly, incluso para compartirlos o usarlos en flujos por WhatsApp.",
@@ -92,6 +105,7 @@ const INTEGRATIONS: IntegrationCard[] = [
   },
   {
     id: "google_calendar",
+    product: "calendar",
     name: "Google Calendar",
     description:
       "Sincronizar tu agenda real con Operaly para verla desde WhatsApp, crear eventos y mantener recordatorios consistentes.",
@@ -105,6 +119,7 @@ const INTEGRATIONS: IntegrationCard[] = [
   },
   {
     id: "gmail",
+    product: "gmail",
     name: "Gmail",
     description:
       "Preparar borradores, confirmar el contenido y luego enviar correos finales con o sin adjuntos desde Operaly.",
@@ -119,6 +134,29 @@ const INTEGRATIONS: IntegrationCard[] = [
 ]
 
 type IntegrationRuntimeStatus = "blocked" | "connected" | "ready_to_connect" | "coming_soon" | "error"
+
+function getProductLabel(product: GoogleProduct) {
+  if (product === "calendar") return "Calendar"
+  if (product === "drive") return "Drive"
+  return "Gmail"
+}
+
+function getProductState(status: GoogleStatusPayload | null, product: GoogleProduct) {
+  return status?.products?.[product] || status?.[product] || null
+}
+
+function normalizeGoogleError(payload: any, fallback: string) {
+  const detail = payload?.detail
+  const error = detail?.error || payload?.error || payload?.detail
+  if (error === "google_oauth_not_configured") {
+    return "Google OAuth aún no está configurado en el servidor. Faltan credenciales GOOGLE_* en el contenedor."
+  }
+  if (error === "google_addon_required") {
+    return "Activa el add-on Google Suite para conectar tu cuenta."
+  }
+  if (typeof error === "string" && error.trim()) return error
+  return fallback
+}
 
 function StatusPill({
   status,
@@ -197,8 +235,9 @@ export default function IntegracionesPage() {
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(payload?.error || "No se pudo consultar Google.")
     setGoogleStatus(payload as GoogleStatusPayload)
-    if (typeof payload?.capability?.google_enabled === "boolean") {
-      setGoogleEnabled(Boolean(payload.capability.google_enabled))
+    const enabled = payload?.capability?.google_enabled ?? payload?.google_enabled
+    if (typeof enabled === "boolean") {
+      setGoogleEnabled(Boolean(enabled))
     }
   }
 
@@ -229,15 +268,21 @@ export default function IntegracionesPage() {
 
   const integrationStatuses = useMemo(() => {
     return INTEGRATIONS.map((integration) => {
+      const productState = getProductState(googleStatus, integration.product)
+      const authorizedProducts = googleStatus?.connection?.authorized_products || []
+      const hasLegacyCalendarConnection =
+        integration.product === "calendar" &&
+        !googleStatus?.products &&
+        (googleStatus?.connection?.connection_status === "connected" || googleStatus?.connection?.status === "connected")
+      const isProductConnected =
+        Boolean(productState?.enabled) || authorizedProducts.includes(integration.product) || hasLegacyCalendarConnection
       const runtimeStatus: IntegrationRuntimeStatus = !googleEnabled
         ? "blocked"
-        : integration.id === "google_calendar"
-          ? googleStatus?.sync_state?.enabled || googleStatus?.connection?.status === "connected"
+        : isProductConnected
             ? "connected"
-            : googleStatus?.sync_state?.sync_status === "error"
+            : productState?.sync_status === "error"
               ? "error"
               : "ready_to_connect"
-          : "coming_soon"
 
       return {
         ...integration,
@@ -246,61 +291,61 @@ export default function IntegracionesPage() {
     })
   }, [googleEnabled, googleStatus])
 
-  const handleConnectCalendar = async () => {
-    setActionLoading("connect")
+  const handleConnectProduct = async (product: GoogleProduct) => {
+    setActionLoading(`connect:${product}`)
     setStatusError("")
     try {
       const headers = await getAuthHeaders()
-      const response = await fetch("/api/google/calendar/connect", {
+      const response = await fetch(`/api/google/${product}/connect`, {
         method: "GET",
         headers,
         cache: "no-store",
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload?.error || "No se pudo iniciar Google Calendar.")
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo iniciar Google ${getProductLabel(product)}.`))
       const authUrl = String(payload?.auth_url || "")
       if (!authUrl) throw new Error("Google no devolvió una URL de autorización.")
       window.location.href = authUrl
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "No se pudo conectar Google Calendar.")
+      setStatusError(err instanceof Error ? err.message : `No se pudo conectar Google ${getProductLabel(product)}.`)
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleValidateCalendar = async () => {
-    setActionLoading("validate")
+  const handleValidateProduct = async (product: GoogleProduct) => {
+    setActionLoading(`validate:${product}`)
     setStatusError("")
     try {
       const headers = await getAuthHeaders()
-      const response = await fetch("/api/google/calendar/validate", {
+      const response = await fetch(`/api/google/${product}/validate`, {
         method: "POST",
         headers,
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload?.error || "No se pudo validar Google Calendar.")
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo validar Google ${getProductLabel(product)}.`))
       await loadGoogleStatus()
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "No se pudo validar Google Calendar.")
+      setStatusError(err instanceof Error ? err.message : `No se pudo validar Google ${getProductLabel(product)}.`)
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleDisconnectCalendar = async () => {
-    setActionLoading("disconnect")
+  const handleDisconnectProduct = async (product: GoogleProduct) => {
+    setActionLoading(`disconnect:${product}`)
     setStatusError("")
     try {
       const headers = await getAuthHeaders()
-      const response = await fetch("/api/google/calendar/disconnect", {
+      const response = await fetch(`/api/google/${product}/disconnect`, {
         method: "POST",
         headers,
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload?.error || "No se pudo desconectar Google Calendar.")
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo desconectar Google ${getProductLabel(product)}.`))
       await loadGoogleStatus()
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "No se pudo desconectar Google Calendar.")
+      setStatusError(err instanceof Error ? err.message : `No se pudo desconectar Google ${getProductLabel(product)}.`)
     } finally {
       setActionLoading(null)
     }
@@ -373,7 +418,10 @@ export default function IntegracionesPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {googleStatus?.connection?.status === "connected" ? "Conectado" : "Disponible"}
+                {googleStatus?.connection?.connection_status === "connected" ||
+                googleStatus?.connection?.status === "connected"
+                  ? "Conectado"
+                  : "Disponible"}
               </p>
             </div>
           </div>
@@ -392,6 +440,8 @@ export default function IntegracionesPage() {
         {integrationStatuses.map((integration) => {
           const Icon = integration.icon
           const runtimeStatus = integration.runtimeStatus
+          const productState = getProductState(googleStatus, integration.product)
+          const productLabel = getProductLabel(integration.product)
 
           return (
             <div
@@ -419,27 +469,30 @@ export default function IntegracionesPage() {
               </div>
 
               <div className="mt-5 space-y-2">
-                {integration.id === "google_calendar" && runtimeStatus === "connected" ? (
+                {runtimeStatus === "connected" ? (
                   <div className="space-y-2">
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
                       <p className="font-semibold">Cuenta conectada</p>
-                      <p className="mt-1">{googleStatus?.connection?.external_account_email || "Google Calendar autorizado"}</p>
-                      <p className="mt-1">Estado: {googleStatus?.sync_state?.sync_status || "idle"}</p>
+                      <p className="mt-1">{googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`}</p>
+                      <p className="mt-1">Estado: {productState?.sync_status || "idle"}</p>
+                      {productState?.last_error && (
+                        <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={handleValidateCalendar}
+                        onClick={() => handleValidateProduct(integration.product)}
                         disabled={Boolean(actionLoading)}
                         className="flex h-10 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-60"
                       >
-                        {actionLoading === "validate" ? "Validando..." : "Validar"}
+                        {actionLoading === `validate:${integration.product}` ? "Validando..." : "Validar"}
                       </button>
                       <button
-                        onClick={handleDisconnectCalendar}
+                        onClick={() => handleDisconnectProduct(integration.product)}
                         disabled={Boolean(actionLoading)}
                         className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
                       >
-                        {actionLoading === "disconnect" ? "Desconectando..." : "Desconectar"}
+                        {actionLoading === `disconnect:${integration.product}` ? "Desconectando..." : "Desconectar"}
                       </button>
                     </div>
                   </div>
@@ -450,31 +503,21 @@ export default function IntegracionesPage() {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </Link>
-                ) : integration.id === "google_calendar" ? (
+                ) : (
                   <button
-                    onClick={handleConnectCalendar}
+                    onClick={() => handleConnectProduct(integration.product)}
                     disabled={Boolean(actionLoading)}
                     className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
                   >
-                    {actionLoading === "connect" ? "Abriendo Google..." : "Conectar Calendar"}
+                    {actionLoading === `connect:${integration.product}` ? "Abriendo Google..." : `Conectar ${productLabel}`}
                     <CalendarDays className="h-3.5 w-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 text-sm font-medium text-amber-700"
-                  >
-                    Próximo producto
-                    <Clock3 className="h-3.5 w-3.5" />
                   </button>
                 )}
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
                     ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
-                    : integration.id === "google_calendar"
-                      ? "Conecta tu propia cuenta Google. Operaly solo guardará la autorización cifrada para este cliente."
-                      : "Drive y Gmail siguen preparados, pero todavía no están activos. Primero dejamos Calendar estable."}
+                    : "Conecta tu propia cuenta Google. Operaly solo guardara la autorizacion cifrada para este cliente."}
                 </div>
               </div>
             </div>
