@@ -107,7 +107,7 @@ type ClientRow = {
 
 type OwnerActivityEntry = {
   id: string
-  action: "plan_change" | "status_change"
+  action: "plan_change" | "status_change" | "client_delete"
   clientId: string
   clientName: string
   previousValue: string | null
@@ -640,6 +640,44 @@ export default function OwnerDashboardPage() {
       await loadOwnerDashboard(true)
     } catch (error: any) {
       alert(error.message || "No se pudo actualizar el estado del cliente.")
+    } finally {
+      setActionLoadingKey("")
+    }
+  }
+
+  const runClientDelete = async (client: ClientRow) => {
+    const clientLabel = client.name || client.email || client.phone || "este cliente"
+    const shouldDelete = window.confirm(
+      `Se eliminará por completo a ${clientLabel}.\n\nEsta acción limpia la cuenta operativa para permitir un registro nuevo con el mismo correo o teléfono.\n\n¿Deseas continuar?`
+    )
+
+    if (!shouldDelete) return
+
+    const loadingKey = `delete:${client.id}`
+    setActionLoadingKey(loadingKey)
+
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/client/delete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientId: client.id,
+          email: client.email,
+          phone: client.phone,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo eliminar por completo al cliente.")
+      }
+
+      setSelectedClient(null)
+      await loadOwnerDashboard(true)
+      alert("Cliente eliminado por completo. Ya puedes volver a registrarlo desde cero.")
+    } catch (error: any) {
+      alert(error.message || "No se pudo eliminar por completo al cliente.")
     } finally {
       setActionLoadingKey("")
     }
@@ -1616,7 +1654,11 @@ export default function OwnerDashboardPage() {
                         <div>
                           <p className="font-medium text-[#0F1F63]">{entry.clientName}</p>
                           <p className="text-sm text-slate-500">
-                            {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}:{" "}
+                            {entry.action === "plan_change"
+                              ? "Cambio de plan"
+                              : entry.action === "client_delete"
+                                ? "Eliminación completa"
+                                : "Cambio de estado"}:{" "}
                             <span className="font-medium text-slate-700">{entry.previousValue || "—"}</span>
                             {" → "}
                             <span className="font-medium text-slate-700">{entry.nextValue || "—"}</span>
@@ -1993,7 +2035,23 @@ export default function OwnerDashboardPage() {
                               ? "Actualizando..."
                               : "Dar de baja"}
                           </Button>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            disabled={Boolean(actionLoadingKey)}
+                            onClick={() => runClientDelete(selectedClient)}
+                          >
+                            {actionLoadingKey === `delete:${selectedClient.id}`
+                              ? "Eliminando..."
+                              : "Eliminar por completo"}
+                          </Button>
                         </div>
+                        <p className="mt-3 text-xs leading-5 text-slate-500">
+                          Usa <span className="font-medium text-[#0F1F63]">Dar de baja</span> para desactivar sin perder historial.
+                          Usa <span className="font-medium text-red-600">Eliminar por completo</span> cuando necesites
+                          limpiar el registro y volver a probar desde cero con el mismo correo o teléfono.
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -2017,7 +2075,11 @@ export default function OwnerDashboardPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="font-medium text-[#0F1F63]">
-                              {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}
+                              {entry.action === "plan_change"
+                                ? "Cambio de plan"
+                                : entry.action === "client_delete"
+                                  ? "Eliminación completa"
+                                  : "Cambio de estado"}
                             </p>
                             <p className="text-xs text-slate-500 mt-1">
                               {entry.previousValue || "—"} → {entry.nextValue || "—"}
