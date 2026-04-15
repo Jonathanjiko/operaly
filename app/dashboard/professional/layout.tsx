@@ -39,6 +39,7 @@ import {
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
+import { labelForLanguage } from "@/lib/runtime-locale"
 
 const sidebarItems = [
   { href: "/dashboard/professional", label: "Dashboard", icon: LayoutDashboard },
@@ -149,7 +150,7 @@ function UserMenu({
             <p className="text-sm font-semibold text-[#0F1F63]">{profile.fullName}</p>
             <p className="text-xs text-slate-500">{profile.email || "Cuenta activa"}</p>
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-              Idioma base: {profile.preferredLanguage || "es"}
+              Idioma base: {labelForLanguage(profile.preferredLanguage || "es")}
             </p>
           </div>
         </DropdownMenuLabel>

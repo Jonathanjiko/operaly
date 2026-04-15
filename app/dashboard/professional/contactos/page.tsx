@@ -4,11 +4,14 @@ import { useEffect, useState, useCallback } from "react"
 import { User, Phone, Plus, Pencil, Trash2, RefreshCw, X, Save, Search, Users } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { labelForLanguage, normalizeInternationalPhone } from "@/lib/runtime-locale"
 
 type ContactRow = {
   id: string
   name: string
   phone: string
+  phone_normalized?: string | null
+  phone_validation_status?: string | null
   relationship?: string
   notes?: string
   birthday?: string
@@ -51,14 +54,33 @@ export default function ContactosPage() {
   const [form, setForm]             = useState<ContactForm>(BLANK_FORM)
   const [saving, setSaving]         = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [countryCode, setCountryCode] = useState("PE")
+  const [preferredLanguage, setPreferredLanguage] = useState("es")
+  const [phoneHelper, setPhoneHelper] = useState("")
 
-  useEffect(() => { getCurrentClientId().then(cid => { setClientId(cid); loadContacts(cid) }).catch(console.error) }, [])
+  useEffect(() => {
+    getCurrentClientId()
+      .then(async (cid) => {
+        setClientId(cid)
+
+        const { data: client } = await supabase
+          .from("clients")
+          .select("country_code, preferred_language, language")
+          .eq("id", cid)
+          .maybeSingle()
+
+        setCountryCode(String(client?.country_code || "PE").toUpperCase())
+        setPreferredLanguage(String(client?.preferred_language || client?.language || "es"))
+        await loadContacts(cid)
+      })
+      .catch(console.error)
+  }, [])
 
   const loadContacts = useCallback(async (cid?: string) => {
     const id = cid || clientId
     if (!id) return
     setLoading(true)
-    const { data } = await supabase.from("contacts").select("id,name,phone,relationship,notes,birthday,created_at")
+    const { data } = await supabase.from("contacts").select("id,name,phone,phone_normalized,phone_validation_status,relationship,notes,birthday,created_at")
       .eq("client_id", id).order("name", { ascending: true })
     setContacts((data || []) as ContactRow[])
     setLoading(false)
@@ -80,9 +102,10 @@ export default function ContactosPage() {
     (c.relationship || "").toLowerCase().includes(search.toLowerCase())
   )
 
-  const openAdd = () => { setForm(BLANK_FORM); setEditingId(null); setShowForm(true) }
+  const openAdd = () => { setForm(BLANK_FORM); setEditingId(null); setPhoneHelper(""); setShowForm(true) }
   const openEdit = (c: ContactRow) => {
     setForm({ name: c.name, phone: c.phone || "", relationship: c.relationship || "", notes: c.notes || "" })
+    setPhoneHelper(c.phone_normalized ? `Operaly ya lo tiene normalizado como ${c.phone_normalized}.` : "")
     setEditingId(c.id); setShowForm(true)
   }
 
@@ -90,14 +113,35 @@ export default function ContactosPage() {
     if (!form.name.trim() || !clientId) return
     setSaving(true)
     try {
-      if (editingId) {
-        await supabase.from("contacts").update({ name: form.name.trim(), phone: form.phone.trim(), relationship: form.relationship.trim() || null, notes: form.notes.trim() || null, updated_at: new Date().toISOString() }).eq("id", editingId)
-      } else {
-        let phone = form.phone.trim()
-        if (phone && !phone.startsWith("+")) phone = "+51" + phone.replace(/^0/, "")
-        await supabase.from("contacts").insert({ client_id: clientId, name: form.name.trim(), phone, relationship: form.relationship.trim() || null, notes: form.notes.trim() || null })
+      const normalizedPhone = normalizeInternationalPhone(form.phone.trim(), countryCode)
+
+      if (form.phone.trim() && !normalizedPhone.ok) {
+        alert(normalizedPhone.helperText)
+        return
       }
-      setShowForm(false); setEditingId(null); setForm(BLANK_FORM)
+
+      if (editingId) {
+        await supabase.from("contacts").update({
+          name: form.name.trim(),
+          phone: normalizedPhone.normalized || form.phone.trim(),
+          phone_normalized: normalizedPhone.normalized || null,
+          phone_validation_status: normalizedPhone.normalized ? "normalized" : null,
+          relationship: form.relationship.trim() || null,
+          notes: form.notes.trim() || null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", editingId)
+      } else {
+        await supabase.from("contacts").insert({
+          client_id: clientId,
+          name: form.name.trim(),
+          phone: normalizedPhone.normalized || null,
+          phone_normalized: normalizedPhone.normalized || null,
+          phone_validation_status: normalizedPhone.normalized ? "normalized" : null,
+          relationship: form.relationship.trim() || null,
+          notes: form.notes.trim() || null,
+        })
+      }
+      setShowForm(false); setEditingId(null); setForm(BLANK_FORM); setPhoneHelper("")
       await loadContacts()
     } finally { setSaving(false) }
   }
@@ -126,6 +170,9 @@ export default function ContactosPage() {
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
             <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             {contacts.length} contacto{contacts.length !== 1 ? "s" : ""} · en tiempo real
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Base: {countryCode} · idioma operativo {labelForLanguage(preferredLanguage)}
           </p>
         </div>
         <div className="flex gap-2">
@@ -165,9 +212,15 @@ export default function ContactosPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
-              <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+              <input value={form.phone} onChange={e => {
+                const nextPhone = e.target.value
+                setForm(f => ({ ...f, phone: nextPhone }))
+                const preview = normalizeInternationalPhone(nextPhone, countryCode)
+                setPhoneHelper(preview.helperText)
+              }}
                 placeholder="+51 999 123 456"
                 className="w-full h-9 px-3 rounded-xl border border-[#D9E1EC] text-sm focus:outline-none focus:border-[#3B82F6]" />
+              {phoneHelper && <p className="mt-1 text-[11px] text-slate-500">{phoneHelper}</p>}
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Relación</label>
@@ -236,6 +289,12 @@ export default function ContactosPage() {
                     <a href={`tel:${c.phone}`} className="flex items-center gap-1 mt-0.5 text-sm text-[#3B82F6] hover:underline">
                       <Phone className="w-3 h-3" />{c.phone}
                     </a>
+                  )}
+                  {c.phone_normalized && c.phone_normalized !== c.phone && (
+                    <p className="text-[11px] text-slate-400 mt-1">Normalizado: {c.phone_normalized}</p>
+                  )}
+                  {c.phone_validation_status && (
+                    <p className="text-[11px] text-slate-400 mt-1">Estado: {c.phone_validation_status}</p>
                   )}
                   {c.notes && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{c.notes}</p>}
 

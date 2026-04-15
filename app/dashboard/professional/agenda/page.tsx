@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import {
   ChevronLeft, ChevronRight, Plus, RefreshCw,
   Zap, CheckSquare, Clock, CalendarDays, X, AlarmClock,
@@ -22,13 +23,141 @@ type EventItem = {
 
 type ViewMode = "month" | "week" | "day" | "agenda"
 
+const AGENDA_COPY: Record<
+  SupportedLanguage,
+  {
+    task: string
+    automation: string
+    dateTime: string
+    overdue: string
+    close: string
+    today: string
+    month: string
+    week: string
+    day: string
+    agenda: string
+    more: string
+    noEvents: string
+    noEventsHint: string
+    totalEvents: string
+  }
+> = {
+  es: {
+    task: "Tarea",
+    automation: "Automatización",
+    dateTime: "Fecha y hora",
+    overdue: "Fecha vencida",
+    close: "Cerrar",
+    today: "Hoy",
+    month: "Mes",
+    week: "Semana",
+    day: "Día",
+    agenda: "Agenda",
+    more: "más",
+    noEvents: "No hay eventos próximos",
+    noEventsHint: "Tus tareas aparecerán aquí cuando tengan fecha",
+    totalEvents: "eventos en total",
+  },
+  en: {
+    task: "Task",
+    automation: "Automation",
+    dateTime: "Date and time",
+    overdue: "Past due",
+    close: "Close",
+    today: "Today",
+    month: "Month",
+    week: "Week",
+    day: "Day",
+    agenda: "Agenda",
+    more: "more",
+    noEvents: "No upcoming events",
+    noEventsHint: "Your dated tasks will show up here",
+    totalEvents: "total events",
+  },
+  pt: {
+    task: "Tarefa",
+    automation: "Automação",
+    dateTime: "Data e hora",
+    overdue: "Data vencida",
+    close: "Fechar",
+    today: "Hoje",
+    month: "Mês",
+    week: "Semana",
+    day: "Dia",
+    agenda: "Agenda",
+    more: "mais",
+    noEvents: "Sem próximos eventos",
+    noEventsHint: "Suas tarefas com data aparecerão aqui",
+    totalEvents: "eventos no total",
+  },
+  de: {
+    task: "Aufgabe",
+    automation: "Automatisierung",
+    dateTime: "Datum und Uhrzeit",
+    overdue: "Überfällig",
+    close: "Schließen",
+    today: "Heute",
+    month: "Monat",
+    week: "Woche",
+    day: "Tag",
+    agenda: "Agenda",
+    more: "mehr",
+    noEvents: "Keine bevorstehenden Termine",
+    noEventsHint: "Deine datierten Aufgaben erscheinen hier",
+    totalEvents: "Ereignisse gesamt",
+  },
+  fr: {
+    task: "Tâche",
+    automation: "Automatisation",
+    dateTime: "Date et heure",
+    overdue: "En retard",
+    close: "Fermer",
+    today: "Aujourd'hui",
+    month: "Mois",
+    week: "Semaine",
+    day: "Jour",
+    agenda: "Agenda",
+    more: "plus",
+    noEvents: "Aucun événement à venir",
+    noEventsHint: "Tes tâches datées apparaîtront ici",
+    totalEvents: "événements au total",
+  },
+  it: {
+    task: "Attività",
+    automation: "Automazione",
+    dateTime: "Data e ora",
+    overdue: "Scaduto",
+    close: "Chiudi",
+    today: "Oggi",
+    month: "Mese",
+    week: "Settimana",
+    day: "Giorno",
+    agenda: "Agenda",
+    more: "altro",
+    noEvents: "Nessun evento imminente",
+    noEventsHint: "Le attività con data appariranno qui",
+    totalEvents: "eventi totali",
+  },
+}
+
 // ── Event Detail Modal ──────────────────────────────────────────────────────
-function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () => void }) {
+function EventDetailModal({
+  event,
+  onClose,
+  locale,
+  language,
+}: {
+  event: EventItem
+  onClose: () => void
+  locale: string
+  language: SupportedLanguage
+}) {
   const isTask = event.type === "task"
   const color = isTask ? "#3B82F6" : "#7C3AED"
+  const copy = AGENDA_COPY[language]
   const d = new Date(event.sourceAt)
   const ok = !isNaN(d.getTime())
-  const fullStr = ok ? d.toLocaleString("es-PE", {
+  const fullStr = ok ? d.toLocaleString(locale, {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -72,7 +201,7 @@ function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () =>
             <AlarmClock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color }} />
             <div>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                Fecha y hora
+                {copy.dateTime}
               </p>
               <p className={`text-sm font-semibold capitalize ${overdue ? "text-[#EF4444]" : "text-[#0F1F63]"}`}>
                 {fullStr}
@@ -86,7 +215,7 @@ function EventDetailModal({ event, onClose }: { event: EventItem; onClose: () =>
             onClick={onClose}
             className="w-full h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a] transition-colors"
           >
-            Cerrar
+            {copy.close}
           </button>
         </div>
       </div>
@@ -179,6 +308,7 @@ export default function AgendaPage() {
   const [selectedDK, setSelectedDK] = useState("")
   const [tz, setTz] = useState("America/Lima")
   const [locale, setLocale] = useState("es-PE")
+  const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [reloadKey, setReloadKey]          = useState(0)
   const [rtClientId, setRtClientId]        = useState("")
@@ -199,11 +329,12 @@ export default function AgendaPage() {
           Intl.DateTimeFormat().resolvedOptions().timeZone ||
           "America/Lima"
 
-        const lang = cl?.preferred_language || cl?.language || "es"
-        const resolvedLocale = lang === "en" ? "en-US" : lang === "pt" ? "pt-BR" : "es-PE"
+        const resolvedLanguage = resolveLanguageCode(cl?.preferred_language || cl?.language || "es")
+        const resolvedLocale = localeFromLanguage(resolvedLanguage)
 
         setTz(resolvedTz)
         setLocale(resolvedLocale)
+        setLanguage(resolvedLanguage)
 
         const now = new Date()
         setSelectedDK(dateKey(now, resolvedTz))
@@ -593,6 +724,8 @@ export default function AgendaPage() {
       {selectedEvent && (
         <EventDetailModal
           event={selectedEvent}
+          locale={locale}
+          language={language}
           onClose={() => setSelectedEvent(null)}
         />
       )}
