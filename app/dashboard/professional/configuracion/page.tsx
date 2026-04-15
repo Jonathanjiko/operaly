@@ -85,6 +85,9 @@ type PaymentRow = {
   provider_ref: string | null
   transaction_id: string | null
   status: string
+  amount_pen: number | null
+  display_amount: number | null
+  display_currency: string | null
   amount_usd: number
   currency: string
   paid_at: string | null
@@ -415,6 +418,9 @@ export default function ProfessionalSettingsPage() {
             provider_ref,
             transaction_id,
             status,
+            amount_pen,
+            display_amount,
+            display_currency,
             amount_usd,
             currency,
             paid_at,
@@ -978,7 +984,10 @@ export default function ProfessionalSettingsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
-                          {formatMoney(payment.currency || BILLING_CURRENCY_CODE, payment.amount_usd)}
+                          {formatMoney(
+                            payment.currency || payment.display_currency || BILLING_CURRENCY_CODE,
+                            (payment.amount_pen ?? payment.display_amount ?? payment.amount_usd) || 0
+                          )}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
                           {payment.provider || "MercadoPago"}

@@ -284,7 +284,7 @@ export async function GET(request: Request) {
         city: client?.city ?? null,
         plan_code: client?.plan_code ?? null,
         status: String(row.status || ""),
-        amount: Number(row.amount_pen ?? row.display_amount ?? row.amount_usd || 0),
+        amount: Number((row.amount_pen ?? row.display_amount ?? row.amount_usd) || 0),
         currency_code: String(row.currency || row.display_currency || "PEN"),
         payment_method: row.provider ?? null,
         payment_method_brand: null,
