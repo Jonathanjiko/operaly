@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   AlertCircle,
   Check,
+  CalendarDays,
   Clock3,
   ExternalLink,
   FolderOpen,
@@ -18,6 +19,25 @@ import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
 import { getDisplayPlanName } from "@/lib/plans"
+
+type GoogleStatusPayload = {
+  ok?: boolean
+  capability?: {
+    google_enabled?: boolean
+  }
+  connection?: {
+    status?: string | null
+    external_account_email?: string | null
+    connected_at?: string | null
+  } | null
+  sync_state?: {
+    enabled?: boolean | null
+    sync_status?: string | null
+    last_synced_at?: string | null
+    last_error?: string | null
+    metadata?: Record<string, any> | null
+  } | null
+}
 
 const GoogleDriveIcon = () => (
   <svg viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
@@ -98,7 +118,7 @@ const INTEGRATIONS: IntegrationCard[] = [
   },
 ]
 
-type IntegrationRuntimeStatus = "blocked" | "ready_for_backend" | "backend_pending"
+type IntegrationRuntimeStatus = "blocked" | "connected" | "ready_to_connect" | "coming_soon" | "error"
 
 function StatusPill({
   status,
@@ -114,27 +134,73 @@ function StatusPill({
     )
   }
 
-  if (status === "ready_for_backend") {
+  if (status === "connected") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+        <Check className="h-3 w-3" />
+        Conectado
+      </span>
+    )
+  }
+
+  if (status === "ready_to_connect") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+        <ExternalLink className="h-3 w-3" />
+        Listo
+      </span>
+    )
+  }
+
+  if (status === "coming_soon") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
         <Clock3 className="h-3 w-3" />
-        Backend pendiente
+        Próximo
       </span>
     )
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-      <Check className="h-3 w-3" />
-      Lista para conectar
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">
+      <AlertCircle className="h-3 w-3" />
+      Error
     </span>
   )
 }
 
 export default function IntegracionesPage() {
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [googleEnabled, setGoogleEnabled] = useState(false)
   const [planCode, setPlanCode] = useState("trial")
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
+  const [statusError, setStatusError] = useState("")
+
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+
+    return {
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
+  const loadGoogleStatus = async () => {
+    const headers = await getAuthHeaders()
+    const response = await fetch("/api/google/status", {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload?.error || "No se pudo consultar Google.")
+    setGoogleStatus(payload as GoogleStatusPayload)
+    if (typeof payload?.capability?.google_enabled === "boolean") {
+      setGoogleEnabled(Boolean(payload.capability.google_enabled))
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -142,6 +208,7 @@ export default function IntegracionesPage() {
 
   const loadData = async () => {
     setLoading(true)
+    setStatusError("")
     try {
       const cid = await getCurrentClientId()
 
@@ -151,19 +218,93 @@ export default function IntegracionesPage() {
       const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
       setPlanCode(getEffectivePlanCode(effectiveLimits))
       setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+      await loadGoogleStatus()
     } catch (err) {
       console.error(err)
+      setStatusError(err instanceof Error ? err.message : "No se pudo cargar el estado de Google.")
     } finally {
       setLoading(false)
     }
   }
 
   const integrationStatuses = useMemo(() => {
-    return INTEGRATIONS.map((integration) => ({
-      ...integration,
-      runtimeStatus: googleEnabled ? "ready_for_backend" : "blocked" as IntegrationRuntimeStatus,
-    }))
-  }, [googleEnabled])
+    return INTEGRATIONS.map((integration) => {
+      const runtimeStatus: IntegrationRuntimeStatus = !googleEnabled
+        ? "blocked"
+        : integration.id === "google_calendar"
+          ? googleStatus?.sync_state?.enabled || googleStatus?.connection?.status === "connected"
+            ? "connected"
+            : googleStatus?.sync_state?.sync_status === "error"
+              ? "error"
+              : "ready_to_connect"
+          : "coming_soon"
+
+      return {
+        ...integration,
+        runtimeStatus,
+      }
+    })
+  }, [googleEnabled, googleStatus])
+
+  const handleConnectCalendar = async () => {
+    setActionLoading("connect")
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/google/calendar/connect", {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || "No se pudo iniciar Google Calendar.")
+      const authUrl = String(payload?.auth_url || "")
+      if (!authUrl) throw new Error("Google no devolvió una URL de autorización.")
+      window.location.href = authUrl
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "No se pudo conectar Google Calendar.")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleValidateCalendar = async () => {
+    setActionLoading("validate")
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/google/calendar/validate", {
+        method: "POST",
+        headers,
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || "No se pudo validar Google Calendar.")
+      await loadGoogleStatus()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "No se pudo validar Google Calendar.")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleDisconnectCalendar = async () => {
+    setActionLoading("disconnect")
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/google/calendar/disconnect", {
+        method: "POST",
+        headers,
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || "No se pudo desconectar Google Calendar.")
+      await loadGoogleStatus()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "No se pudo desconectar Google Calendar.")
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -231,11 +372,21 @@ export default function IntegracionesPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Pendiente</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {googleStatus?.connection?.status === "connected" ? "Conectado" : "Disponible"}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {statusError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {statusError === "google_addon_required"
+            ? "Activa el add-on Google Suite para conectar tu cuenta."
+            : statusError}
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-3">
         {integrationStatuses.map((integration) => {
@@ -268,19 +419,52 @@ export default function IntegracionesPage() {
               </div>
 
               <div className="mt-5 space-y-2">
-                {runtimeStatus === "blocked" ? (
+                {integration.id === "google_calendar" && runtimeStatus === "connected" ? (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
+                      <p className="font-semibold">Cuenta conectada</p>
+                      <p className="mt-1">{googleStatus?.connection?.external_account_email || "Google Calendar autorizado"}</p>
+                      <p className="mt-1">Estado: {googleStatus?.sync_state?.sync_status || "idle"}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={handleValidateCalendar}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-60"
+                      >
+                        {actionLoading === "validate" ? "Validando..." : "Validar"}
+                      </button>
+                      <button
+                        onClick={handleDisconnectCalendar}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {actionLoading === "disconnect" ? "Desconectando..." : "Desconectar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : runtimeStatus === "blocked" ? (
                   <Link href="/precios" className="block">
                     <button className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#7C3AED]/25 bg-[#7C3AED]/5 text-sm font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/10">
                       Activar add-on Google
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </Link>
+                ) : integration.id === "google_calendar" ? (
+                  <button
+                    onClick={handleConnectCalendar}
+                    disabled={Boolean(actionLoading)}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
+                  >
+                    {actionLoading === "connect" ? "Abriendo Google..." : "Conectar Calendar"}
+                    <CalendarDays className="h-3.5 w-3.5" />
+                  </button>
                 ) : (
                   <button
                     disabled
                     className="flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 text-sm font-medium text-amber-700"
                   >
-                    Backend OAuth en implementacion
+                    Próximo producto
                     <Clock3 className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -288,7 +472,9 @@ export default function IntegracionesPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
                     ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
-                    : "Tu cuenta ya puede usar Google Suite a nivel de contrato. Lo siguiente es activar el backend de OAuth, sincronizacion y acciones reales por WhatsApp."}
+                    : integration.id === "google_calendar"
+                      ? "Conecta tu propia cuenta Google. Operaly solo guardará la autorización cifrada para este cliente."
+                      : "Drive y Gmail siguen preparados, pero todavía no están activos. Primero dejamos Calendar estable."}
                 </div>
               </div>
             </div>
