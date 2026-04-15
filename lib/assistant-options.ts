@@ -25,6 +25,9 @@ export const ASSISTANT_COUNTRIES = [
 export const ASSISTANT_LANGUAGES = [
   { code: "es", label: "Español" },
   { code: "en", label: "English" },
+  { code: "de", label: "Deutsch" },
+  { code: "fr", label: "Francais" },
+  { code: "it", label: "Italiano" },
   { code: "pt", label: "Português" },
 ]
 

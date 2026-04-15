@@ -19,6 +19,26 @@ type RegisterAuthData = {
   method?: string
 }
 
+const WEB_LOCALE_TO_LANGUAGE: Record<string, string> = {
+  es: "es",
+  en: "en",
+  pt: "pt",
+  de: "de",
+  fr: "fr",
+  it: "it",
+}
+
+function getCookieValue(name: string) {
+  if (typeof document === "undefined") return ""
+
+  const value = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`))
+    ?.split("=")[1]
+
+  return value ? decodeURIComponent(value) : ""
+}
+
 function validateAnyPhone(input: string, countryCode: string): { ok: boolean; value: string; error: string } {
   const raw = (input || "").trim()
   if (!raw) return { ok: false, value: "", error: "Ingresa tu número de teléfono." }
@@ -97,6 +117,18 @@ export default function SetupClient() {
 
   useEffect(() => {
     const hydrate = async () => {
+      const detectedCountry = getCookieValue("operaly_country")
+      const detectedWebLocale = getCookieValue("operaly_web_locale")
+      const detectedLanguage = WEB_LOCALE_TO_LANGUAGE[detectedWebLocale] || ""
+
+      if (detectedCountry && countryCode === "PE") {
+        setCountryCode(detectedCountry.toUpperCase())
+      }
+
+      if (detectedLanguage && language === "es") {
+        setLanguage(detectedLanguage)
+      }
+
       let parsedRaw: RegisterAuthData | null = null
       const raw = localStorage.getItem("operaly_register_auth")
 
@@ -214,10 +246,60 @@ export default function SetupClient() {
       if (updateUserError) throw updateUserError
 
       try {
+        const now = new Date().toISOString()
+        const webLocale = getCookieValue("operaly_web_locale") || language
+        const { error: preferenceError } = await supabase.from("client_preferences").upsert(
+          [
+            {
+              client_id: clientId,
+              pref_key: "preferred_language",
+              pref_value: language,
+              source: "registration",
+              updated_at: now,
+            },
+            {
+              client_id: clientId,
+              pref_key: "language_source",
+              pref_value: "registration",
+              source: "registration",
+              updated_at: now,
+            },
+            {
+              client_id: clientId,
+              pref_key: "web_locale",
+              pref_value: webLocale,
+              source: "geoip_fallback",
+              updated_at: now,
+            },
+            {
+              client_id: clientId,
+              pref_key: "timezone",
+              pref_value: browserTimeZone,
+              source: "registration",
+              updated_at: now,
+            },
+          ],
+          { onConflict: "client_id,pref_key" }
+        )
+
+        if (preferenceError) {
+          console.warn("[setup] language preference upsert:", preferenceError.message)
+        }
+      } catch (preferenceErr) {
+        console.warn("[setup] language preference upsert failed (non-blocking):", preferenceErr)
+      }
+
+      try {
         const syncResponse = await fetch("/api/auth/sync-app-metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId, authUserId: user.id }),
+          body: JSON.stringify({
+            clientId,
+            authUserId: user.id,
+            preferredLanguage: language,
+            webLocale: getCookieValue("operaly_web_locale") || language,
+            timezone: browserTimeZone,
+          }),
         })
 
         if (!syncResponse.ok) {
@@ -249,6 +331,8 @@ export default function SetupClient() {
           city,
           phone_normalized: normalized.value,
           preferred_language: language,
+          language_source: "registration",
+          web_locale: getCookieValue("operaly_web_locale") || language,
           timezone: browserTimeZone,
           planCode,
         })

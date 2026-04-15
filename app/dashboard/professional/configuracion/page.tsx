@@ -577,6 +577,11 @@ export default function ProfessionalSettingsPage() {
         throw authUpdateError
       }
 
+      await Promise.all([
+        upsertPreference("preferred_language", normalizedPreferredLanguage),
+        upsertPreference("language_source", "dashboard"),
+        upsertPreference("timezone", normalizedTimezone),
+      ])
 
       alert("Configuración guardada correctamente.")
       await loadData()
