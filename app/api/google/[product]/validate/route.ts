@@ -3,7 +3,7 @@ import { getOperalyBackendUrl, getSessionBearerToken, readBackendPayload } from 
 
 export const dynamic = "force-dynamic"
 
-const GOOGLE_PRODUCTS = new Set(["calendar", "drive", "gmail"])
+const GOOGLE_PRODUCTS = new Set(["calendar", "drive", "gmail", "contacts"])
 
 async function resolveProduct(context: any) {
   const params = await context?.params

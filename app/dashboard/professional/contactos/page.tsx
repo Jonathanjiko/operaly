@@ -33,6 +33,28 @@ type ContactForm = {
   birthday: string
 }
 
+type GoogleContactsProductState = {
+  enabled?: boolean | null
+  sync_status?: string | null
+  last_synced_at?: string | null
+  last_error?: string | null
+}
+
+type GoogleContactsStatusPayload = {
+  ok?: boolean
+  google_enabled?: boolean
+  capability?: {
+    google_enabled?: boolean
+  }
+  connection?: {
+    authorized_products?: string[] | null
+  } | null
+  products?: {
+    contacts?: GoogleContactsProductState
+  } | null
+  contacts?: GoogleContactsProductState
+}
+
 const BLANK_FORM: ContactForm = { name: "", phone: "", relationship: "", notes: "", birthday: "" }
 
 function toBirthdayInput(value?: string | null) {
@@ -115,6 +137,27 @@ export default function ContactosPage() {
   const [preferredLanguage, setPreferredLanguage] = useState("es")
   const [phoneHelper, setPhoneHelper] = useState("")
   const [contactsBridgeStatus, setContactsBridgeStatus] = useState<"active" | "pending" | "base_only">("base_only")
+  const [googleContactsConnected, setGoogleContactsConnected] = useState(false)
+  const [googleContactsSyncStatus, setGoogleContactsSyncStatus] = useState("")
+  const [googleContactsAction, setGoogleContactsAction] = useState<string | null>(null)
+  const [googleContactsMessage, setGoogleContactsMessage] = useState("")
+  const [googleContactsError, setGoogleContactsError] = useState("")
+
+  const loadGoogleContactsStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+      const payload = (await response.json().catch(() => ({}))) as GoogleContactsStatusPayload
+      if (!response.ok) throw new Error(String((payload as any)?.error || "No se pudo consultar Google Contacts."))
+      const productState = payload?.products?.contacts || payload?.contacts || null
+      const authorizedProducts = payload?.connection?.authorized_products || []
+      const connected = Boolean(productState?.enabled) || authorizedProducts.includes("contacts")
+      setGoogleContactsConnected(connected)
+      setGoogleContactsSyncStatus(String(productState?.sync_status || ""))
+      setGoogleContactsError(String(productState?.last_error || ""))
+    } catch (error) {
+      console.error("No se pudo leer el estado de Google Contacts:", error)
+    }
+  }, [])
 
   const loadContacts = useCallback(async (nextClientId?: string) => {
     const resolvedClientId = nextClientId || clientId
@@ -164,10 +207,10 @@ export default function ContactosPage() {
           .maybeSingle()
         setCountryCode(String(client?.country_code || "PE").toUpperCase())
         setPreferredLanguage(String(client?.preferred_language || client?.language || "es"))
-        await loadContacts(currentClientId)
+        await Promise.all([loadContacts(currentClientId), loadGoogleContactsStatus()])
       })
       .catch(console.error)
-  }, [loadContacts])
+  }, [loadContacts, loadGoogleContactsStatus])
 
   useEffect(() => {
     if (!clientId) return
@@ -199,6 +242,41 @@ export default function ContactosPage() {
     const normalized = String(contact.sync_status || "").toLowerCase()
     return normalized.includes("ok") || normalized.includes("sync")
   }).length
+
+  async function connectGoogleContacts() {
+    setGoogleContactsAction("connect")
+    setGoogleContactsMessage("")
+    setGoogleContactsError("")
+    try {
+      const response = await fetch("/api/google/contacts/connect", { method: "GET", cache: "no-store" })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(payload?.error || payload?.detail || "No se pudo iniciar Google Contacts."))
+      const authUrl = String(payload?.auth_url || "")
+      if (!authUrl) throw new Error("Google no devolvio una URL de autorizacion para Contacts.")
+      window.location.href = authUrl
+    } catch (error) {
+      setGoogleContactsError(error instanceof Error ? error.message : "No se pudo iniciar Google Contacts.")
+    } finally {
+      setGoogleContactsAction(null)
+    }
+  }
+
+  async function syncGoogleContacts() {
+    setGoogleContactsAction("sync")
+    setGoogleContactsMessage("")
+    setGoogleContactsError("")
+    try {
+      const response = await fetch("/api/google/contacts/sync", { method: "POST" })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(String(payload?.error || payload?.detail || "No se pudo sincronizar Google Contacts."))
+      setGoogleContactsMessage("Google Contacts ya se sincronizo con tu base de Operaly.")
+      await Promise.all([loadContacts(), loadGoogleContactsStatus()])
+    } catch (error) {
+      setGoogleContactsError(error instanceof Error ? error.message : "No se pudo sincronizar Google Contacts.")
+    } finally {
+      setGoogleContactsAction(null)
+    }
+  }
 
   function openAdd() {
     setForm(BLANK_FORM)
@@ -330,6 +408,46 @@ export default function ContactosPage() {
         Cuando Google Contacts quede conectado, esta base debe distinguir claramente contactos internos de Operaly, contactos traidos desde Google y contactos fusionados. Desde aqui se prepara el puente para agenda, Gmail, llamadas, archivos y casos.
       </div>
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#0F1F63]">Google Contacts</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Aqui debe quedar visible si la libreta Google ya esta conectada, si falta conceder el scope o si solo falta correr la sincronizacion real hacia Operaly.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Estado actual:{" "}
+              {googleContactsConnected
+                ? contactsBridgeStatus === "active"
+                  ? "conectado y reflejado en esta base"
+                  : "conectado, pero todavia falta sync visible"
+                : "todavia no conectado"}
+              {googleContactsSyncStatus ? ` · sync: ${syncLabel(googleContactsSyncStatus)}` : ""}
+            </p>
+            {googleContactsMessage && <p className="mt-2 text-xs text-emerald-700">{googleContactsMessage}</p>}
+            {googleContactsError && <p className="mt-2 text-xs text-red-700">{googleContactsError}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={connectGoogleContacts}
+              disabled={googleContactsAction !== null}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-60"
+            >
+              {googleContactsAction === "connect" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+              {googleContactsConnected ? "Reconectar Contacts" : "Conectar Contacts"}
+            </button>
+            <button
+              onClick={syncGoogleContacts}
+              disabled={googleContactsAction !== null || !googleContactsConnected}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+            >
+              {googleContactsAction === "sync" ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {contactsBridgeStatus === "active" ? "Re-sincronizar" : "Sincronizar"}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div
         className={`rounded-2xl border px-4 py-3 text-sm ${
           contactsBridgeStatus === "active"
@@ -342,7 +460,9 @@ export default function ContactosPage() {
         {contactsBridgeStatus === "active"
           ? "El puente con Google Contacts ya deja senales visibles en esta base. Aqui deberias empezar a ver contactos Google o fusionados."
           : contactsBridgeStatus === "pending"
-            ? "Tu libreta interna ya esta lista, pero el backend todavia no esta reflejando contactos Google sincronizados en esta vista."
+            ? googleContactsConnected
+              ? "Google Contacts ya esta conectado, pero todavia falta completar o refrescar la sync para ver personas Google o fusionadas en esta vista."
+              : "Tu libreta interna ya esta lista, pero el backend todavia no esta reflejando contactos Google sincronizados en esta vista."
             : "Mostrando la base interna de Operaly. Si el backend de Google Contacts aun no expone columnas de sync, esta pantalla ya no se rompe y sigue mostrando los contactos reales del usuario."}
       </div>
 

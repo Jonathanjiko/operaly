@@ -39,9 +39,10 @@ type GoogleStatusPayload = {
   calendar?: GoogleProductState
   drive?: GoogleProductState
   gmail?: GoogleProductState
+  contacts?: GoogleProductState
 }
 
-type GoogleProduct = "calendar" | "drive" | "gmail"
+type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
 
 type GoogleProductState = {
   enabled?: boolean | null
@@ -52,7 +53,7 @@ type GoogleProductState = {
 }
 
 type IntegrationCard = {
-  id: "google_drive" | "google_calendar" | "gmail"
+  id: "google_drive" | "google_calendar" | "gmail" | "google_contacts"
   product: GoogleProduct
   name: string
   description: string
@@ -68,6 +69,8 @@ type ContactsSnapshot = {
   merged: number
   birthdays: number
   withEmail: number
+  synced: number
+  lastSyncedAt: string | null
   bridgeStatus: "active" | "pending" | "base_only"
 }
 
@@ -97,6 +100,12 @@ const GoogleCalendarIcon = () => (
     <rect x="25" y="2" width="10" height="18" rx="5" fill="#EA4335" />
     <rect x="65" y="2" width="10" height="18" rx="5" fill="#EA4335" />
   </svg>
+)
+
+const GoogleContactsIcon = () => (
+  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#34A853]/10 text-[#34A853]">
+    <Users className="h-4 w-4" />
+  </div>
 )
 
 const INTEGRATIONS: IntegrationCard[] = [
@@ -136,12 +145,25 @@ const INTEGRATIONS: IntegrationCard[] = [
       "Trabajar respuestas desde el dashboard o WhatsApp",
     ],
   },
+  {
+    id: "google_contacts",
+    product: "contacts",
+    name: "Google Contacts",
+    description: "Sincronizar personas desde Google para usarlas en agenda, Gmail, casos, llamadas y archivos sin duplicar la libreta.",
+    icon: GoogleContactsIcon,
+    useCases: [
+      "Traer nombres, telefonos y emails",
+      "Resolver cumpleanos y relaciones si existen",
+      "Fusionar sin duplicados absurdos",
+    ],
+  },
 ]
 
 function getProductLabel(product: GoogleProduct) {
   if (product === "calendar") return "Calendar"
   if (product === "drive") return "Drive"
-  return "Gmail"
+  if (product === "gmail") return "Gmail"
+  return "Contacts"
 }
 
 function getProductState(status: GoogleStatusPayload | null, product: GoogleProduct) {
@@ -153,6 +175,7 @@ function normalizeGoogleError(payload: any, fallback: string) {
   const error = detail?.error || payload?.error || payload?.detail
   if (error === "google_oauth_not_configured") return "Google OAuth todavia no esta listo en el servidor."
   if (error === "google_addon_required") return "Activa el add-on Google Suite para conectar tu cuenta."
+  if (error === "google_contacts_scope_required") return "Falta conceder el permiso de Google Contacts para poder sincronizar personas."
   if (typeof error === "string" && error.trim()) return error
   return fallback
 }
@@ -211,10 +234,68 @@ export default function IntegracionesPage() {
     merged: 0,
     birthdays: 0,
     withEmail: 0,
+    synced: 0,
+    lastSyncedAt: null,
     bridgeStatus: "base_only",
   })
 
   const googleServerConfigured = !statusError.toLowerCase().includes("google oauth todavia no esta listo en el servidor")
+
+  const loadContactsSnapshot = async (clientId: string) => {
+    const extendedResponse = await supabase
+      .from("contacts")
+      .select("id,email,birthday,source,sync_status,last_synced_at")
+      .eq("client_id", clientId)
+
+    if (!extendedResponse.error) {
+      const rows = extendedResponse.data || []
+      const google = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length
+      const merged = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
+      const googleLikeCount = google + merged
+      const synced = rows.filter((contact) => {
+        const normalized = String(contact.sync_status || "").toLowerCase()
+        return normalized.includes("ok") || normalized.includes("sync")
+      }).length
+      const lastSyncedAt =
+        rows
+          .map((contact) => String(contact.last_synced_at || ""))
+          .filter(Boolean)
+          .sort()
+          .at(-1) || null
+
+      setContactsSnapshot({
+        total: rows.length,
+        google,
+        merged,
+        birthdays: rows.filter((contact) => Boolean(contact.birthday)).length,
+        withEmail: rows.filter((contact) => Boolean(contact.email)).length,
+        synced,
+        lastSyncedAt,
+        bridgeStatus: googleLikeCount > 0 ? "active" : rows.length > 0 ? "pending" : "base_only",
+      })
+      return
+    }
+
+    const baseResponse = await supabase
+      .from("contacts")
+      .select("id,email,birthday,source")
+      .eq("client_id", clientId)
+
+    const rows = baseResponse.data || []
+    const google = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length
+    const merged = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
+    const googleLikeCount = google + merged
+    setContactsSnapshot({
+      total: rows.length,
+      google,
+      merged,
+      birthdays: rows.filter((contact) => Boolean(contact.birthday)).length,
+      withEmail: rows.filter((contact) => Boolean(contact.email)).length,
+      synced: googleLikeCount,
+      lastSyncedAt: null,
+      bridgeStatus: googleLikeCount > 0 ? "active" : rows.length > 0 ? "pending" : "base_only",
+    })
+  }
 
   const getAuthHeaders = async () => {
     const { data } = await supabase.auth.getSession()
@@ -253,23 +334,7 @@ export default function IntegracionesPage() {
       setPlanCode(getEffectivePlanCode(effectiveLimits))
       setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
 
-      const { data: contacts } = await supabase
-        .from("contacts")
-        .select("id,email,birthday,source")
-        .eq("client_id", cid)
-
-      const contactRows = contacts || []
-      const googleLikeCount =
-        contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length +
-        contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
-      setContactsSnapshot({
-        total: contactRows.length,
-        google: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length,
-        merged: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length,
-        birthdays: contactRows.filter((contact) => Boolean(contact.birthday)).length,
-        withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
-        bridgeStatus: googleLikeCount > 0 ? "active" : contactRows.length > 0 ? "pending" : "base_only",
-      })
+      await loadContactsSnapshot(cid)
 
       await loadGoogleStatus()
     } catch (err) {
@@ -308,6 +373,26 @@ export default function IntegracionesPage() {
     () => integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length,
     [integrationStatuses]
   )
+
+  const contactsProductConnected =
+    integrationStatuses.find((integration) => integration.product === "contacts")?.runtimeStatus === "connected"
+
+  const handleSyncContacts = async () => {
+    setActionLoading("sync:contacts")
+    setStatusError("")
+    try {
+      const response = await fetch("/api/google/contacts/sync", {
+        method: "POST",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, "No se pudo sincronizar Google Contacts."))
+      await loadData()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "No se pudo sincronizar Google Contacts.")
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   const handleConnectProduct = async (product: GoogleProduct) => {
     setActionLoading(`connect:${product}`)
@@ -461,7 +546,9 @@ export default function IntegracionesPage() {
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">conexion usuario</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{connectedProductsCount > 0 ? `${connectedProductsCount}/3 conectadas` : "Pendiente"}</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {connectedProductsCount > 0 ? `${connectedProductsCount}/${INTEGRATIONS.length} conectadas` : "Pendiente"}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Falta completar el callback OAuth real por producto para que se llenen las tablas Google del tenant.
           </p>
@@ -524,9 +611,15 @@ export default function IntegracionesPage() {
                       <p className="font-semibold">Cuenta conectada</p>
                       <p className="mt-1">{googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`}</p>
                       <p className="mt-1">Estado: {productState?.sync_status || "idle"}</p>
+                      {integration.product === "contacts" && (
+                        <p className="mt-1">
+                          Puente visible: {contactsSnapshot.bridgeStatus === "active" ? "si" : "todavia no"} ·{" "}
+                          {contactsSnapshot.google + contactsSnapshot.merged} Google/fusionados
+                        </p>
+                      )}
                       {productState?.last_error && <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className={`grid gap-2 ${integration.product === "contacts" ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
                       <button
                         onClick={() => handleValidateProduct(integration.product)}
                         disabled={Boolean(actionLoading)}
@@ -534,6 +627,19 @@ export default function IntegracionesPage() {
                       >
                         {actionLoading === `validate:${integration.product}` ? "Validando..." : "Validar"}
                       </button>
+                      {integration.product === "contacts" && (
+                        <button
+                          onClick={handleSyncContacts}
+                          disabled={Boolean(actionLoading)}
+                          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          {actionLoading === "sync:contacts"
+                            ? "Sincronizando..."
+                            : contactsSnapshot.bridgeStatus === "active"
+                              ? "Re-sincronizar"
+                              : "Sincronizar"}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDisconnectProduct(integration.product)}
                         disabled={Boolean(actionLoading)}
@@ -561,7 +667,7 @@ export default function IntegracionesPage() {
                       : !googleServerConfigured
                         ? "Servidor pendiente"
                         : `Conectar ${productLabel}`}
-                    <CalendarDays className="h-3.5 w-3.5" />
+                    {integration.product === "contacts" ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
                   </button>
                 )}
 
@@ -588,7 +694,7 @@ export default function IntegracionesPage() {
           <h2 className="font-semibold text-[#0F1F63]">Ruta real de activacion</h2>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2">
               <FolderOpen className="h-4 w-4 text-[#34A853]" />
@@ -616,6 +722,15 @@ export default function IntegracionesPage() {
               Preparar el correo, mostrarte el borrador, pedir confirmacion y recien ahi enviarlo con adjunto o sin adjunto.
             </p>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-[#34A853]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Contacts</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Sincronizar personas para que agenda, Gmail, archivos, casos y llamadas usen una sola base viva.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -631,7 +746,9 @@ export default function IntegracionesPage() {
         {contactsSnapshot.bridgeStatus === "active"
           ? "Google ya empieza a reflejarse en contactos: el usuario puede distinguir base interna, contactos Google y contactos fusionados."
           : contactsSnapshot.bridgeStatus === "pending"
-            ? "La cuenta Google puede estar conectada, pero el puente con contactos aun no se refleja en la base del usuario. Aqui debe verse cuando el backend empiece a sincronizar y fusionar personas."
+            ? contactsProductConnected
+              ? "Google Contacts ya esta conectado, pero todavia falta correr o completar la sincronizacion para ver personas Google o fusionadas en esta base."
+              : "La cuenta Google puede estar conectada, pero el puente con contactos aun no se refleja en la base del usuario. Aqui debe verse cuando el backend empiece a sincronizar y fusionar personas."
             : "Todavia no hay puente visible con Google Contacts. Esta pantalla ya deja claro que la libreta interna existe, pero la sincronizacion Google <-> Operaly sigue pendiente del backend."}
       </div>
 
@@ -659,7 +776,7 @@ export default function IntegracionesPage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-[#0F1F63]">Estado visible</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Hoy ya tienes {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""} en Operaly. El siguiente salto es reflejar sync, merge y conflictos desde Google.
+              Hoy ya tienes {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""} en Operaly. {contactsProductConnected ? "Google Contacts ya puede sincronizar y fusionar." : "El siguiente salto es conectar y sincronizar Google Contacts."}
             </p>
           </div>
         </div>
