@@ -271,15 +271,15 @@ export default function AsistentePage() {
       ) : null}
 
       <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Contrato del asistente</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Qué define aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Profesión, tono, estilo y contexto se guardan en Supabase como tu configuración operativa. El backend debe usarlos para cómo Operaly piensa, responde y te representa en WhatsApp.
+          Aquí decide cómo debe representarlo Operaly: desde qué profesión lo acompaña, qué tono usa, qué tan breve o detallado responde y qué contexto debe tener siempre presente.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">guardado</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">asistente visible</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {runtimeSnapshot?.preferences?.assistant_tone || tone}
           </p>
@@ -305,10 +305,10 @@ export default function AsistentePage() {
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicado</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Depende del runtime</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">en conversación</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Debe sentirse como suyo</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Si WhatsApp sigue respondiendo genérico, el backend aún no está honrando esta personalidad.
+            Si WhatsApp sigue respondiendo genérico o fuera de tono, backend todavía no está aplicando bien esta configuración.
           </p>
         </div>
       </div>
@@ -371,6 +371,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Profesion</h2>
             <p className="text-xs text-muted-foreground">Operaly ajusta su lenguaje y criterio segun tu area</p>
+            <p className="text-xs text-muted-foreground">Esto debería cambiar cómo analiza, propone y responde.</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
@@ -410,6 +411,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Tono de comunicacion</h2>
             <p className="text-xs text-muted-foreground">La personalidad con la que Operaly te responde por WhatsApp</p>
+            <p className="text-xs text-muted-foreground">Debe reflejarse también en llamadas, notas de voz y mensajes proactivos.</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
@@ -437,6 +439,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Estilo de respuesta</h2>
             <p className="text-xs text-muted-foreground">Que tan breve o profundo quieres a Operaly</p>
+            <p className="text-xs text-muted-foreground">Sirve para que no se sienta demasiado seco ni demasiado largo.</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -464,6 +467,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Contexto permanente</h2>
             <p className="text-xs text-muted-foreground">Informacion que Operaly debe recordar siempre sobre tu trabajo</p>
+            <p className="text-xs text-muted-foreground">Aquí puede dejar criterios, contexto o forma de trabajo que no quiere repetir todo el tiempo.</p>
           </div>
         </div>
         <textarea
@@ -516,8 +520,29 @@ export default function AsistentePage() {
         </div>
       ) : null}
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Cómo debe tratarlo</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Su nombre, tratamiento y profesión deberían cambiar la forma en que Operaly le habla a usted.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Cómo debe pensar</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            El tono y el estilo ayudan a que responda con el nivel de detalle y formalidad que usted espera.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Qué no debería perder</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            El contexto permanente debería servir para que no tenga que volver a explicarle siempre lo mismo.
+          </p>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Si Operaly todavía responde con un tono por defecto, mezcla idiomas o ignora tu profesión al leer agenda, archivos o tareas, el problema sigue estando en el backend runtime, no en esta pantalla.
+        Si Operaly todavía le responde con un tono genérico, mezcla idiomas o ignora su profesión, el problema ya no está en esta pantalla sino en la aplicación real del runtime.
       </div>
     </div>
   )

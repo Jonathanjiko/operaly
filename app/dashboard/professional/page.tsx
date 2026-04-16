@@ -565,15 +565,15 @@ export default function ProfessionalDashboardPage() {
         label: "Voz runtime",
         value: voiceConfigured ? "Guardada" : "Pendiente",
         detail: voiceConfigured
-          ? `${runtimeSnapshot.voice?.voice_name || runtimeSnapshot.voice?.voice_id || "Configurada"} en Supabase`
-          : "Aún no configuras una voz para Operaly",
+          ? `${runtimeSnapshot.voice?.voice_name || runtimeSnapshot.voice?.voice_id || "Configurada"} para su cuenta`
+          : "Todavía no ha dejado una voz lista",
       },
       {
         label: "Asistente",
         value: assistantConfigured ? "Guardado" : "Base",
         detail: assistantConfigured
           ? `${runtimeSnapshot.preferences.assistant_tone || "tono"} · ${runtimeSnapshot.preferences.assistant_style || "estilo"}`
-          : "Todavía usa configuración por defecto",
+          : "Todavía se apoya más en la configuración base",
       },
       {
         label: "Welcome WhatsApp",
@@ -900,7 +900,7 @@ export default function ProfessionalDashboardPage() {
             <div className="rounded-2xl border border-border p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Idioma</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{runtimeLanguageLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Así le hablará Operaly por defecto.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Así debería hablarle Operaly por defecto.</p>
             </div>
             <div className="rounded-2xl border border-border p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">En qué va</p>
@@ -929,33 +929,33 @@ export default function ProfessionalDashboardPage() {
           </div>
 
           <div className="mt-5 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Lo que ya dejó listo</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Voz</p>
-                <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                  {runtimeSnapshot.voice?.voice_id ? "Guardada en Supabase" : "Sin guardar todavía"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {operationalSignals.runtimeVoiceApplied
-                    ? "Ya se nota movimiento reciente relacionado con la voz."
-                    : "Todavía no se ve uso reciente de la voz en WhatsApp."}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Asistente</p>
-                <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                  {runtimeSnapshot.preferences.assistant_tone || runtimeSnapshot.preferences.assistant_style
+              <p className="text-sm font-semibold text-[#0F1F63]">Lo que ya dejó listo</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Voz</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    {runtimeSnapshot.voice?.voice_id ? "Guardada en Supabase" : "Sin guardar todavía"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {operationalSignals.runtimeVoiceApplied
+                    ? "Ya se ve movimiento reciente relacionado con su voz."
+                    : "Todavía no se ve uso reciente de la voz en WhatsApp o llamadas."}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Asistente</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    {runtimeSnapshot.preferences.assistant_tone || runtimeSnapshot.preferences.assistant_style
                     ? "Guardado en Supabase"
                     : "Sin personalización guardada"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {operationalSignals.runtimeAssistantApplied
-                    ? "Ya hay respuestas recientes para revisar si el estilo se está respetando."
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {operationalSignals.runtimeAssistantApplied
+                    ? "Ya hay respuestas recientes para revisar si Operaly se parece más a usted."
                     : "Todavía falta ver más actividad para confirmarlo."}
-                </p>
+                  </p>
+                </div>
               </div>
-            </div>
           </div>
         </div>
 

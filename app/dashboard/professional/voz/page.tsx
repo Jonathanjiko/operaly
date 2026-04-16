@@ -264,24 +264,24 @@ export default function VozPage() {
       ) : null}
 
       <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#06B6D4]/5 p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Lo que controlas aquí</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Lo que puede ajustar aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Esta configuración se guarda en Supabase como tu fuente operativa de voz. El backend debe leer exactamente esta voz, este tono y este estilo cuando Operaly te responda por WhatsApp o por llamada.
+          Aquí decide cómo debe sonar Operaly. Puede elegir una voz sugerida, pegar una voz propia de ElevenLabs y definir cómo quiere que le hable en audios y llamadas.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">guardado</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz visible</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {runtimeSnapshot?.voice?.voice_id ? "Sí" : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {runtimeSnapshot?.voice?.voice_name || "Todavía no hay voz runtime visible"}
+            {runtimeSnapshot?.voice?.voice_name || "Todavía no se refleja una voz visible"}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última señal</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">último movimiento</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {normalizeRuntimeStatus(
               String(
@@ -296,10 +296,10 @@ export default function VozPage() {
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicado</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Depende del backend</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">llamadas</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Debe oírse como aquí</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Si WhatsApp sigue usando otra voz, todavía no hay señal de aplicación real.
+            Si en llamada o audio suena distinto, la integración de fondo todavía no está cerrada del todo.
           </p>
         </div>
       </div>
@@ -379,8 +379,8 @@ export default function VozPage() {
 
         <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 p-3">
           <div>
-            <p className="text-sm font-medium text-[#0F1F63]">Usar mi propia voz clonada</p>
-            <p className="text-xs text-muted-foreground">Pega el Voice ID de ElevenLabs</p>
+              <p className="text-sm font-medium text-[#0F1F63]">Usar mi propia voz</p>
+              <p className="text-xs text-muted-foreground">Pegue aquí el Voice ID de ElevenLabs</p>
           </div>
           <button
             type="button"
@@ -402,7 +402,7 @@ export default function VozPage() {
               className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-mono focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Encuentralo en <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="text-[#7C3AED] underline">elevenlabs.io</a> y pegalo aqui.
+              Si ya creó o clonó una voz en <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="text-[#7C3AED] underline">ElevenLabs</a>, copie el Voice ID y péguelo aquí.
             </p>
           </div>
         ) : (
@@ -482,6 +482,27 @@ export default function VozPage() {
               <p className="mt-0.5 text-[10px] text-muted-foreground">{tone.desc}</p>
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Voz recomendada</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Lo más rápido para empezar. Elige una voz ya lista y la deja guardada en su cuenta.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Voz propia</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Si quiere algo más personal, puede crear o clonar su voz en ElevenLabs y luego pegar el Voice ID aquí.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Cómo debe notarse</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Esto debería reflejarse tanto en audios como en llamadas, sin que tenga que volver a configurarlo.
+          </p>
         </div>
       </div>
 
@@ -567,7 +588,7 @@ export default function VozPage() {
       ) : null}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Si Operaly todavía te habla con otra voz, otro tono o mezcla idiomas en WhatsApp, el problema ya no es esta pantalla: el backend aún no está aplicando correctamente tu configuración runtime.
+        Si Operaly todavía suena distinto, habla con otra voz o no respeta este estilo en llamadas, el pendiente ya no está en esta pantalla sino en la integración viva de fondo.
       </div>
     </div>
   )
