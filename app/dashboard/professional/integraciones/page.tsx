@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   AlertCircle,
-  Check,
   CalendarDays,
+  Check,
   Clock3,
   ExternalLink,
   FolderOpen,
@@ -14,12 +14,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Users,
 } from "lucide-react"
-import {
-  fetchProfessionalRuntime,
-  normalizeRuntimeStatus,
-  type ProfessionalRuntimeSnapshot,
-} from "@/lib/professional-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -55,6 +51,25 @@ type GoogleProductState = {
   metadata?: Record<string, any> | null
 }
 
+type IntegrationCard = {
+  id: "google_drive" | "google_calendar" | "gmail"
+  product: GoogleProduct
+  name: string
+  description: string
+  icon: () => JSX.Element
+  useCases: string[]
+}
+
+type IntegrationRuntimeStatus = "blocked" | "connected" | "ready_to_connect" | "coming_soon" | "error"
+
+type ContactsSnapshot = {
+  total: number
+  google: number
+  merged: number
+  birthdays: number
+  withEmail: number
+}
+
 const GoogleDriveIcon = () => (
   <svg viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
     <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
@@ -83,25 +98,13 @@ const GoogleCalendarIcon = () => (
   </svg>
 )
 
-type IntegrationCard = {
-  id: "google_drive" | "google_calendar" | "gmail"
-  product: GoogleProduct
-  name: string
-  description: string
-  icon: () => JSX.Element
-  color: string
-  useCases: string[]
-}
-
 const INTEGRATIONS: IntegrationCard[] = [
   {
     id: "google_drive",
     product: "drive",
     name: "Google Drive",
-    description:
-      "Consultar, descargar y analizar archivos del Drive desde Operaly, incluso para compartirlos o usarlos en flujos por WhatsApp.",
+    description: "Consultar, descargar y analizar archivos del Drive desde Operaly, incluso para compartirlos o usarlos en flujos por WhatsApp.",
     icon: GoogleDriveIcon,
-    color: "#34A853",
     useCases: [
       "Buscar archivos por nombre o contexto",
       "Analizar PDFs, hojas y documentos",
@@ -112,10 +115,8 @@ const INTEGRATIONS: IntegrationCard[] = [
     id: "google_calendar",
     product: "calendar",
     name: "Google Calendar",
-    description:
-      "Sincronizar tu agenda real con Operaly para verla desde WhatsApp, crear eventos y mantener recordatorios consistentes.",
+    description: "Sincronizar tu agenda real con Operaly para verla desde WhatsApp, crear eventos y mantener recordatorios consistentes.",
     icon: GoogleCalendarIcon,
-    color: "#1A73E8",
     useCases: [
       "Ver agenda del dia desde WhatsApp",
       "Crear y mover eventos",
@@ -126,10 +127,8 @@ const INTEGRATIONS: IntegrationCard[] = [
     id: "gmail",
     product: "gmail",
     name: "Gmail",
-    description:
-      "Preparar borradores, confirmar el contenido y luego enviar correos finales con o sin adjuntos desde Operaly.",
+    description: "Preparar borradores, confirmar el contenido y luego enviar correos finales con o sin adjuntos desde Operaly.",
     icon: GmailIcon,
-    color: "#EA4335",
     useCases: [
       "Redactar correos con confirmacion previa",
       "Adjuntar archivos y enviar a contactos",
@@ -137,8 +136,6 @@ const INTEGRATIONS: IntegrationCard[] = [
     ],
   },
 ]
-
-type IntegrationRuntimeStatus = "blocked" | "connected" | "ready_to_connect" | "coming_soon" | "error"
 
 function getProductLabel(product: GoogleProduct) {
   if (product === "calendar") return "Calendar"
@@ -153,21 +150,13 @@ function getProductState(status: GoogleStatusPayload | null, product: GoogleProd
 function normalizeGoogleError(payload: any, fallback: string) {
   const detail = payload?.detail
   const error = detail?.error || payload?.error || payload?.detail
-  if (error === "google_oauth_not_configured") {
-    return "Google OAuth todavía no está listo en el servidor."
-  }
-  if (error === "google_addon_required") {
-    return "Activa el add-on Google Suite para conectar tu cuenta."
-  }
+  if (error === "google_oauth_not_configured") return "Google OAuth todavia no esta listo en el servidor."
+  if (error === "google_addon_required") return "Activa el add-on Google Suite para conectar tu cuenta."
   if (typeof error === "string" && error.trim()) return error
   return fallback
 }
 
-function StatusPill({
-  status,
-}: {
-  status: IntegrationRuntimeStatus
-}) {
+function StatusPill({ status }: { status: IntegrationRuntimeStatus }) {
   if (status === "blocked") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#7C3AED]">
@@ -176,7 +165,6 @@ function StatusPill({
       </span>
     )
   }
-
   if (status === "connected") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
@@ -185,7 +173,6 @@ function StatusPill({
       </span>
     )
   }
-
   if (status === "ready_to_connect") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
@@ -194,16 +181,14 @@ function StatusPill({
       </span>
     )
   }
-
   if (status === "coming_soon") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
         <Clock3 className="h-3 w-3" />
-        Próximo
+        Proximo
       </span>
     )
   }
-
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">
       <AlertCircle className="h-3 w-3" />
@@ -219,17 +204,21 @@ export default function IntegracionesPage() {
   const [planCode, setPlanCode] = useState("trial")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
-  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
-  const googleServerConfigured = !statusError.toLowerCase().includes("google oauth aún no está configurado")
+  const [contactsSnapshot, setContactsSnapshot] = useState<ContactsSnapshot>({
+    total: 0,
+    google: 0,
+    merged: 0,
+    birthdays: 0,
+    withEmail: 0,
+  })
+
+  const googleServerConfigured = !statusError.toLowerCase().includes("google oauth todavia no esta listo en el servidor")
 
   const getAuthHeaders = async () => {
     const { data } = await supabase.auth.getSession()
     const token = data.session?.access_token
-    if (!token) throw new Error("No hay sesión activa.")
-
-    return {
-      Authorization: `Bearer ${token}`,
-    }
+    if (!token) throw new Error("No hay sesion activa.")
+    return { Authorization: `Bearer ${token}` }
   }
 
   const loadGoogleStatus = async () => {
@@ -243,9 +232,7 @@ export default function IntegracionesPage() {
     if (!response.ok) throw new Error(payload?.error || "No se pudo consultar Google.")
     setGoogleStatus(payload as GoogleStatusPayload)
     const enabled = payload?.capability?.google_enabled ?? payload?.google_enabled
-    if (typeof enabled === "boolean") {
-      setGoogleEnabled(Boolean(enabled))
-    }
+    if (typeof enabled === "boolean") setGoogleEnabled(Boolean(enabled))
   }
 
   useEffect(() => {
@@ -257,19 +244,28 @@ export default function IntegracionesPage() {
     setStatusError("")
     try {
       const cid = await getCurrentClientId()
-
       const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
       if (limitsError) throw limitsError
 
       const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
       setPlanCode(getEffectivePlanCode(effectiveLimits))
       setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+
+      const { data: contacts } = await supabase
+        .from("contacts")
+        .select("id,email,birthday,source")
+        .eq("client_id", cid)
+
+      const contactRows = contacts || []
+      setContactsSnapshot({
+        total: contactRows.length,
+        google: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length,
+        merged: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length,
+        birthdays: contactRows.filter((contact) => Boolean(contact.birthday)).length,
+        withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
+      })
+
       await loadGoogleStatus()
-      try {
-        setRuntimeSnapshot(await fetchProfessionalRuntime())
-      } catch (runtimeError) {
-        console.error("No se pudo cargar runtime de integraciones:", runtimeError)
-      }
     } catch (err) {
       console.error(err)
       setStatusError(err instanceof Error ? err.message : "No se pudo cargar el estado de Google.")
@@ -286,26 +282,26 @@ export default function IntegracionesPage() {
         integration.product === "calendar" &&
         !googleStatus?.products &&
         (googleStatus?.connection?.connection_status === "connected" || googleStatus?.connection?.status === "connected")
+
       const isProductConnected =
         Boolean(productState?.enabled) || authorizedProducts.includes(integration.product) || hasLegacyCalendarConnection
+
       const runtimeStatus: IntegrationRuntimeStatus = !googleEnabled
         ? "blocked"
         : isProductConnected
-            ? "connected"
-            : productState?.sync_status === "error"
-              ? "error"
-              : "ready_to_connect"
+          ? "connected"
+          : productState?.sync_status === "error"
+            ? "error"
+            : "ready_to_connect"
 
-      return {
-        ...integration,
-        runtimeStatus,
-      }
+      return { ...integration, runtimeStatus }
     })
   }, [googleEnabled, googleStatus])
 
-  const connectedProductsCount = useMemo(() => {
-    return integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length
-  }, [integrationStatuses])
+  const connectedProductsCount = useMemo(
+    () => integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length,
+    [integrationStatuses]
+  )
 
   const handleConnectProduct = async (product: GoogleProduct) => {
     setActionLoading(`connect:${product}`)
@@ -320,7 +316,7 @@ export default function IntegracionesPage() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo iniciar Google ${getProductLabel(product)}.`))
       const authUrl = String(payload?.auth_url || "")
-      if (!authUrl) throw new Error("Google no devolvió una URL de autorización.")
+      if (!authUrl) throw new Error("Google no devolvio una URL de autorizacion.")
       window.location.href = authUrl
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : `No se pudo conectar Google ${getProductLabel(product)}.`)
@@ -369,7 +365,7 @@ export default function IntegracionesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
           <RefreshCw className="h-5 w-5 animate-spin" />
           Cargando integraciones...
@@ -403,7 +399,7 @@ export default function IntegracionesPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                Operaly usará estas conexiones para consultar agenda, trabajar con archivos de Drive y preparar correos con confirmación antes de enviarlos.
+                Operaly usara estas conexiones para consultar agenda, trabajar con archivos de Drive, preparar correos y resolver personas desde una base de contactos util.
               </p>
             </div>
             {googleEnabled ? (
@@ -433,11 +429,7 @@ export default function IntegracionesPage() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {!googleServerConfigured
-                  ? "Pendiente"
-                  : "Listo"}
-              </p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
             </div>
           </div>
         </div>
@@ -445,33 +437,25 @@ export default function IntegracionesPage() {
 
       {statusError && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {statusError === "google_addon_required"
-            ? "Activa el add-on Google Suite para conectar tu cuenta."
-            : statusError}
+          {statusError === "google_addon_required" ? "Activa el add-on Google Suite para conectar tu cuenta." : statusError}
         </div>
       )}
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
-        Lo que ves aquí ya está alineado al contrato: la conexión se hace manualmente desde tu dashboard, y después debe quedar utilizable desde WhatsApp. En este momento el backend puede estar listo aunque todavía no exista una conexión OAuth real para tu cuenta.
+        Lo que ves aqui ya esta alineado al contrato: la conexion se hace manualmente desde tu dashboard, y despues debe quedar utilizable desde WhatsApp. En este momento el backend puede estar listo aunque todavia no exista una conexion OAuth real para tu cuenta.
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">servidor oauth</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {googleServerConfigured ? "Listo" : "Pendiente"}
-          </p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {googleServerConfigured
-              ? "El backend ya permite abrir el flujo OAuth y guardar tokens cifrados."
-              : "El backend todavía no está listo para abrir el flujo OAuth."}
+            {googleServerConfigured ? "El backend ya permite abrir el flujo OAuth y guardar tokens cifrados." : "El backend todavia no esta listo para abrir el flujo OAuth."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">conexión usuario</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {connectedProductsCount > 0 ? `${connectedProductsCount}/3 conectadas` : "Pendiente"}
-          </p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">conexion usuario</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{connectedProductsCount > 0 ? `${connectedProductsCount}/3 conectadas` : "Pendiente"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Falta completar el callback OAuth real por producto para que se llenen las tablas Google del tenant.
           </p>
@@ -479,10 +463,17 @@ export default function IntegracionesPage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">usable en whatsapp</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavía no"}
+            {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavia no"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Solo despues de conectar la cuenta real del usuario y validar el producto desde el runtime.</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">contactos listos</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {contactsSnapshot.google + contactsSnapshot.merged > 0 ? `${contactsSnapshot.google + contactsSnapshot.merged} con puente Google` : "Base interna"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Solo después de conectar la cuenta real del usuario y validar el producto desde el runtime.
+            {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para Gmail, agenda y casos.
           </p>
         </div>
       </div>
@@ -495,10 +486,7 @@ export default function IntegracionesPage() {
           const productLabel = getProductLabel(integration.product)
 
           return (
-            <div
-              key={integration.id}
-              className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-            >
+            <div key={integration.id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <Icon />
@@ -526,9 +514,7 @@ export default function IntegracionesPage() {
                       <p className="font-semibold">Cuenta conectada</p>
                       <p className="mt-1">{googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`}</p>
                       <p className="mt-1">Estado: {productState?.sync_status || "idle"}</p>
-                      {productState?.last_error && (
-                        <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>
-                      )}
+                      {productState?.last_error && <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -571,12 +557,12 @@ export default function IntegracionesPage() {
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
-                    ? "Primero se habilita comercialmente. Luego se conectará por OAuth seguro desde este mismo dashboard."
+                    ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
                     : !googleServerConfigured
-                      ? "El dashboard ya está listo, pero el backend todavía no puede abrir el flujo OAuth."
-                    : runtimeStatus === "connected"
-                      ? "La infraestructura OAuth ya está lista. Ahora esta integración sí puede empezar a usarse desde WhatsApp según el producto."
-                      : "El servidor ya está listo. El siguiente paso real es conectar tu cuenta Google para este producto desde aquí."}
+                      ? "El dashboard ya esta listo, pero el backend todavia no puede abrir el flujo OAuth."
+                      : runtimeStatus === "connected"
+                        ? "La infraestructura OAuth ya esta lista. Ahora esta integracion si puede empezar a usarse desde WhatsApp segun el producto."
+                        : "El servidor ya esta listo. El siguiente paso real es conectar tu cuenta Google para este producto desde aqui."}
                 </div>
               </div>
             </div>
@@ -602,7 +588,6 @@ export default function IntegracionesPage() {
               Descargar, analizar y compartir archivos desde Operaly, incluso cuando el usuario lo pida por WhatsApp.
             </p>
           </div>
-
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#1A73E8]" />
@@ -612,7 +597,6 @@ export default function IntegracionesPage() {
               Mostrar tu agenda real en Operaly y sincronizar eventos para que agenda y recordatorios no se contradigan.
             </p>
           </div>
-
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-[#EA4335]" />
@@ -620,6 +604,36 @@ export default function IntegracionesPage() {
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               Preparar el correo, mostrarte el borrador, pedir confirmacion y recien ahi enviarlo con adjunto o sin adjunto.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
+            <Users className="h-4 w-4 text-[#0F1F63]" />
+          </div>
+          <h2 className="font-semibold text-[#0F1F63]">Puente con contactos</h2>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Base de personas</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cuando Google Contacts quede activo, Operaly debe distinguir contactos internos, Google y fusionados sin duplicados absurdos.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Uso operativo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Agenda, Gmail, archivos, casos y llamadas deben resolver nombre, telefono, email, cumpleanos y relacion desde una sola base.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Estado visible</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Hoy ya tienes {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""} en Operaly. El siguiente salto es reflejar sync, merge y conflictos desde Google.
             </p>
           </div>
         </div>
