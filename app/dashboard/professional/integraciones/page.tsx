@@ -154,7 +154,7 @@ function normalizeGoogleError(payload: any, fallback: string) {
   const detail = payload?.detail
   const error = detail?.error || payload?.error || payload?.detail
   if (error === "google_oauth_not_configured") {
-    return "Google OAuth aún no está configurado en el servidor. Faltan credenciales GOOGLE_* en el contenedor."
+    return "Google OAuth todavía no está listo en el servidor."
   }
   if (error === "google_addon_required") {
     return "Activa el add-on Google Suite para conectar tu cuenta."
@@ -303,6 +303,10 @@ export default function IntegracionesPage() {
     })
   }, [googleEnabled, googleStatus])
 
+  const connectedProductsCount = useMemo(() => {
+    return integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length
+  }, [integrationStatuses])
+
   const handleConnectProduct = async (product: GoogleProduct) => {
     setActionLoading(`connect:${product}`)
     setStatusError("")
@@ -399,7 +403,7 @@ export default function IntegracionesPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                Operaly usara estas conexiones para consultar agenda, trabajar con archivos de Drive y preparar correos con confirmacion antes de enviarlos.
+                Operaly usará estas conexiones para consultar agenda, trabajar con archivos de Drive y preparar correos con confirmación antes de enviarlos.
               </p>
             </div>
             {googleEnabled ? (
@@ -432,10 +436,7 @@ export default function IntegracionesPage() {
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {!googleServerConfigured
                   ? "Pendiente"
-                  : googleStatus?.connection?.connection_status === "connected" ||
-                      googleStatus?.connection?.status === "connected"
-                    ? "Conectado"
-                    : "Disponible"}
+                  : "Listo"}
               </p>
             </div>
           </div>
@@ -451,7 +452,7 @@ export default function IntegracionesPage() {
       )}
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
-        Lo que ves aquí ya está alineado al contrato: la conexión se hace manualmente desde tu dashboard, pero después debe quedar utilizable desde WhatsApp. Si el backend aún no tiene `GOOGLE_*`, esta pantalla lo mostrará como pendiente y no como si ya estuviera operando.
+        Lo que ves aquí ya está alineado al contrato: la conexión se hace manualmente desde tu dashboard, y después debe quedar utilizable desde WhatsApp. En este momento el backend puede estar listo aunque todavía no exista una conexión OAuth real para tu cuenta.
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -462,32 +463,26 @@ export default function IntegracionesPage() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {googleServerConfigured
-              ? "El backend ya permite abrir el flujo OAuth."
-              : "Faltan credenciales GOOGLE_* en el contenedor."}
+              ? "El backend ya permite abrir el flujo OAuth y guardar tokens cifrados."
+              : "El backend todavía no está listo para abrir el flujo OAuth."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última señal</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">conexión usuario</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {normalizeRuntimeStatus(
-              String(
-                runtimeSnapshot?.recentEvents?.find((event) =>
-                  String(event.event_type || event.action || "").toLowerCase().includes("google")
-                )?.event_type || ""
-              )
-            )}
+            {connectedProductsCount > 0 ? `${connectedProductsCount}/3 conectadas` : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Señal reciente del runtime para Google e integraciones.
+            Falta completar el callback OAuth real por producto para que se llenen las tablas Google del tenant.
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">usable en whatsapp</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {googleServerConfigured && googleEnabled ? "En preparación" : "Todavía no"}
+            {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavía no"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Solo cuando el backend, OAuth y el add-on estén realmente operativos.
+            Solo después de conectar la cuenta real del usuario y validar el producto desde el runtime.
           </p>
         </div>
       </div>
@@ -576,10 +571,12 @@ export default function IntegracionesPage() {
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
-                    ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
+                    ? "Primero se habilita comercialmente. Luego se conectará por OAuth seguro desde este mismo dashboard."
                     : !googleServerConfigured
-                      ? "El dashboard ya esta listo, pero el backend aun no tiene las credenciales GOOGLE_* cargadas en el contenedor."
-                    : "Conecta tu propia cuenta Google. Operaly solo guardara la autorizacion cifrada para este cliente."}
+                      ? "El dashboard ya está listo, pero el backend todavía no puede abrir el flujo OAuth."
+                    : runtimeStatus === "connected"
+                      ? "La infraestructura OAuth ya está lista. Ahora esta integración sí puede empezar a usarse desde WhatsApp según el producto."
+                      : "El servidor ya está listo. El siguiente paso real es conectar tu cuenta Google para este producto desde aquí."}
                 </div>
               </div>
             </div>
