@@ -1,9 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { AlertCircle, CheckCircle2, ChevronRight, Clock, FolderOpen, Pencil, Plus, RefreshCw, Search, Trash2, User, X } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight, Clock, FolderOpen, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, User, X } from "lucide-react"
 import { AppToast } from "@/components/ui/app-toast"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
 
@@ -48,6 +53,11 @@ function StatusBadge({ status }: { status: string | null }) {
   const current = getStatus(status)
   const Icon = current.icon
   return <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${current.bg} ${current.border}`} style={{ color: current.color }}><Icon className="w-3 h-3" />{current.label}</span>
+}
+
+function isCaseEvent(eventType: string | null | undefined) {
+  const normalized = String(eventType || "").toLowerCase()
+  return normalized.includes("case") || normalized.includes("continuity")
 }
 
 function DetailModal({ cas, locale, copy, onClose, onEdit, onDelete }: { cas: CaseRow; locale: string; copy: Record<string, string>; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
@@ -154,6 +164,7 @@ export default function CasosPage() {
   const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [locale, setLocale] = useState("es-PE")
   const [timezone, setTimezone] = useState("America/Lima")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
 
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
@@ -173,6 +184,11 @@ export default function CasosPage() {
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
       setCases((data || []) as CaseRow[])
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime de casos:", runtimeError)
+      }
     } catch (error: any) {
       showToast(error.message || copy.loadError, "error")
     } finally {
@@ -190,6 +206,9 @@ export default function CasosPage() {
   }), [cases, search, filterStatus])
 
   const counts = useMemo(() => Object.fromEntries(STATUS.map((statusRow) => [statusRow.value, cases.filter((cas) => (cas.status || "open") === statusRow.value).length])), [cases])
+  const recentCaseEvents = useMemo(() => {
+    return (runtimeSnapshot?.recentEvents || []).filter((event) => isCaseEvent(event?.event_type)).slice(0, 4)
+  }, [runtimeSnapshot])
 
   async function createCase(payload: any) {
     const { error } = await supabase.from("cases").insert({ client_id: clientId, ...payload, created_at: new Date().toISOString() })
@@ -240,6 +259,65 @@ export default function CasosPage() {
         <div className="flex gap-1.5 flex-wrap">
           <button onClick={() => setFilterStatus("")} className={`h-9 px-3 rounded-xl text-xs font-semibold border transition-all ${!filterStatus ? "bg-[#0F1F63] text-white border-transparent" : "border-border bg-background text-muted-foreground"}`}>{copy.all} ({cases.length})</button>
           {STATUS.map((statusRow) => <button key={statusRow.value} onClick={() => setFilterStatus(statusRow.value)} className={`h-9 px-3 rounded-xl text-xs font-semibold border transition-all ${filterStatus === statusRow.value ? `${statusRow.bg} ${statusRow.border}` : "border-border bg-background text-muted-foreground"}`} style={filterStatus === statusRow.value ? { color: statusRow.color } : {}}>{statusRow.label} ({counts[statusRow.value] || 0})</button>)}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad operativa</h2>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Los casos deben servir como línea de trabajo viva entre WhatsApp, documentos, contactos y memoria futura. Aquí ya se ve mejor lo que está persistido y lo que aún depende de la profundización del backend.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Casos visibles</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{cases.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Registros ya visibles en tu panel profesional.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con continuidad</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {cases.filter((cas) => Boolean(cas.continuity_summary)).length}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Casos que ya traen un resumen útil de continuidad.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Runtime de casos</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con archivos y contactos aún se sigue endureciendo en backend.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Señales recientes</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Estas señales ayudan a distinguir entre casos guardados y continuidad realmente usada por el runtime.
+          </p>
+          <div className="mt-4 space-y-3">
+            {recentCaseEvents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
+                Aún no hay eventos recientes de casos en runtime.
+              </div>
+            ) : (
+              recentCaseEvents.map((event) => (
+                <div key={String(event.id || event.created_at)} className="rounded-2xl border border-border bg-secondary/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Runtime</p>
+                  <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+                    {normalizeRuntimeStatus(String(event.event_type || "case_event"))}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {event.created_at ? new Date(event.created_at).toLocaleString(locale) : "—"}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

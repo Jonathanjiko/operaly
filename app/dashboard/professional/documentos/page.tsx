@@ -1,8 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertCircle, Archive, CheckCircle2, Clock, File, FileImage, FileSpreadsheet, FileText, RefreshCw, Search, Trash2, Upload, X } from "lucide-react"
+import { AlertCircle, Archive, CheckCircle2, Clock, File, FileImage, FileSpreadsheet, FileText, RefreshCw, Search, ShieldCheck, Trash2, Upload, X } from "lucide-react"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
 
@@ -29,6 +34,11 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
   de: { title: "Dokumente", subtitle: "Deine operative Dateibasis zum Nachschlagen, Verknüpfen und Wiederverwenden über WhatsApp.", sync: "Mit Supabase und WhatsApp synchronisiert", reminder: "Verarbeitete Dateien bleiben bereit für Analyse, Fall-Kontinuität und späteres Senden.", upload: "Datei hochladen", uploading: "Lädt hoch...", search: "Dokumente suchen...", drag: "Dateien hierher ziehen oder klicken", dragActive: "Zum Hochladen loslassen", dragHint: "PDF, Word, Excel, Bilder, Archive · max. 50 MB", empty: "Keine Dokumente", emptyHint: "Lade deine erste Datei hoch oder sende sie an Operaly per WhatsApp.", processed: "Verarbeitet", processing: "In Verarbeitung", error: "Fehler", close: "Schließen", delete: "Löschen", deleteConfirm: "Dieses Dokument löschen?", size: "Größe", type: "Typ", pages: "Seiten", chunks: "KI-Chunks", source: "Quelle", uploaded: "Hochgeladen", readyHint: "Operaly kann diese Datei bereits analysieren und Fragen dazu beantworten.", total: "Dateien", processedCount: "verarbeitet", mb: "MB" },
   fr: { title: "Documents", subtitle: "Ta base opérationnelle de fichiers à consulter, associer et réutiliser depuis WhatsApp.", sync: "Synchronisé avec Supabase et WhatsApp", reminder: "Les fichiers traités restent prêts pour l’analyse, la continuité par cas et les envois ultérieurs.", upload: "Téléverser", uploading: "Téléversement...", search: "Rechercher des documents...", drag: "Glisse des fichiers ou clique pour choisir", dragActive: "Relâche pour téléverser", dragHint: "PDF, Word, Excel, images, archives · max 50 MB", empty: "Aucun document", emptyHint: "Téléverse ton premier fichier ou envoie-le à Operaly via WhatsApp.", processed: "Traité", processing: "Traitement", error: "Erreur", close: "Fermer", delete: "Supprimer", deleteConfirm: "Supprimer ce document ?", size: "Taille", type: "Type", pages: "Pages", chunks: "Chunks IA", source: "Source", uploaded: "Ajouté", readyHint: "Operaly peut déjà analyser ce fichier et répondre à son sujet.", total: "fichiers", processedCount: "traités", mb: "MB" },
   it: { title: "Documenti", subtitle: "La tua base operativa di file da consultare, associare e riutilizzare da WhatsApp.", sync: "Sincronizzato con Supabase e WhatsApp", reminder: "I file processati restano pronti per analisi, continuità per caso e invii successivi.", upload: "Carica file", uploading: "Caricamento...", search: "Cerca documenti...", drag: "Trascina file o fai clic per selezionare", dragActive: "Rilascia per caricare", dragHint: "PDF, Word, Excel, immagini, archivi · max 50 MB", empty: "Nessun documento", emptyHint: "Carica il tuo primo file o invialo a Operaly via WhatsApp.", processed: "Processato", processing: "In elaborazione", error: "Errore", close: "Chiudi", delete: "Elimina", deleteConfirm: "Eliminare questo documento?", size: "Dimensione", type: "Tipo", pages: "Pagine", chunks: "Chunk IA", source: "Origine", uploaded: "Caricato", readyHint: "Operaly può già analizzare questo file e rispondere su di esso.", total: "file", processedCount: "processati", mb: "MB" },
+}
+
+function isDocumentEvent(eventType: string | null | undefined) {
+  const normalized = String(eventType || "").toLowerCase()
+  return normalized.includes("document") || normalized.includes("file")
 }
 
 function formatSize(bytes: number | null) {
@@ -128,6 +138,7 @@ export default function DocumentosPage() {
   const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [locale, setLocale] = useState("es-PE")
   const [timezone, setTimezone] = useState("America/Lima")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const copy = COPY[language]
@@ -146,6 +157,11 @@ export default function DocumentosPage() {
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
       setDocuments((data || []) as DocumentRow[])
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime documental:", runtimeError)
+      }
     } catch (error: any) {
       alert(error.message || "Error al cargar.")
     } finally {
@@ -159,6 +175,10 @@ export default function DocumentosPage() {
     const query = search.toLowerCase()
     return documents.filter((doc) => !query || (doc.title || doc.file_name || "").toLowerCase().includes(query))
   }, [documents, search])
+
+  const recentDocumentEvents = useMemo(() => {
+    return (runtimeSnapshot?.recentEvents || []).filter((event) => isDocumentEvent(event?.event_type)).slice(0, 4)
+  }, [runtimeSnapshot])
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -226,6 +246,63 @@ export default function DocumentosPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="w-full h-10 pl-9 pr-4 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad documental</h2>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Este módulo ya separa lo que está visible en tu base documental de lo que el backend todavía debe cerrar para asociación automática con casos, contactos y memoria larga.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Base visible</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{documents.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos ya ligados a tu `client_id`.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para análisis</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{processed}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Documentos que ya muestran estado procesado o listo.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Backend documental</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con casos y envío todavía depende del backend.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Señales recientes</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Aquí se reflejan eventos recientes ligados a documentos y uso desde WhatsApp cuando el backend los registra.
+          </p>
+          <div className="mt-4 space-y-3">
+            {recentDocumentEvents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
+                Aún no hay eventos documentales recientes en runtime.
+              </div>
+            ) : (
+              recentDocumentEvents.map((event) => (
+                <div key={String(event.id || event.created_at)} className="rounded-2xl border border-border bg-secondary/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Runtime</p>
+                  <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+                    {normalizeRuntimeStatus(String(event.event_type || "document_event"))}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {event.created_at ? new Date(event.created_at).toLocaleString(locale) : "—"}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div onDragOver={(event) => { event.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={(event) => { event.preventDefault(); setDragOver(false); handleUpload(event.dataTransfer.files) }} className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${dragOver ? "border-[#3B82F6] bg-[#EFF6FF]" : "border-border hover:border-[#3B82F6]/40 hover:bg-secondary/30"}`} onClick={() => inputRef.current?.click()}>
