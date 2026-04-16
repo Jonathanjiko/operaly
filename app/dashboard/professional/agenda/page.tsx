@@ -25,7 +25,7 @@ type GoogleStatusPayload = {
 }
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
-  es: { title: "Agenda", subtitle: "Vea su día con claridad y sin enredos.", sync: "Se actualiza con sus cambios", reminder: "Cuando programa algo aquí, Operaly lo toma en cuenta para acompañarle mejor.", task: "Tarea", automation: "Automatización", dateTime: "Fecha y hora", close: "Cerrar", today: "Hoy", month: "Mes", week: "Semana", day: "Día", agenda: "Agenda", more: "más", noEvents: "No tiene nada próximo", noEventsHint: "Lo que programe aparecerá aquí.", totalEvents: "eventos" },
+  es: { title: "Agenda", subtitle: "Vea su dia con claridad y sin enredos.", sync: "Se mantiene al dia con sus cambios", reminder: "Lo que programe aqui ayuda a que Operaly le recuerde, le acompane y no pierda contexto.", task: "Tarea", automation: "Automatizacion", dateTime: "Fecha y hora", close: "Cerrar", today: "Hoy", month: "Mes", week: "Semana", day: "Dia", agenda: "Agenda", more: "mas", noEvents: "No tiene nada proximo", noEventsHint: "Lo que programe aparecera aqui.", totalEvents: "eventos" },
   en: { title: "Agenda", subtitle: "Operational view of dates, reminders, and active automations.", sync: "Synced with Supabase and WhatsApp", reminder: "By contract, scheduled items respect timezone and use the default 10-minute reminder unless changed explicitly.", task: "Task", automation: "Automation", dateTime: "Date and time", close: "Close", today: "Today", month: "Month", week: "Week", day: "Day", agenda: "Agenda", more: "more", noEvents: "No upcoming events", noEventsHint: "Your dated tasks and automations will appear here.", totalEvents: "total events" },
   pt: { title: "Agenda", subtitle: "Visão operacional de datas, lembretes e automações ativas.", sync: "Sincronizado com Supabase e WhatsApp", reminder: "Por contrato, o que é programado aqui respeita o fuso e usa lembrete base de 10 min salvo ajuste explícito.", task: "Tarefa", automation: "Automação", dateTime: "Data e hora", close: "Fechar", today: "Hoje", month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda", more: "mais", noEvents: "Sem próximos eventos", noEventsHint: "Suas tarefas e automações com data aparecerão aqui.", totalEvents: "eventos no total" },
   de: { title: "Agenda", subtitle: "Operative Ansicht von Terminen, Erinnerungen und aktiven Automationen.", sync: "Mit Supabase und WhatsApp synchronisiert", reminder: "Geplante Elemente respektieren den Zeitzonen-Vertrag und nutzen standardmäßig einen 10-Minuten-Reminder.", task: "Aufgabe", automation: "Automatisierung", dateTime: "Datum und Uhrzeit", close: "Schließen", today: "Heute", month: "Monat", week: "Woche", day: "Tag", agenda: "Agenda", more: "mehr", noEvents: "Keine bevorstehenden Termine", noEventsHint: "Deine datierten Aufgaben und Automationen erscheinen hier.", totalEvents: "Ereignisse gesamt" },
@@ -288,52 +288,52 @@ export default function AgendaPage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">en agenda</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{events.length}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Todo lo que ya tiene programado.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Todo lo que ya tiene programado para hoy o despues.</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">personas</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.total}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Personas listas para reuniones y seguimiento.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Personas listas para reuniones, correos y seguimiento.</p>
         </div>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">cumpleanos</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.birthdays}</p>
-          <p className="mt-1 text-xs text-slate-600">Punto de partida para automatizaciones utiles y saludos programados.</p>
+          <p className="mt-1 text-xs text-slate-600">Pueden ayudarle a preparar recordatorios, saludos y seguimiento.</p>
         </div>
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600">google</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.googleLike > 0 ? "Listo" : "Pendiente"}</p>
-          <p className="mt-1 text-xs text-slate-600">{contactSignals.googleLike} contacto{contactSignals.googleLike !== 1 ? "s" : ""} Google o fusionados visibles.</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600">apoyo google</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.googleLike > 0 ? "Visible" : "Pendiente"}</p>
+          <p className="mt-1 text-xs text-slate-600">{contactSignals.googleLike} contacto{contactSignals.googleLike !== 1 ? "s" : ""} de Google o ya unido{contactSignals.googleLike !== 1 ? "s" : ""}.</p>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className={`rounded-2xl border p-4 ${googleSignals.calendarConnected ? "border-emerald-200 bg-emerald-50" : "border-sky-200 bg-sky-50"}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">calendar</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.calendarConnected ? "Operativo" : "Pendiente"}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">google calendar</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.calendarConnected ? "Conectado" : "Pendiente"}</p>
           <p className="mt-1 text-xs text-slate-600">
             {googleSignals.calendarConnected
-              ? "Su calendario ya puede leerse y actualizarse desde Operaly."
-              : "Su agenda ya funciona aquí. Falta conectar Google Calendar para verla completa."}
+              ? "Su calendario ya puede ayudar a completar lo que ve aqui y lo que pregunta por WhatsApp."
+              : "Su agenda ya funciona aqui. Cuando conecte Google Calendar, tambien podra ver lo que agregue desde fuera."}
           </p>
         </div>
         <div className={`rounded-2xl border p-4 ${googleSignals.contactsConnected ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personas para agenda</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">personas para agenda</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {googleSignals.contactsConnected ? "Contacts conectado" : contactSignals.googleLike > 0 ? "Con apoyo de Google" : "Base interna"}
+            {googleSignals.contactsConnected ? "Listas para usar" : contactSignals.googleLike > 0 ? "Con apoyo de Google" : "Base interna"}
           </p>
           <p className="mt-1 text-xs text-slate-600">
             {googleSignals.contactsConnected
-              ? "Sus contactos ya pueden ayudar a completar reuniones, cumpleaños y contexto."
-              : "Por ahora esta agenda se apoya en la libreta interna y en lo que ya se haya unido desde Google."}
+              ? "Sus personas ya pueden ayudar a completar reuniones, cumpleaños y contexto."
+              : "Por ahora esta agenda se apoya en su libreta interna y en lo que ya se haya unido desde Google."}
           </p>
         </div>
       </div>
 
       <div className={`rounded-2xl border px-4 py-3 text-sm ${contactSignals.googleLike > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
         {contactSignals.googleLike > 0
-          ? "Agenda ya puede empezar a apoyarse en contactos sincronizados para reuniones, cumpleaños y contexto de personas."
-          : "La agenda ya usa la base interna de contactos. Cuando Google Contacts quede sincronizado, aqui deberia sentirse el puente con reuniones, cumpleaños y recordatorios por persona."}
+          ? "Esta agenda ya puede apoyarse en personas sincronizadas para reuniones, cumpleaños y contexto."
+          : "La agenda ya usa su base interna de personas. Cuando Google Contacts quede listo, aqui deberia sentirse mejor el apoyo por persona."}
       </div>
 
       {view === "month" && (

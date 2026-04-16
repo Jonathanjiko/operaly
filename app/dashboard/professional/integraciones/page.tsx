@@ -113,48 +113,48 @@ const INTEGRATIONS: IntegrationCard[] = [
     id: "google_drive",
     product: "drive",
     name: "Google Drive",
-    description: "Consultar, descargar y analizar archivos del Drive desde Operaly, incluso para compartirlos o usarlos en flujos por WhatsApp.",
+    description: "Ver sus archivos de Drive desde Operaly y traer solo lo que quiera revisar, resumir o compartir.",
     icon: GoogleDriveIcon,
     useCases: [
-      "Buscar archivos por nombre o contexto",
-      "Analizar PDFs, hojas y documentos",
-      "Enviar archivos a terceros desde Operaly",
+      "Ubicar archivos por nombre o tema",
+      "Traer un documento cuando quiera revisarlo",
+      "Usarlo luego en correos, casos o WhatsApp",
     ],
   },
   {
     id: "google_calendar",
     product: "calendar",
     name: "Google Calendar",
-    description: "Sincronizar tu agenda real con Operaly para verla desde WhatsApp, crear eventos y mantener recordatorios consistentes.",
+    description: "Mantener su agenda al día para verla desde Operaly, crear eventos y no perder cambios hechos desde Google.",
     icon: GoogleCalendarIcon,
     useCases: [
-      "Ver agenda del dia desde WhatsApp",
+      "Ver su agenda del dia desde WhatsApp",
       "Crear y mover eventos",
-      "Sincronizar cambios con Operaly",
+      "Reflejar cambios hechos en Google",
     ],
   },
   {
     id: "gmail",
     product: "gmail",
     name: "Gmail",
-    description: "Preparar borradores, confirmar el contenido y luego enviar correos finales con o sin adjuntos desde Operaly.",
+    description: "Preparar correos, revisarlos con usted y enviarlos con asunto, destinatario y adjuntos cuando lo confirme.",
     icon: GmailIcon,
     useCases: [
-      "Redactar correos con confirmacion previa",
+      "Preparar correos con confirmacion previa",
       "Adjuntar archivos y enviar a contactos",
-      "Trabajar respuestas desde el dashboard o WhatsApp",
+      "Responder desde WhatsApp o desde el dashboard",
     ],
   },
   {
     id: "google_contacts",
     product: "contacts",
     name: "Google Contacts",
-    description: "Sincronizar personas desde Google para usarlas en agenda, Gmail, casos, llamadas y archivos sin duplicar la libreta.",
+    description: "Traer sus personas desde Google para usarlas en agenda, correo, casos y llamadas sin desordenar la libreta.",
     icon: GoogleContactsIcon,
     useCases: [
-      "Traer nombres, telefonos y emails",
-      "Resolver cumpleanos y relaciones si existen",
-      "Fusionar sin duplicados absurdos",
+      "Traer nombres, telefonos y correos",
+      "Aprovechar cumpleanos y relaciones si existen",
+      "Unir sin crear duplicados innecesarios",
     ],
   },
 ]
@@ -543,7 +543,7 @@ export default function IntegracionesPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Conecte sus herramientas y déjelas listas para trabajar con Operaly.
+            Conecte sus herramientas y deje todo listo para usarlo despues con Operaly.
           </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">
@@ -562,18 +562,18 @@ export default function IntegracionesPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                Desde aquí deja lista su agenda, sus archivos, su correo y sus contactos para usarlos después por WhatsApp.
+                Desde aqui deja lista su agenda, sus archivos, su correo y sus personas para usarlos luego por WhatsApp o desde este panel.
               </p>
             </div>
             {googleEnabled ? (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Disponible en su cuenta
+                Disponible para usted
               </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600">
                 <Lock className="h-3.5 w-3.5" />
-                Falta activar Google
+                Falta activarlo
               </div>
             )}
           </div>
@@ -587,12 +587,12 @@ export default function IntegracionesPage() {
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">google</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleEnabled ? "Activa" : "Bloqueada"}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">suite google</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleEnabled ? "Disponible" : "Bloqueada"}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">conexion</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Lista" : "Pendiente"}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">estado general</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
             </div>
           </div>
         </div>
@@ -605,32 +605,32 @@ export default function IntegracionesPage() {
       )}
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
-        Usted conecta todo desde aquí. Después, Operaly lo usa por WhatsApp sin que tenga que repetir la configuración.
+        Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez.
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">google listo</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">cuenta preparada</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Sí" : "No"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {googleServerConfigured ? "Ya puede empezar a conectar productos." : "Todavía falta dejarlo listo."}
+            {googleServerConfigured ? "Ya puede empezar a conectar lo que necesite." : "Todavia falta dejarlo listo."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">productos conectados</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">herramientas conectadas</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {connectedProductsCount > 0 ? `${connectedProductsCount}/${INTEGRATIONS.length} conectadas` : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Aquí ve qué parte de Google ya quedó lista en su cuenta.
+            Aqui ve que parte de Google ya quedo lista en su cuenta.
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">usable en whatsapp</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">para usar ya</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavia no"}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">Mientras más productos conecte, más puede hacer Operaly por usted.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Mientras mas conecte, mas puede resolver Operaly por usted.</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">personas</p>
@@ -638,7 +638,7 @@ export default function IntegracionesPage() {
             {contactsStatusLabel}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para Gmail, agenda y casos.
+            {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para correo, agenda y casos.
           </p>
         </div>
       </div>
@@ -681,8 +681,8 @@ export default function IntegracionesPage() {
                       <p className="mt-1">Estado: {integration.product === "contacts" ? contactsStatusLabel : productState?.sync_status || "listo"}</p>
                       {integration.product === "contacts" && (
                         <p className="mt-1">
-                          Puente visible: {contactsSnapshot.bridgeStatus === "active" ? "si" : "todavia no"} ·{" "}
-                          {contactsSnapshot.google + contactsSnapshot.merged} Google/fusionados
+                          Personas visibles: {contactsSnapshot.bridgeStatus === "active" ? "si" : "todavia no"} ·{" "}
+                          {contactsSnapshot.google + contactsSnapshot.merged} de Google o unidas
                         </p>
                       )}
                       {productState?.last_error && <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>}
@@ -704,7 +704,7 @@ export default function IntegracionesPage() {
                           {actionLoading === "sync:contacts"
                             ? "Sincronizando..."
                             : contactsSnapshot.bridgeStatus === "active"
-                              ? "Re-sincronizar"
+                              ? "Actualizar"
                               : "Sincronizar"}
                         </button>
                       )}
@@ -733,7 +733,7 @@ export default function IntegracionesPage() {
                     {actionLoading === `connect:${integration.product}`
                       ? "Abriendo Google..."
                       : !googleServerConfigured
-                        ? "Servidor pendiente"
+                        ? "Pendiente"
                         : `Conectar ${productLabel}`}
                     {integration.product === "contacts" ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
                   </button>
@@ -741,12 +741,12 @@ export default function IntegracionesPage() {
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
-                    ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
+                    ? "Primero hay que activar Google para su cuenta. Despues podra conectarlo desde aqui."
                     : !googleServerConfigured
-                      ? "El dashboard ya esta listo, pero el backend todavia no puede abrir el flujo OAuth."
+                      ? "Esta pantalla ya esta preparada, pero todavia falta que la conexion quede disponible."
                       : runtimeStatus === "connected"
-                        ? "La infraestructura OAuth ya esta lista. Ahora esta integracion si puede empezar a usarse desde WhatsApp segun el producto."
-                        : "El servidor ya esta listo. El siguiente paso real es conectar tu cuenta Google para este producto desde aqui."}
+                        ? "Esta herramienta ya puede empezar a ayudarle desde Operaly segun el uso que necesite."
+                        : "El siguiente paso es conectar este producto para empezar a usarlo desde Operaly."}
                 </div>
               </div>
             </div>
@@ -812,12 +812,12 @@ export default function IntegracionesPage() {
         }`}
       >
         {contactsSnapshot.bridgeStatus === "active"
-          ? "Sus personas de Google ya empiezan a aparecer aquí junto con la libreta que ya tenía."
+          ? "Sus personas de Google ya empiezan a verse aqui junto con la libreta que ya tenia."
           : contactsSnapshot.bridgeStatus === "pending"
             ? contactsProductConnected
-              ? "Google Contacts ya está conectado, pero todavía está trayendo o actualizando sus personas."
-              : "Todavía falta conectar Google Contacts para completar su libreta."
-            : "Por ahora solo está viendo su libreta interna. Cuando conecte Contacts, aquí aparecerán también sus personas de Google."}
+              ? "Google Contacts ya esta conectado, pero todavia esta trayendo o actualizando sus personas."
+              : "Todavia falta conectar Google Contacts para completar su libreta."
+            : "Por ahora solo esta viendo su libreta interna. Cuando conecte Contacts, aqui apareceran tambien sus personas de Google."}
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -832,13 +832,13 @@ export default function IntegracionesPage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-[#0F1F63]">Su libreta</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Operaly junta lo que usted ya tenía con lo que llegue desde Google, sin desordenarle los contactos.
+              Operaly junta lo que usted ya tenia con lo que llegue desde Google, sin desordenarle los contactos.
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-[#0F1F63]">Para qué sirve</p>
+              <p className="text-sm font-semibold text-[#0F1F63]">Para que sirve</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Sirve para escribir correos, agendar reuniones, ubicar cumpleaños, enviar archivos y trabajar casos.
+              Sirve para escribir correos, agendar reuniones, ubicar cumpleanos, enviar archivos y trabajar casos.
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
