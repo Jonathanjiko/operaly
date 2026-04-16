@@ -33,6 +33,11 @@ import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
 import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
+import {
   getDisplayPlanName,
   getDisplayPlanPeriodicity,
 } from "@/lib/plans"
@@ -168,6 +173,7 @@ export default function ProfessionalSettingsPage() {
   const [voiceSettings, setVoiceSettings] = useState<any>(null)
   const [voiceMinutesUsed, setVoiceMinutesUsed] = useState(0)
   const [voiceMinutesLimit, setVoiceMinutesLimit] = useState(0)
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
 
   const initials = useMemo(() => {
     if (!fullName.trim()) {
@@ -551,6 +557,12 @@ export default function ProfessionalSettingsPage() {
           .rpc("get_voice_settings", { p_client_id: resolvedClientId })
         if (vsData) setVoiceSettings(vsData)
       } catch (_) {}
+
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.warn("professional runtime query error:", runtimeError)
+      }
 
       // Load voice minutes usage
       try {
@@ -938,6 +950,66 @@ export default function ProfessionalSettingsPage() {
             >
               {saving ? "Guardando..." : "Guardar cambios"}
             </Button>
+
+            <div className="mt-6 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
+              <div className="mb-4 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#7C3AED]" />
+                <p className="text-sm font-semibold text-[#0F1F63]">Estado aplicado vs guardado</p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Idioma operativo</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    Guardado: {preferredLanguage || language || "es"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Runtime: {normalizeRuntimeStatus(String(runtimeSnapshot?.preferences?.preferred_language || "")) === "Sin señal"
+                      ? "Sin lectura runtime visible"
+                      : String(runtimeSnapshot?.preferences?.preferred_language || "Sin señal")}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Welcome y teléfono</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    Welcome: {normalizeRuntimeStatus(
+                      String(
+                        runtimeSnapshot?.preferences?.welcome_initial_status ||
+                          runtimeSnapshot?.welcome?.status ||
+                          runtimeSnapshot?.welcome?.message_status ||
+                          ""
+                      )
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Teléfono: {normalizeRuntimeStatus(
+                      String(runtimeSnapshot?.client?.phone_verification_status || phoneVerificationStatus || "")
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Voz</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    Guardado: {voiceSettings?.voice_name || voiceSettings?.voice_id || "Sin voz"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Runtime: {runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "Sin lectura runtime visible"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Asistente</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                    Guardado: {preferredLanguage || "es"} · {profession || "sin profesión"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Runtime: {runtimeSnapshot?.preferences?.assistant_tone || "Sin señal de tono"} · {runtimeSnapshot?.preferences?.assistant_style || "Sin señal de estilo"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-card rounded-2xl border border-border p-6">
