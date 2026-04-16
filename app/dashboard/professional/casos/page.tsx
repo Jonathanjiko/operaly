@@ -185,6 +185,11 @@ export default function CasosPage() {
   const [locale, setLocale] = useState("es-PE")
   const [timezone, setTimezone] = useState("America/Lima")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [contactSignals, setContactSignals] = useState({
+    total: 0,
+    googleLike: 0,
+    withEmail: 0,
+  })
 
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
@@ -194,9 +199,10 @@ export default function CasosPage() {
     try {
       const currentClientId = await getCurrentClientId()
       setClientId(currentClientId)
-      const [{ data: client }, { data, error }] = await Promise.all([
+      const [{ data: client }, { data, error }, { data: contacts }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", currentClientId).maybeSingle(),
         supabase.from("cases").select("*").eq("client_id", currentClientId).order("created_at", { ascending: false }),
+        supabase.from("contacts").select("id,email,source").eq("client_id", currentClientId),
       ])
       if (error) throw error
       const resolvedLanguage = resolveLanguageCode(client?.preferred_language || client?.language || "es")
@@ -204,6 +210,15 @@ export default function CasosPage() {
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
       setCases((data || []) as CaseRow[])
+      const contactRows = contacts || []
+      setContactSignals({
+        total: contactRows.length,
+        googleLike: contactRows.filter((contact) => {
+          const source = String(contact.source || "").toLowerCase()
+          return source.includes("google") || source.includes("merge")
+        }).length,
+        withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
+      })
       try {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
@@ -327,6 +342,11 @@ export default function CasosPage() {
               </p>
               <p className="mt-1 text-xs text-muted-foreground">El backend ya refresca mejor el resumen y los hitos del caso.</p>
             </div>
+          </div>
+          <div className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${contactSignals.googleLike > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
+            {contactSignals.googleLike > 0
+              ? `Ya hay ${contactSignals.googleLike} contacto${contactSignals.googleLike !== 1 ? "s" : ""} Google o fusionado${contactSignals.googleLike !== 1 ? "s" : ""} visible${contactSignals.googleLike !== 1 ? "s" : ""} para nutrir continuidad, correo y seguimiento por persona.`
+              : `Los casos ya pueden apoyarse en ${contactSignals.total} contacto${contactSignals.total !== 1 ? "s" : ""} interno${contactSignals.total !== 1 ? "s" : ""}. El siguiente salto es ver aqui el puente real con Google Contacts y sus emails.`}
           </div>
         </div>
 

@@ -113,6 +113,12 @@ export default function AgendaPage() {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [clientId, setClientId] = useState("")
+  const [contactSignals, setContactSignals] = useState({
+    total: 0,
+    birthdays: 0,
+    withEmail: 0,
+    googleLike: 0,
+  })
 
   const copy = COPY[language]
 
@@ -135,9 +141,10 @@ export default function AgendaPage() {
         const todayKey = dateKey(new Date(), resolvedTimezone)
         setSelectedKey(todayKey)
 
-        const [{ data: tasks }, { data: recurring }] = await Promise.all([
+        const [{ data: tasks }, { data: recurring }, { data: contacts }] = await Promise.all([
           supabase.from("tasks").select("id,title,due_at").eq("client_id", currentClientId).not("due_at", "is", null),
           supabase.from("recurring_tasks").select("id,title,next_run").eq("client_id", currentClientId).not("next_run", "is", null),
+          supabase.from("contacts").select("id,email,birthday,source").eq("client_id", currentClientId),
         ])
 
         const mapped = [
@@ -154,6 +161,16 @@ export default function AgendaPage() {
         ].filter(Boolean) as EventItem[]
 
         setEvents(mapped)
+        const contactRows = contacts || []
+        setContactSignals({
+          total: contactRows.length,
+          birthdays: contactRows.filter((contact) => Boolean(contact.birthday)).length,
+          withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
+          googleLike: contactRows.filter((contact) => {
+            const source = String(contact.source || "").toLowerCase()
+            return source.includes("google") || source.includes("merge")
+          }).length,
+        })
       } finally {
         setLoading(false)
       }
@@ -227,6 +244,35 @@ export default function AgendaPage() {
         <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
         <h2 className="text-base font-semibold text-[#0F1F63] capitalize">{navTitle()}</h2>
         {loading && <RefreshCw className="w-4 h-4 text-muted-foreground animate-spin ml-auto" />}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">agenda visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{events.length}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Eventos internos y automatizaciones ya visibles en esta agenda.</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">contactos utiles</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.total}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Base de personas disponible para reuniones, recordatorios y seguimiento.</p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">cumpleanos</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.birthdays}</p>
+          <p className="mt-1 text-xs text-slate-600">Punto de partida para automatizaciones utiles y saludos programados.</p>
+        </div>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600">puente Google</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.googleLike > 0 ? "Con senal" : "Pendiente"}</p>
+          <p className="mt-1 text-xs text-slate-600">{contactSignals.googleLike} contacto{contactSignals.googleLike !== 1 ? "s" : ""} Google o fusionados visibles.</p>
+        </div>
+      </div>
+
+      <div className={`rounded-2xl border px-4 py-3 text-sm ${contactSignals.googleLike > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
+        {contactSignals.googleLike > 0
+          ? "Agenda ya puede empezar a apoyarse en contactos sincronizados para reuniones, cumpleaños y contexto de personas."
+          : "La agenda ya usa la base interna de contactos. Cuando Google Contacts quede sincronizado, aqui deberia sentirse el puente con reuniones, cumpleaños y recordatorios por persona."}
       </div>
 
       {view === "month" && (

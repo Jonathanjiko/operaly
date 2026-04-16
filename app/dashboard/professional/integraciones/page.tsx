@@ -68,6 +68,7 @@ type ContactsSnapshot = {
   merged: number
   birthdays: number
   withEmail: number
+  bridgeStatus: "active" | "pending" | "base_only"
 }
 
 const GoogleDriveIcon = () => (
@@ -210,6 +211,7 @@ export default function IntegracionesPage() {
     merged: 0,
     birthdays: 0,
     withEmail: 0,
+    bridgeStatus: "base_only",
   })
 
   const googleServerConfigured = !statusError.toLowerCase().includes("google oauth todavia no esta listo en el servidor")
@@ -257,12 +259,16 @@ export default function IntegracionesPage() {
         .eq("client_id", cid)
 
       const contactRows = contacts || []
+      const googleLikeCount =
+        contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length +
+        contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
       setContactsSnapshot({
         total: contactRows.length,
         google: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length,
         merged: contactRows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length,
         birthdays: contactRows.filter((contact) => Boolean(contact.birthday)).length,
         withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
+        bridgeStatus: googleLikeCount > 0 ? "active" : contactRows.length > 0 ? "pending" : "base_only",
       })
 
       await loadGoogleStatus()
@@ -470,7 +476,11 @@ export default function IntegracionesPage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">contactos listos</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {contactsSnapshot.google + contactsSnapshot.merged > 0 ? `${contactsSnapshot.google + contactsSnapshot.merged} con puente Google` : "Base interna"}
+            {contactsSnapshot.bridgeStatus === "active"
+              ? `${contactsSnapshot.google + contactsSnapshot.merged} con puente Google`
+              : contactsSnapshot.bridgeStatus === "pending"
+                ? "Pendiente de sync"
+                : "Base interna"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para Gmail, agenda y casos.
@@ -607,6 +617,22 @@ export default function IntegracionesPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          contactsSnapshot.bridgeStatus === "active"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : contactsSnapshot.bridgeStatus === "pending"
+              ? "border-sky-200 bg-sky-50 text-sky-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+        }`}
+      >
+        {contactsSnapshot.bridgeStatus === "active"
+          ? "Google ya empieza a reflejarse en contactos: el usuario puede distinguir base interna, contactos Google y contactos fusionados."
+          : contactsSnapshot.bridgeStatus === "pending"
+            ? "La cuenta Google puede estar conectada, pero el puente con contactos aun no se refleja en la base del usuario. Aqui debe verse cuando el backend empiece a sincronizar y fusionar personas."
+            : "Todavia no hay puente visible con Google Contacts. Esta pantalla ya deja claro que la libreta interna existe, pero la sincronizacion Google <-> Operaly sigue pendiente del backend."}
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">

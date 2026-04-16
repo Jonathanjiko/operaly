@@ -114,17 +114,42 @@ export default function ContactosPage() {
   const [countryCode, setCountryCode] = useState("PE")
   const [preferredLanguage, setPreferredLanguage] = useState("es")
   const [phoneHelper, setPhoneHelper] = useState("")
+  const [contactsBridgeStatus, setContactsBridgeStatus] = useState<"active" | "pending" | "base_only">("base_only")
 
   const loadContacts = useCallback(async (nextClientId?: string) => {
     const resolvedClientId = nextClientId || clientId
     if (!resolvedClientId) return
     setLoading(true)
-    const { data } = await supabase
+    const extendedResponse = await supabase
       .from("contacts")
       .select("id,name,phone,email,phone_normalized,phone_validation_status,relationship,notes,birthday,company,job_title,source,sync_status,external_source,last_synced_at,created_at")
       .eq("client_id", resolvedClientId)
       .order("name", { ascending: true })
-    setContacts((data || []) as ContactRow[])
+    if (!extendedResponse.error) {
+      const rows = (extendedResponse.data || []) as ContactRow[]
+      setContacts(rows)
+      setContactsBridgeStatus(rows.some((contact) => String(contact.source || "").toLowerCase().includes("google") || String(contact.source || "").toLowerCase().includes("merge")) ? "active" : "pending")
+      setLoading(false)
+      return
+    }
+
+    const baseResponse = await supabase
+      .from("contacts")
+      .select("id,name,phone,phone_normalized,phone_validation_status,relationship,notes,birthday,created_at")
+      .eq("client_id", resolvedClientId)
+      .order("name", { ascending: true })
+
+    setContacts(((baseResponse.data || []) as ContactRow[]).map((contact) => ({
+      ...contact,
+      email: null,
+      company: null,
+      job_title: null,
+      source: "internal",
+      sync_status: null,
+      external_source: null,
+      last_synced_at: null,
+    })))
+    setContactsBridgeStatus("base_only")
     setLoading(false)
   }, [clientId])
 
@@ -303,6 +328,22 @@ export default function ContactosPage() {
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
         Cuando Google Contacts quede conectado, esta base debe distinguir claramente contactos internos de Operaly, contactos traidos desde Google y contactos fusionados. Desde aqui se prepara el puente para agenda, Gmail, llamadas, archivos y casos.
+      </div>
+
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          contactsBridgeStatus === "active"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : contactsBridgeStatus === "pending"
+              ? "border-sky-200 bg-sky-50 text-sky-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+        }`}
+      >
+        {contactsBridgeStatus === "active"
+          ? "El puente con Google Contacts ya deja senales visibles en esta base. Aqui deberias empezar a ver contactos Google o fusionados."
+          : contactsBridgeStatus === "pending"
+            ? "Tu libreta interna ya esta lista, pero el backend todavia no esta reflejando contactos Google sincronizados en esta vista."
+            : "Mostrando la base interna de Operaly. Si el backend de Google Contacts aun no expone columnas de sync, esta pantalla ya no se rompe y sigue mostrando los contactos reales del usuario."}
       </div>
 
       <div className="relative">
