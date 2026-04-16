@@ -136,17 +136,18 @@ export default function AsistentePage() {
   }
 
   const upsertPref = async (key: string, value: string) => {
-    await supabase.from("client_preferences").upsert(
+    const { error } = await supabase.from("client_preferences").upsert(
       { client_id: clientId, pref_key: key, pref_value: value, source: "dashboard", updated_at: new Date().toISOString() },
       { onConflict: "client_id,pref_key" },
     )
+    if (error) throw error
   }
 
   const handleSave = async () => {
     if (!clientId) return
     setSaving(true)
     try {
-      await supabase
+      const { error: clientUpdateError } = await supabase
         .from("clients")
         .update({
           profession_code: professionCode,
@@ -156,12 +157,14 @@ export default function AsistentePage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", clientId)
+      if (clientUpdateError) throw clientUpdateError
 
       await upsertPref("assistant_tone", tone)
       await upsertPref("assistant_context", customContext.trim())
       await upsertPref("assistant_profession", professionCode)
       await upsertPref("assistant_style", style)
 
+      await loadConfig()
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {

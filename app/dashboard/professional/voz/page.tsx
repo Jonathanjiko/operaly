@@ -143,7 +143,7 @@ export default function VozPage() {
     try {
       const resolvedVoiceId = useCustomVoice ? customVoiceId.trim() : voiceId
       const voice = ELEVENLABS_VOICES.find((item) => item.id === resolvedVoiceId)
-      await supabase.from("user_voice_settings").upsert(
+      const { error } = await supabase.from("user_voice_settings").upsert(
         {
           client_id: clientId,
           voice_provider: "elevenlabs",
@@ -157,6 +157,8 @@ export default function VozPage() {
         },
         { onConflict: "client_id" },
       )
+      if (error) throw error
+      await loadConfig()
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {

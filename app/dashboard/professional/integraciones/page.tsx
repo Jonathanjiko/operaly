@@ -214,6 +214,7 @@ export default function IntegracionesPage() {
   const [planCode, setPlanCode] = useState("trial")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
+  const googleServerConfigured = !statusError.toLowerCase().includes("google oauth aún no está configurado")
 
   const getAuthHeaders = async () => {
     const { data } = await supabase.auth.getSession()
@@ -418,10 +419,12 @@ export default function IntegracionesPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {googleStatus?.connection?.connection_status === "connected" ||
-                googleStatus?.connection?.status === "connected"
-                  ? "Conectado"
-                  : "Disponible"}
+                {!googleServerConfigured
+                  ? "Pendiente"
+                  : googleStatus?.connection?.connection_status === "connected" ||
+                      googleStatus?.connection?.status === "connected"
+                    ? "Conectado"
+                    : "Disponible"}
               </p>
             </div>
           </div>
@@ -506,10 +509,14 @@ export default function IntegracionesPage() {
                 ) : (
                   <button
                     onClick={() => handleConnectProduct(integration.product)}
-                    disabled={Boolean(actionLoading)}
+                    disabled={Boolean(actionLoading) || !googleServerConfigured}
                     className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
                   >
-                    {actionLoading === `connect:${integration.product}` ? "Abriendo Google..." : `Conectar ${productLabel}`}
+                    {actionLoading === `connect:${integration.product}`
+                      ? "Abriendo Google..."
+                      : !googleServerConfigured
+                        ? "Servidor pendiente"
+                        : `Conectar ${productLabel}`}
                     <CalendarDays className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -517,6 +524,8 @@ export default function IntegracionesPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
                   {runtimeStatus === "blocked"
                     ? "Primero se habilita comercialmente. Luego se conectara por OAuth seguro desde este mismo dashboard."
+                    : !googleServerConfigured
+                      ? "El dashboard ya esta listo, pero el backend aun no tiene las credenciales GOOGLE_* cargadas en el contenedor."
                     : "Conecta tu propia cuenta Google. Operaly solo guardara la autorizacion cifrada para este cliente."}
                 </div>
               </div>
