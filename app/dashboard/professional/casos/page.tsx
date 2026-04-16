@@ -25,6 +25,11 @@ type CaseRow = {
   continuity_summary?: string | null
   last_activity_at?: string | null
   created_at: string | null
+  updated_at?: string | null
+  event_count?: number | null
+  document_count?: number | null
+  contact_count?: number | null
+  last_event_type?: string | null
 }
 
 type Toast = { open: boolean; msg: string; type: "success" | "error" | "info" }
@@ -60,6 +65,14 @@ function isCaseEvent(eventType: string | null | undefined) {
   return normalized.includes("case") || normalized.includes("continuity")
 }
 
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-border bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+      {label}: {value}
+    </span>
+  )
+}
+
 function DetailModal({ cas, locale, copy, onClose, onEdit, onDelete }: { cas: CaseRow; locale: string; copy: Record<string, string>; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
   const title = cas.case_title || cas.title || "Caso"
   return (
@@ -88,7 +101,14 @@ function DetailModal({ cas, locale, copy, onClose, onEdit, onDelete }: { cas: Ca
           )}
           {cas.summary && <div className="bg-secondary/40 rounded-xl p-4"><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">{copy.summaryLabel}</p><p className="text-sm text-[#0F1F63] leading-relaxed">{cas.summary}</p></div>}
           {cas.continuity_summary && <div className="bg-[#EFF6FF] rounded-xl p-4 border border-[#BFDBFE]"><p className="text-[10px] font-bold text-[#1D4ED8] uppercase tracking-wider mb-2">{copy.continuity}</p><p className="text-sm text-[#1D4ED8] leading-relaxed">{cas.continuity_summary}</p></div>}
+          <div className="flex flex-wrap gap-2">
+            {cas.event_count ? <MetricPill label="Hitos" value={String(cas.event_count)} /> : null}
+            {cas.document_count ? <MetricPill label="Docs" value={String(cas.document_count)} /> : null}
+            {cas.contact_count ? <MetricPill label="Contactos" value={String(cas.contact_count)} /> : null}
+            {cas.last_event_type ? <MetricPill label="Último evento" value={normalizeRuntimeStatus(cas.last_event_type)} /> : null}
+          </div>
           {cas.created_at && <p className="text-xs text-muted-foreground">{copy.opened} {new Date(cas.created_at).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>}
+          {cas.last_activity_at ? <p className="text-xs text-muted-foreground">Última actividad: {new Date(cas.last_activity_at).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}</p> : null}
         </div>
         <div className="px-6 pb-6 flex gap-2">
           <button onClick={() => { onEdit(); onClose() }} className="flex-1 h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a] flex items-center justify-center gap-2"><Pencil className="w-4 h-4" />{copy.editCase}</button>
@@ -209,6 +229,8 @@ export default function CasosPage() {
   const recentCaseEvents = useMemo(() => {
     return (runtimeSnapshot?.recentEvents || []).filter((event) => isCaseEvent(event?.event_type)).slice(0, 4)
   }, [runtimeSnapshot])
+  const casesWithContinuity = cases.filter((cas) => Boolean(cas.continuity_summary)).length
+  const casesWithActivity = cases.filter((cas) => Boolean(cas.last_activity_at || cas.last_event_type)).length
 
   async function createCase(payload: any) {
     const { error } = await supabase.from("cases").insert({ client_id: clientId, ...payload, created_at: new Date().toISOString() })
@@ -280,7 +302,7 @@ export default function CasosPage() {
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con continuidad</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {cases.filter((cas) => Boolean(cas.continuity_summary)).length}
+                {casesWithContinuity}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Casos que ya traen un resumen útil de continuidad.</p>
             </div>
@@ -290,6 +312,20 @@ export default function CasosPage() {
                 {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con archivos y contactos aún se sigue endureciendo en backend.</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-white/80 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con actividad reciente</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{casesWithActivity}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Casos que ya muestran último hito o última actividad visible.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-white/80 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Continuidad viva</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">El backend ya refresca mejor el resumen y los hitos del caso.</p>
             </div>
           </div>
         </div>
@@ -344,6 +380,11 @@ export default function CasosPage() {
                       {person && <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><User className="w-3 h-3" />{person}</p>}
                       {cas.summary && <p className="text-xs text-muted-foreground mt-2 line-clamp-2 bg-secondary/30 rounded-lg px-2.5 py-1.5">{cas.summary}</p>}
                       {cas.continuity_summary && <p className="text-xs text-[#1D4ED8] mt-2 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg px-2.5 py-1.5 line-clamp-2">{cas.continuity_summary}</p>}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {cas.event_count ? <MetricPill label="Hitos" value={String(cas.event_count)} /> : null}
+                        {cas.document_count ? <MetricPill label="Docs" value={String(cas.document_count)} /> : null}
+                        {cas.last_event_type ? <MetricPill label="Último" value={normalizeRuntimeStatus(cas.last_event_type)} /> : null}
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">

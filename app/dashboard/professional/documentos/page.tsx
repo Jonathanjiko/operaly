@@ -26,6 +26,14 @@ type DocumentRow = {
   channel: string | null
   storage_path: string | null
   created_at: string | null
+  embedding_status?: string | null
+  embedding_provider?: string | null
+  embedding_model?: string | null
+  indexed_at?: string | null
+  vision_status?: string | null
+  extraction_source?: string | null
+  contact_id?: string | null
+  case_id?: string | null
 }
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
@@ -81,6 +89,29 @@ function FileBg({ mime }: { mime: string | null }) {
   return "bg-secondary"
 }
 
+function RuntimeTag({
+  label,
+  value,
+  tone = "slate",
+}: {
+  label: string
+  value: string
+  tone?: "slate" | "blue" | "emerald" | "amber" | "purple"
+}) {
+  const tones = {
+    slate: "bg-secondary text-muted-foreground border-border",
+    blue: "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    amber: "bg-amber-50 text-amber-700 border-amber-200",
+    purple: "bg-violet-50 text-violet-700 border-violet-200",
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tones[tone]}`}>
+      {label}: {value}
+    </span>
+  )
+}
+
 function StatusBadge({ status, copy }: { status: string | null; copy: Record<string, string> }) {
   const normalized = (status || "").toLowerCase()
   if (normalized === "processed" || normalized === "ready") {
@@ -106,6 +137,22 @@ function DetailModal({ doc, locale, copy, onClose, onDelete }: { doc: DocumentRo
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-[#0F1F63] leading-snug break-words">{name}</h2>
             <StatusBadge status={doc.status} copy={copy} />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {doc.embedding_status ? (
+                <RuntimeTag
+                  label="Embeddings"
+                  value={normalizeRuntimeStatus(doc.embedding_status)}
+                  tone={doc.embedding_status === "indexed" ? "emerald" : doc.embedding_status === "failed" ? "amber" : "blue"}
+                />
+              ) : null}
+              {doc.vision_status ? (
+                <RuntimeTag
+                  label="Visión"
+                  value={normalizeRuntimeStatus(doc.vision_status)}
+                  tone={doc.vision_status === "ready" || doc.vision_status === "processed" ? "purple" : "amber"}
+                />
+              ) : null}
+            </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl border border-border flex items-center justify-center hover:bg-secondary"><X className="w-4 h-4" /></button>
         </div>
@@ -129,6 +176,28 @@ function DetailModal({ doc, locale, copy, onClose, onDelete }: { doc: DocumentRo
             <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-3">
               <p className="text-xs font-semibold text-[#1D4ED8]">{copy.processed}</p>
               <p className="text-xs text-[#3B82F6] mt-0.5">{copy.readyHint}</p>
+            </div>
+          ) : null}
+          {(doc.indexed_at || doc.extraction_source || doc.case_id || doc.contact_id) ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-secondary/40 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Indexado</p>
+                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">
+                  {doc.indexed_at ? new Date(doc.indexed_at).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" }) : "Pendiente"}
+                </p>
+              </div>
+              <div className="bg-secondary/40 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Extracción</p>
+                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.extraction_source || "Base"}</p>
+              </div>
+              <div className="bg-secondary/40 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Caso ligado</p>
+                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.case_id ? "Sí" : "No"}</p>
+              </div>
+              <div className="bg-secondary/40 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Contacto ligado</p>
+                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.contact_id ? "Sí" : "No"}</p>
+              </div>
             </div>
           ) : null}
         </div>
@@ -237,6 +306,11 @@ export default function DocumentosPage() {
   const totalMb = documents.reduce((sum, doc) => sum + (doc.file_size_bytes || 0), 0) / 1048576
   const processed = documents.filter((doc) => doc.status === "processed" || doc.status === "ready").length
   const sensitiveCandidates = documents.filter((doc) => looksSensitiveDocument(doc)).length
+  const indexedDocuments = documents.filter((doc) => String(doc.embedding_status || "").toLowerCase() === "indexed").length
+  const visionReady = documents.filter((doc) => {
+    const status = String(doc.vision_status || "").toLowerCase()
+    return status === "processed" || status === "ready"
+  }).length
 
   return (
     <div className="space-y-5">
@@ -288,6 +362,18 @@ export default function DocumentosPage() {
                 {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con casos y envío todavía depende del backend.</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-white/80 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Indexación semántica</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{indexedDocuments}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos con embeddings listos para retrieval semántico.</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-white/80 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Visión/OCR útil</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{visionReady}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Imágenes con señal de extracción visual útil dentro del runtime.</p>
             </div>
           </div>
         </div>
@@ -383,6 +469,20 @@ export default function DocumentosPage() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <StatusBadge status={doc.status} copy={copy} />
                       <span className="text-[10px] text-muted-foreground">{formatSize(doc.file_size_bytes)}</span>
+                      {doc.embedding_status ? (
+                        <RuntimeTag
+                          label="Emb"
+                          value={normalizeRuntimeStatus(doc.embedding_status)}
+                          tone={String(doc.embedding_status).toLowerCase() === "indexed" ? "emerald" : "amber"}
+                        />
+                      ) : null}
+                      {doc.vision_status ? (
+                        <RuntimeTag
+                          label="Visión"
+                          value={normalizeRuntimeStatus(doc.vision_status)}
+                          tone={String(doc.vision_status).toLowerCase() === "ready" ? "purple" : "amber"}
+                        />
+                      ) : null}
                     </div>
                   </div>
                   <button onClick={(event) => { event.stopPropagation(); handleDelete(doc.id) }} className="w-7 h-7 rounded-lg border border-border bg-background flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[#FEF2F2] hover:border-[#EF4444]/30 hover:text-[#EF4444]"><Trash2 className="w-3 h-3" /></button>
