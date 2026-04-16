@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react"
 import {
   CreditCard,
   Globe,
+  Layers3,
   Lock,
   MapPin,
   Mic,
   Phone,
   RefreshCcw,
+  Sparkles,
   ShieldCheck,
   User,
   Wallet,
@@ -22,7 +24,11 @@ import {
   getEffectivePlanStatus,
   type EffectiveLimitsRuntime,
 } from "@/lib/effective-limits"
-import { getDefaultOwnerCatalog, type OwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
+import {
+  getDefaultOwnerCatalog,
+  type OwnerCatalog,
+  type OwnerCatalogPlan,
+} from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
@@ -52,11 +58,6 @@ type ClientRow = {
   phone_verification_requested_at: string | null
   plan_code: string | null
   plan_status: string | null
-}
-
-type PreferenceRow = {
-  pref_key: string
-  pref_value: string | null
 }
 
 type SubscriptionRow = {
@@ -92,6 +93,19 @@ type PaymentRow = {
   currency: string
   paid_at: string | null
   created_at: string
+}
+
+type AddOnPurchaseRow = {
+  id: string
+  code: string | null
+  item_code: string | null
+  status: string
+  expires_at: string | null
+  created_at: string
+  calls_minutes_extra: number | null
+  storage_gb_extra: number | null
+  enables_voice: boolean | null
+  enables_google: boolean | null
 }
 
 type AuthMetadata = {
@@ -147,6 +161,7 @@ export default function ProfessionalSettingsPage() {
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [activeAddons, setActiveAddons] = useState<AddOnPurchaseRow[]>([])
   const [catalog, setCatalog] = useState<OwnerCatalog>(getDefaultOwnerCatalog())
 
   // Voice settings state
@@ -181,6 +196,26 @@ export default function ProfessionalSettingsPage() {
   )
   const currentPlanLabel =
     effectivePlanCatalog?.name || getDisplayPlanName(effectivePlanCode) || effectivePlanCode
+  const catalogAddonsMap = useMemo(
+    () => new Map(catalog.addons.map((addon) => [addon.code, addon])),
+    [catalog]
+  )
+  const availableAddons = useMemo(
+    () => catalog.addons.filter((addon) => addon.active !== false),
+    [catalog]
+  )
+  const paymentSummary = useMemo(() => {
+    return payments.reduce(
+      (acc, payment) => {
+        const normalized = String(payment.status || "").toLowerCase()
+        if (["approved", "paid", "succeeded"].includes(normalized)) acc.approved += 1
+        else if (normalized === "pending") acc.pending += 1
+        else if (["failed", "declined"].includes(normalized)) acc.failed += 1
+        return acc
+      },
+      { approved: 0, pending: 0, failed: 0 }
+    )
+  }, [payments])
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -273,6 +308,24 @@ export default function ProfessionalSettingsPage() {
 
     if (normalized === "failed" || normalized === "declined") {
       return "border-red-200 bg-red-50 text-red-700"
+    }
+
+    return "border-slate-200 bg-slate-100 text-slate-700"
+  }
+
+  const getAddonStatusBadgeClass = (status: string | null | undefined) => {
+    const normalized = String(status || "").toLowerCase()
+
+    if (normalized === "active") {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    }
+
+    if (normalized === "pending") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
+    }
+
+    if (["expired", "cancelled", "inactive"].includes(normalized)) {
+      return "border-slate-200 bg-slate-100 text-slate-700"
     }
 
     return "border-slate-200 bg-slate-100 text-slate-700"
@@ -438,6 +491,36 @@ export default function ProfessionalSettingsPage() {
 
       setPayments((paymentsData || []) as PaymentRow[])
 
+      const { data: addOnPurchasesData, error: addOnPurchasesError } = await supabase
+        .from("add_on_purchases")
+        .select(
+          `
+            id,
+            code,
+            item_code,
+            status,
+            expires_at,
+            created_at,
+            calls_minutes_extra,
+            storage_gb_extra,
+            enables_voice,
+            enables_google
+          `
+        )
+        .eq("client_id", resolvedClientId)
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      if (addOnPurchasesError) {
+        console.warn("add_on_purchases query error:", addOnPurchasesError.message)
+      }
+
+      setActiveAddons(
+        ((addOnPurchasesData || []) as AddOnPurchaseRow[]).filter(
+          (addon) => String(addon.status || "").toLowerCase() === "active"
+        )
+      )
+
       try {
         const catalogResponse = await fetch("/api/catalog", {
           method: "GET",
@@ -599,6 +682,34 @@ export default function ProfessionalSettingsPage() {
     }
 
     window.location.href = `/iniciar-pago?plan=${planCode}&cid=${clientId}`
+  }
+
+  const handleAddonCheckout = async (addonCode: string) => {
+    if (!clientId) {
+      alert("No encontramos el cliente de esta cuenta.")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/payments/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planCode: addonCode, provider: "mercadopago" }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || payload?.detail || "No se pudo iniciar el pago.")
+      }
+
+      const checkoutUrl = payload.checkout_url || payload.init_point || ""
+      if (!checkoutUrl) {
+        throw new Error("No se pudo generar el enlace de cobro.")
+      }
+
+      window.location.href = checkoutUrl
+    } catch (error: any) {
+      alert(error.message || "No se pudo iniciar el pago del add-on.")
+    }
   }
 
   if (loading) {
@@ -968,6 +1079,146 @@ export default function ProfessionalSettingsPage() {
                 </Button>
               </div>
             </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">pagos aprobados</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{paymentSummary.approved}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">pagos pendientes</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{paymentSummary.pending}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">add-ons activos</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeAddons.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+              Operaly te muestra precios en la moneda más clara para tu región, pero el cobro operativo se procesa con Mercado Pago en soles y queda trazado en tu historial.
+            </div>
+          </div>
+
+          <div className="bg-card rounded-2xl border border-border p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <Layers3 className="w-5 h-5 text-[#8B5CF6]" />
+              <h2 className="text-xl font-semibold text-[#0F1F63]">
+                Add-ons y compras
+              </h2>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-[#0F1F63]">Add-ons activos</p>
+                    <p className="text-sm text-muted-foreground">
+                      Lo que ya está habilitado en tu cuenta y debe reflejarse también en WhatsApp.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-border bg-secondary/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                    {activeAddons.length} activo{activeAddons.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {activeAddons.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    Aún no tienes add-ons activos en esta cuenta.
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {activeAddons.map((addon) => {
+                      const addonCode = addon.code || addon.item_code || ""
+                      const catalogAddon = catalogAddonsMap.get(addonCode)
+                      return (
+                        <div
+                          key={addon.id}
+                          className="rounded-2xl border border-border p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-[#0F1F63]">
+                                  {catalogAddon?.name || addonCode || "Add-on activo"}
+                                </p>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${getAddonStatusBadgeClass(
+                                    addon.status
+                                  )}`}
+                                >
+                                  {addon.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {catalogAddon?.description || "Capacidad adicional activa sobre tu plan base."}
+                              </p>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
+                                {addon.storage_gb_extra ? <span>+{addon.storage_gb_extra} GB</span> : null}
+                                {addon.enables_voice ? <span>voz habilitada</span> : null}
+                                {addon.enables_google ? <span>Google habilitado</span> : null}
+                              </div>
+                            </div>
+
+                            <div className="text-right text-xs text-muted-foreground">
+                              <p>Activado {formatDateTime(addon.created_at)}</p>
+                              <p>Vence {formatDateTime(addon.expires_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#06B6D4]" />
+                  <p className="text-sm font-medium text-[#0F1F63]">Ampliar capacidades</p>
+                </div>
+                <div className="grid gap-4">
+                  {availableAddons.map((addon) => (
+                    <div
+                      key={addon.code}
+                      className="rounded-2xl border border-border bg-background p-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <p className="font-semibold text-[#0F1F63]">{addon.name}</p>
+                          <p className="text-sm text-muted-foreground">{addon.description}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {addon.extra_minutes > 0 ? <span>+{addon.extra_minutes} min</span> : null}
+                            {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB</span> : null}
+                            {addon.extra_messages > 0 ? <span>+{addon.extra_messages} mensajes</span> : null}
+                            {addon.extra_automations > 0 ? <span>+{addon.extra_automations} automatizaciones</span> : null}
+                            {addon.enables_google ? <span>Google Suite</span> : null}
+                            {addon.enables_voice ? <span>voz</span> : null}
+                          </div>
+                          <p className="text-sm font-medium text-[#0F1F63]">
+                            {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                          </p>
+                          {!isPeru && (
+                            <p className="text-xs text-[#0369A1]">
+                              Cobro real {pricing.formatPen(pricing.toPenAmount(addon.price, addon.currency))}
+                            </p>
+                          )}
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={() => handleAddonCheckout(addon.code)}
+                        >
+                          Comprar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-card rounded-2xl border border-border p-6">
@@ -997,6 +1248,10 @@ export default function ProfessionalSettingsPage() {
                             (payment.amount_pen ?? payment.display_amount ?? payment.amount_usd) || 0
                           )}
                         </p>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>{payment.item_code ? "Compra extra" : "Plan / suscripción"}</span>
+                          {payment.item_code ? <span>• {catalogAddonsMap.get(payment.item_code)?.name || payment.item_code}</span> : null}
+                        </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           {payment.provider || "MercadoPago"}
                         </p>
