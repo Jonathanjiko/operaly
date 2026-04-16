@@ -859,9 +859,9 @@ export default function ProfessionalDashboardPage() {
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-[#0F1F63]">Estado runtime</h3>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Puesta a punto</h3>
               <p className="text-sm text-muted-foreground">
-                Lo que ya quedó guardado en Supabase y las últimas señales que devolvió el runtime de WhatsApp.
+                Revise rápido si su cuenta ya está lista para trabajar como usted espera.
               </p>
             </div>
             <Link href="/dashboard/professional/configuracion">
@@ -898,21 +898,21 @@ export default function ProfessionalDashboardPage() {
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-border p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Idioma runtime</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Idioma</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{runtimeLanguageLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Locale activo: {runtimeLocale}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Así le hablará Operaly por defecto.</p>
             </div>
             <div className="rounded-2xl border border-border p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Contexto corto</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">En qué va</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {String(runtimeSnapshot.contextState?.module_context || runtimeSnapshot.contextState?.current_module || "Sin módulo")}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {runtimeSnapshot.contextState?.pending_confirmation ? "Con confirmación pendiente" : "Sin confirmación pendiente"}
+                {runtimeSnapshot.contextState?.pending_confirmation ? "Tiene algo por confirmar" : "No hay nada pendiente por confirmar"}
               </p>
             </div>
             <div className="rounded-2xl border border-border p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Último entendimiento</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Última respuesta</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {lastUnderstanding
                   ? normalizeRuntimeStatus(
@@ -923,13 +923,13 @@ export default function ProfessionalDashboardPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 {lastUnderstanding?.confidence != null
                   ? `Confianza ${(Number(lastUnderstanding.confidence) * 100).toFixed(0)}%`
-                  : "Todavía no hay corrida visible"}
+                  : "Todavía no hay movimiento reciente"}
               </p>
             </div>
           </div>
 
           <div className="mt-5 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Guardado vs aplicado</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Lo que ya dejó listo</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Voz</p>
@@ -938,8 +938,8 @@ export default function ProfessionalDashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {operationalSignals.runtimeVoiceApplied
-                    ? "Ya hay señales runtime relacionadas a voz."
-                    : "Todavía no vemos señal clara de aplicación en WhatsApp."}
+                    ? "Ya se nota movimiento reciente relacionado con la voz."
+                    : "Todavía no se ve uso reciente de la voz en WhatsApp."}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -951,8 +951,8 @@ export default function ProfessionalDashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {operationalSignals.runtimeAssistantApplied
-                    ? "Ya hay entendimientos recientes para contrastar si el runtime lo honra."
-                    : "Todavía faltan señales recientes para confirmar aplicación real."}
+                    ? "Ya hay respuestas recientes para revisar si el estilo se está respetando."
+                    : "Todavía falta ver más actividad para confirmarlo."}
                 </p>
               </div>
             </div>
@@ -961,9 +961,9 @@ export default function ProfessionalDashboardPage() {
 
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-[#0F1F63]">Actividad reciente de WhatsApp</h3>
+            <h3 className="text-lg font-semibold text-[#0F1F63]">WhatsApp reciente</h3>
             <p className="text-sm text-muted-foreground">
-              Eventos recientes para comprobar si Operaly entendió, confirmó o ejecutó algo.
+              Aquí ve lo último que Operaly estuvo haciendo o entendiendo.
             </p>
           </div>
 
@@ -975,7 +975,7 @@ export default function ProfessionalDashboardPage() {
                     <div>
                       <p className="font-medium text-[#0F1F63]">{event.title}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {event.detail || "Evento operacional"} · {formatRuntimeDate(event.createdAt, runtimeLocale)}
+                        {event.detail || "Movimiento reciente"} · {formatRuntimeDate(event.createdAt, runtimeLocale)}
                       </p>
                     </div>
                     <Bell className="h-4 w-4 text-[#7C3AED]" />
@@ -987,7 +987,7 @@ export default function ProfessionalDashboardPage() {
             <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
               <p className="font-medium text-[#0F1F63]">Todavía no hay actividad reciente visible.</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Cuando uses WhatsApp, aquí aparecerán señales de entendimiento, confirmación y ejecución.
+                Cuando use WhatsApp, aquí verá lo último que hizo Operaly.
               </p>
             </div>
           )}
@@ -998,9 +998,9 @@ export default function ProfessionalDashboardPage() {
         <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.welcomeStatus).card}`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-[#0F1F63]">Bienvenida inicial</h3>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Primer saludo</h3>
               <p className="text-sm text-muted-foreground">
-                Estado real del primer mensaje de WhatsApp después del registro.
+                Le muestra si el primer mensaje quedó bien enviado.
               </p>
             </div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRuntimeTone(operationalSignals.welcomeStatus).pill}`}>
@@ -1031,9 +1031,9 @@ export default function ProfessionalDashboardPage() {
         <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.phoneStatus).card}`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-[#0F1F63]">Estado del teléfono</h3>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Línea de WhatsApp</h3>
               <p className="text-sm text-muted-foreground">
-                Señal actual de la línea registrada para operar por WhatsApp.
+                Revise si el número quedó listo para trabajar.
               </p>
             </div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRuntimeTone(operationalSignals.phoneStatus).pill}`}>
@@ -1055,7 +1055,7 @@ export default function ProfessionalDashboardPage() {
 
       <div className="bg-card rounded-2xl border border-border p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-[#0F1F63]">Próximos eventos</h3>
+          <h3 className="text-lg font-semibold text-[#0F1F63]">Lo que viene</h3>
           <Link href="/dashboard/professional/agenda">
             <Button variant="ghost" size="sm" className="text-[#3B82F6]">
               Ver agenda
@@ -1100,7 +1100,7 @@ export default function ProfessionalDashboardPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
             <p className="text-[#0F1F63] font-medium">
-              No tienes próximos eventos programados.
+              No tiene nada próximo programado.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               Tus tareas con fecha y automatizaciones activas aparecerán aquí.
@@ -1112,7 +1112,7 @@ export default function ProfessionalDashboardPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-[#0F1F63]">Pendientes para hoy</h3>
+          <h3 className="text-lg font-semibold text-[#0F1F63]">Pendientes de hoy</h3>
             <Link href="/dashboard/professional/tareas">
               <Button variant="ghost" size="sm" className="text-[#3B82F6]">
                 Ver tablero
@@ -1164,7 +1164,7 @@ export default function ProfessionalDashboardPage() {
                 No tienes pendientes activos para hoy.
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                Crea tareas desde tu dashboard o desde WhatsApp y aparecerán aquí.
+                Cree algo aquí o por WhatsApp y aparecerá en esta vista.
               </p>
             </div>
           )}
@@ -1172,7 +1172,7 @@ export default function ProfessionalDashboardPage() {
 
         <div className="bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-[#0F1F63]">Accesos rápidos</h3>
+            <h3 className="text-lg font-semibold text-[#0F1F63]">Ir rápido a</h3>
           </div>
 
           <div className="space-y-4">
@@ -1239,7 +1239,7 @@ export default function ProfessionalDashboardPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-10 text-center">
             <p className="text-[#0F1F63] font-medium">
-              Aún no tienes documentos recientes.
+              Aún no tiene documentos recientes.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
               Sube tu primer archivo para empezar a analizar información con Operaly.

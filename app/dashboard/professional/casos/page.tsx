@@ -56,7 +56,7 @@ const STATUS = [
 ]
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
-  es: { title: "Casos", subtitle: "Línea de trabajo para continuidad, contexto y seguimiento histórico.", sync: "Sincronizado con Supabase y WhatsApp", reminder: "Cada caso debe sostener memoria útil por contacto, archivo y conversación futura.", total: "casos en total", open: "abiertos", search: "Buscar casos...", all: "Todos", noCases: "Sin casos", noCasesHint: "Crea el primero aquí o pídele a Operaly por WhatsApp que abra uno nuevo.", newCase: "Nuevo caso", editCase: "Editar caso", createCase: "Crear caso", save: "Guardar", cancel: "Cancelar", titleLabel: "Título del caso *", titlePlaceholder: "Ej: Contrato de arrendamiento — García", personLabel: "Persona involucrada", personPlaceholder: "Nombre del cliente, contraparte o contacto", summaryLabel: "Resumen", summaryPlaceholder: "Contexto, siguiente paso o información relevante...", continuity: "Continuidad", opened: "Abierto el", deleteConfirm: "¿Eliminar este caso?", createdOk: "Caso creado.", updatedOk: "Caso actualizado.", deletedOk: "Caso eliminado.", deletedError: "Error al eliminar.", loadError: "Error al cargar." },
+  es: { title: "Casos", subtitle: "Siga cada tema importante sin perder el hilo.", sync: "Se actualiza con sus cambios", reminder: "Cada caso debe ayudarle a retomar personas, archivos y pendientes con facilidad.", total: "casos", open: "abiertos", search: "Buscar casos...", all: "Todos", noCases: "Sin casos", noCasesHint: "Cree el primero aquí o pídaselo a Operaly por WhatsApp.", newCase: "Nuevo caso", editCase: "Editar caso", createCase: "Crear caso", save: "Guardar", cancel: "Cancelar", titleLabel: "Título del caso *", titlePlaceholder: "Ej: Contrato de arrendamiento — García", personLabel: "Persona involucrada", personPlaceholder: "Nombre del cliente, contraparte o contacto", summaryLabel: "Resumen", summaryPlaceholder: "Contexto, siguiente paso o información relevante...", continuity: "Continuidad", opened: "Abierto el", deleteConfirm: "¿Eliminar este caso?", createdOk: "Caso creado.", updatedOk: "Caso actualizado.", deletedOk: "Caso eliminado.", deletedError: "Error al eliminar.", loadError: "Error al cargar." },
   en: { title: "Cases", subtitle: "Workline for continuity, context, and historical follow-up.", sync: "Synced with Supabase and WhatsApp", reminder: "Each case should preserve useful memory across contacts, files, and future conversations.", total: "cases total", open: "open", search: "Search cases...", all: "All", noCases: "No cases", noCasesHint: "Create the first one here or ask Operaly on WhatsApp to open it.", newCase: "New case", editCase: "Edit case", createCase: "Create case", save: "Save", cancel: "Cancel", titleLabel: "Case title *", titlePlaceholder: "Example: Lease contract — García", personLabel: "Person involved", personPlaceholder: "Client, counterparty, or contact name", summaryLabel: "Summary", summaryPlaceholder: "Context, next step, or relevant information...", continuity: "Continuity", opened: "Opened on", deleteConfirm: "Delete this case?", createdOk: "Case created.", updatedOk: "Case updated.", deletedOk: "Case deleted.", deletedError: "Error deleting case.", loadError: "Error loading cases." },
   pt: { title: "Casos", subtitle: "Linha de trabalho para continuidade, contexto e acompanhamento histórico.", sync: "Sincronizado com Supabase e WhatsApp", reminder: "Cada caso deve preservar memória útil por contato, arquivo e conversas futuras.", total: "casos no total", open: "abertos", search: "Buscar casos...", all: "Todos", noCases: "Sem casos", noCasesHint: "Crie o primeiro aqui ou peça para a Operaly abrir um pelo WhatsApp.", newCase: "Novo caso", editCase: "Editar caso", createCase: "Criar caso", save: "Salvar", cancel: "Cancelar", titleLabel: "Título do caso *", titlePlaceholder: "Ex.: Contrato de aluguel — García", personLabel: "Pessoa envolvida", personPlaceholder: "Cliente, contraparte ou contato", summaryLabel: "Resumo", summaryPlaceholder: "Contexto, próximo passo ou informação relevante...", continuity: "Continuidade", opened: "Aberto em", deleteConfirm: "Excluir este caso?", createdOk: "Caso criado.", updatedOk: "Caso atualizado.", deletedOk: "Caso excluído.", deletedError: "Erro ao excluir.", loadError: "Erro ao carregar." },
   de: { title: "Fälle", subtitle: "Arbeitslinie für Kontinuität, Kontext und historischen Verlauf.", sync: "Mit Supabase und WhatsApp synchronisiert", reminder: "Jeder Fall sollte nützliche Erinnerung über Kontakt, Datei und spätere Gespräche tragen.", total: "Fälle gesamt", open: "offen", search: "Fälle suchen...", all: "Alle", noCases: "Keine Fälle", noCasesHint: "Erstelle hier den ersten oder bitte Operaly per WhatsApp darum.", newCase: "Neuer Fall", editCase: "Fall bearbeiten", createCase: "Fall erstellen", save: "Speichern", cancel: "Abbrechen", titleLabel: "Falltitel *", titlePlaceholder: "Beispiel: Mietvertrag — García", personLabel: "Beteiligte Person", personPlaceholder: "Kunde, Gegenpartei oder Kontakt", summaryLabel: "Zusammenfassung", summaryPlaceholder: "Kontext, nächster Schritt oder relevante Info...", continuity: "Kontinuität", opened: "Geöffnet am", deleteConfirm: "Diesen Fall löschen?", createdOk: "Fall erstellt.", updatedOk: "Fall aktualisiert.", deletedOk: "Fall gelöscht.", deletedError: "Fehler beim Löschen.", loadError: "Fehler beim Laden." },
@@ -345,44 +345,42 @@ export default function CasosPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad operativa</h2>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Resumen del trabajo</h2>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Los casos deben servir como línea de trabajo viva entre WhatsApp, documentos, contactos y memoria futura. Aquí ya se ve mejor lo que está persistido y lo que aún depende de la profundización del backend.
+            Aquí ve qué temas siguen abiertos, qué ya tiene continuidad y con qué personas o documentos puede apoyarse.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Casos visibles</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Casos</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{cases.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Registros ya visibles en tu panel profesional.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Temas que ya tiene guardados.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con continuidad</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con resumen</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {casesWithContinuity}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">Casos que ya traen un resumen útil de continuidad.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Casos que ya se pueden retomar más fácil.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Runtime de casos</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con archivos y contactos aún se sigue endureciendo en backend.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Actividad</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{recentCaseEvents.length > 0 ? "Con movimiento" : "Pendiente"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Le ayuda a ver si un caso se está moviendo o sigue quieto.</p>
             </div>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con actividad reciente</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con actividad</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{casesWithActivity}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Casos que ya muestran último hito o última actividad visible.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Casos con alguna novedad visible.</p>
             </div>
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Continuidad viva</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Seguimiento</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">El backend ya refresca mejor el resumen y los hitos del caso.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Le muestra si el caso ya viene tomando forma.</p>
             </div>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -422,14 +420,14 @@ export default function CasosPage() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#0F1F63]">Señales recientes</h2>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Movimientos recientes</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Estas señales ayudan a distinguir entre casos guardados y continuidad realmente usada por el runtime.
+            Le ayuda a ver qué cambió hace poco en sus casos.
           </p>
           <div className="mt-4 space-y-3">
             {recentCaseEvents.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
-                Aún no hay eventos recientes de casos en runtime.
+                Todavía no hay novedades recientes en sus casos.
               </div>
             ) : (
               recentCaseEvents.map((event) => (

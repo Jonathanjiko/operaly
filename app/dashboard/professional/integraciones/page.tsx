@@ -228,6 +228,12 @@ export default function IntegracionesPage() {
   const [planCode, setPlanCode] = useState("trial")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
+  const [contactsSyncState, setContactsSyncState] = useState<{
+    status: "not_connected" | "scope_required" | "syncing" | "ok" | "partial" | "error" | ""
+    message: string
+    counts?: Record<string, number>
+    lastSyncedAt?: string | null
+  }>({ status: "", message: "" })
   const [contactsSnapshot, setContactsSnapshot] = useState<ContactsSnapshot>({
     total: 0,
     google: 0,
@@ -304,6 +310,32 @@ export default function IntegracionesPage() {
     return { Authorization: `Bearer ${token}` }
   }
 
+  const loadContactsStatus = async () => {
+    try {
+      const response = await fetch("/api/google/contacts/status", {
+        method: "GET",
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) return
+      setContactsSyncState({
+        status: String(payload?.sync_status || "") as
+          | "not_connected"
+          | "scope_required"
+          | "syncing"
+          | "ok"
+          | "partial"
+          | "error"
+          | "",
+        message: String(payload?.message || ""),
+        counts: payload?.counts || undefined,
+        lastSyncedAt: payload?.last_synced_at || payload?.lastSyncedAt || null,
+      })
+    } catch (error) {
+      console.error("No se pudo leer el estado de Google Contacts:", error)
+    }
+  }
+
   const loadGoogleStatus = async () => {
     const headers = await getAuthHeaders()
     const response = await fetch("/api/google/status", {
@@ -322,6 +354,15 @@ export default function IntegracionesPage() {
     loadData()
   }, [])
 
+  useEffect(() => {
+    if (contactsSyncState.status !== "syncing") return
+    const interval = window.setInterval(() => {
+      loadContactsStatus()
+      loadData()
+    }, 4000)
+    return () => window.clearInterval(interval)
+  }, [contactsSyncState.status])
+
   const loadData = async () => {
     setLoading(true)
     setStatusError("")
@@ -337,6 +378,7 @@ export default function IntegracionesPage() {
       await loadContactsSnapshot(cid)
 
       await loadGoogleStatus()
+      await loadContactsStatus()
     } catch (err) {
       console.error(err)
       setStatusError(err instanceof Error ? err.message : "No se pudo cargar el estado de Google.")
@@ -386,6 +428,19 @@ export default function IntegracionesPage() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(normalizeGoogleError(payload, "No se pudo sincronizar Google Contacts."))
+      setContactsSyncState({
+        status: String(payload?.sync_status || "syncing") as
+          | "not_connected"
+          | "scope_required"
+          | "syncing"
+          | "ok"
+          | "partial"
+          | "error"
+          | "",
+        message: String(payload?.message || "Estoy trayendo sus contactos en segundo plano."),
+        counts: payload?.counts || undefined,
+        lastSyncedAt: payload?.last_synced_at || null,
+      })
       await loadData()
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : "No se pudo sincronizar Google Contacts.")
@@ -465,13 +520,30 @@ export default function IntegracionesPage() {
     )
   }
 
+  const contactsStatusLabel =
+    contactsSyncState.status === "ok"
+      ? "Listo"
+      : contactsSyncState.status === "syncing"
+        ? "Sincronizando"
+        : contactsSyncState.status === "partial"
+          ? "Revisar"
+          : contactsSyncState.status === "scope_required"
+            ? "Falta permiso"
+            : contactsSyncState.status === "error"
+              ? "Error"
+              : contactsSnapshot.bridgeStatus === "active"
+                ? "Listo"
+                : contactsProductConnected
+                  ? "Falta traer personas"
+                  : "Pendiente"
+
   return (
     <div className="max-w-5xl space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Conecta tus herramientas de trabajo desde el dashboard administrativo usando la capa efectiva de capacidades, sin convertir este espacio en un chat.
+            Conecte sus herramientas y déjelas listas para trabajar con Operaly.
           </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">
@@ -490,18 +562,18 @@ export default function IntegracionesPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                Operaly usara estas conexiones para consultar agenda, trabajar con archivos de Drive, preparar correos y resolver personas desde una base de contactos util.
+                Desde aquí deja lista su agenda, sus archivos, su correo y sus contactos para usarlos después por WhatsApp.
               </p>
             </div>
             {googleEnabled ? (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Google habilitado por plan/add-on
+                Disponible en su cuenta
               </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600">
                 <Lock className="h-3.5 w-3.5" />
-                Falta habilitacion comercial
+                Falta activar Google
               </div>
             )}
           </div>
@@ -511,16 +583,16 @@ export default function IntegracionesPage() {
           <p className="text-sm font-semibold text-[#0F1F63]">Estado actual</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">plan actual</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">plan</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">google suite</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">google</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleEnabled ? "Activa" : "Bloqueada"}</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">oauth backend</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">conexion</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Lista" : "Pendiente"}</p>
             </div>
           </div>
         </div>
@@ -533,24 +605,24 @@ export default function IntegracionesPage() {
       )}
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
-        Lo que ves aqui ya esta alineado al contrato: la conexion se hace manualmente desde tu dashboard, y despues debe quedar utilizable desde WhatsApp. En este momento el backend puede estar listo aunque todavia no exista una conexion OAuth real para tu cuenta.
+        Usted conecta todo desde aquí. Después, Operaly lo usa por WhatsApp sin que tenga que repetir la configuración.
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">servidor oauth</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">google listo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Sí" : "No"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {googleServerConfigured ? "El backend ya permite abrir el flujo OAuth y guardar tokens cifrados." : "El backend todavia no esta listo para abrir el flujo OAuth."}
+            {googleServerConfigured ? "Ya puede empezar a conectar productos." : "Todavía falta dejarlo listo."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">conexion usuario</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">productos conectados</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {connectedProductsCount > 0 ? `${connectedProductsCount}/${INTEGRATIONS.length} conectadas` : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Falta completar el callback OAuth real por producto para que se llenen las tablas Google del tenant.
+            Aquí ve qué parte de Google ya quedó lista en su cuenta.
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -558,16 +630,12 @@ export default function IntegracionesPage() {
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavia no"}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">Solo despues de conectar la cuenta real del usuario y validar el producto desde el runtime.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Mientras más productos conecte, más puede hacer Operaly por usted.</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">contactos listos</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">personas</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {contactsSnapshot.bridgeStatus === "active"
-              ? `${contactsSnapshot.google + contactsSnapshot.merged} con puente Google`
-              : contactsSnapshot.bridgeStatus === "pending"
-                ? "Pendiente de sync"
-                : "Base interna"}
+            {contactsStatusLabel}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para Gmail, agenda y casos.
@@ -610,7 +678,7 @@ export default function IntegracionesPage() {
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
                       <p className="font-semibold">Cuenta conectada</p>
                       <p className="mt-1">{googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`}</p>
-                      <p className="mt-1">Estado: {productState?.sync_status || "idle"}</p>
+                      <p className="mt-1">Estado: {integration.product === "contacts" ? contactsStatusLabel : productState?.sync_status || "listo"}</p>
                       {integration.product === "contacts" && (
                         <p className="mt-1">
                           Puente visible: {contactsSnapshot.bridgeStatus === "active" ? "si" : "todavia no"} ·{" "}
@@ -691,7 +759,7 @@ export default function IntegracionesPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
             <AlertCircle className="h-4 w-4 text-[#0F1F63]" />
           </div>
-          <h2 className="font-semibold text-[#0F1F63]">Ruta real de activacion</h2>
+          <h2 className="font-semibold text-[#0F1F63]">Qué gana al conectarlo</h2>
         </div>
 
         <div className="grid gap-3 md:grid-cols-4">
@@ -701,7 +769,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Drive</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Descargar, analizar y compartir archivos desde Operaly, incluso cuando el usuario lo pida por WhatsApp.
+              Buscar, traer y trabajar sus archivos sin salir de Operaly.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -710,7 +778,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Calendar</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Mostrar tu agenda real en Operaly y sincronizar eventos para que agenda y recordatorios no se contradigan.
+              Ver su agenda real y crear reuniones sin desordenar sus recordatorios.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -719,7 +787,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Gmail</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Preparar el correo, mostrarte el borrador, pedir confirmacion y recien ahi enviarlo con adjunto o sin adjunto.
+              Preparar correos, revisarlos con usted y enviarlos cuando lo confirme.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -728,7 +796,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Contacts</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Sincronizar personas para que agenda, Gmail, archivos, casos y llamadas usen una sola base viva.
+              Tener sus personas listas para correos, agenda, casos y llamadas.
             </p>
           </div>
         </div>
@@ -744,12 +812,12 @@ export default function IntegracionesPage() {
         }`}
       >
         {contactsSnapshot.bridgeStatus === "active"
-          ? "Google ya empieza a reflejarse en contactos: el usuario puede distinguir base interna, contactos Google y contactos fusionados."
+          ? "Sus personas de Google ya empiezan a aparecer aquí junto con la libreta que ya tenía."
           : contactsSnapshot.bridgeStatus === "pending"
             ? contactsProductConnected
-              ? "Google Contacts ya esta conectado, pero todavia falta correr o completar la sincronizacion para ver personas Google o fusionadas en esta base."
-              : "La cuenta Google puede estar conectada, pero el puente con contactos aun no se refleja en la base del usuario. Aqui debe verse cuando el backend empiece a sincronizar y fusionar personas."
-            : "Todavia no hay puente visible con Google Contacts. Esta pantalla ya deja claro que la libreta interna existe, pero la sincronizacion Google <-> Operaly sigue pendiente del backend."}
+              ? "Google Contacts ya está conectado, pero todavía está trayendo o actualizando sus personas."
+              : "Todavía falta conectar Google Contacts para completar su libreta."
+            : "Por ahora solo está viendo su libreta interna. Cuando conecte Contacts, aquí aparecerán también sus personas de Google."}
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -757,28 +825,28 @@ export default function IntegracionesPage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
             <Users className="h-4 w-4 text-[#0F1F63]" />
           </div>
-          <h2 className="font-semibold text-[#0F1F63]">Puente con contactos</h2>
+          <h2 className="font-semibold text-[#0F1F63]">Personas en Operaly</h2>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Base de personas</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Cuando Google Contacts quede activo, Operaly debe distinguir contactos internos, Google y fusionados sin duplicados absurdos.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Uso operativo</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Agenda, Gmail, archivos, casos y llamadas deben resolver nombre, telefono, email, cumpleanos y relacion desde una sola base.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Estado visible</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Hoy ya tienes {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""} en Operaly. {contactsProductConnected ? "Google Contacts ya puede sincronizar y fusionar." : "El siguiente salto es conectar y sincronizar Google Contacts."}
-            </p>
-          </div>
+              <p className="text-sm font-semibold text-[#0F1F63]">Su libreta</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Operaly junta lo que usted ya tenía con lo que llegue desde Google, sin desordenarle los contactos.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Para qué sirve</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Sirve para escribir correos, agendar reuniones, ubicar cumpleaños, enviar archivos y trabajar casos.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Hoy en su cuenta</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Tiene {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""}. {contactsProductConnected ? "Google Contacts ya puede actualizar esta base." : "El siguiente paso es conectar Google Contacts."}
+              </p>
+            </div>
         </div>
       </div>
     </div>
