@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   AlertCircle,
   FolderLock,
@@ -252,6 +253,10 @@ function isVaultEvent(eventType: string | null | undefined) {
   )
 }
 
+function inferOriginLabel(item: VaultRow) {
+  return String(item.source || item.origin || item.created_from || item.channel || "vault")
+}
+
 function TypeIcon({ type }: { type: string }) {
   const normalized = type.toLowerCase()
   if (normalized.includes("password") || normalized.includes("credential") || normalized.includes("secret")) {
@@ -434,6 +439,45 @@ export default function BaulPrivadoPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Separación con documentos</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              El baúl privado no reemplaza tu base documental. Aquí deben vivir credenciales, links y archivos sensibles cuando el runtime o tú decidan aislarlos del flujo operativo general.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/professional/documentos"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0F1F63]/15 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+          >
+            <FolderLock className="h-4 w-4" />
+            Ver documentos
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visibles</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{items.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Elementos ya separados dentro de `private_vault_items`.</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Origen documental</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+              {items.filter((item) => inferOriginLabel(item).toLowerCase().includes("document")).length}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Registros que ya parecen venir de clasificación documental o runtime similar.</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Separación viva</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+              {recentVaultEvents.length > 0 ? "Con señal" : "Pendiente"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">La clasificación sensible desde documentos y WhatsApp todavía seguirá ganando profundidad en backend.</p>
           </div>
         </div>
       </div>

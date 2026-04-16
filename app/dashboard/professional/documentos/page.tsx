@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertCircle, Archive, CheckCircle2, Clock, File, FileImage, FileSpreadsheet, FileText, RefreshCw, Search, ShieldCheck, Trash2, Upload, X } from "lucide-react"
+import Link from "next/link"
+import { AlertCircle, Archive, CheckCircle2, Clock, File, FileImage, FileSpreadsheet, FileText, FolderLock, RefreshCw, Search, ShieldCheck, Trash2, Upload, X } from "lucide-react"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import {
   fetchProfessionalRuntime,
@@ -39,6 +40,18 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
 function isDocumentEvent(eventType: string | null | undefined) {
   const normalized = String(eventType || "").toLowerCase()
   return normalized.includes("document") || normalized.includes("file")
+}
+
+function looksSensitiveDocument(doc: DocumentRow) {
+  const haystack = [doc.title, doc.file_name, doc.mime_type, doc.storage_path].join(" ").toLowerCase()
+  return (
+    haystack.includes("password") ||
+    haystack.includes("secret") ||
+    haystack.includes("credential") ||
+    haystack.includes("credencial") ||
+    haystack.includes("privado") ||
+    haystack.includes("private")
+  )
 }
 
 function formatSize(bytes: number | null) {
@@ -223,6 +236,7 @@ export default function DocumentosPage() {
 
   const totalMb = documents.reduce((sum, doc) => sum + (doc.file_size_bytes || 0), 0) / 1048576
   const processed = documents.filter((doc) => doc.status === "processed" || doc.status === "ready").length
+  const sensitiveCandidates = documents.filter((doc) => looksSensitiveDocument(doc)).length
 
   return (
     <div className="space-y-5">
@@ -301,6 +315,43 @@ export default function DocumentosPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Puente con baúl privado</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              La base documental guarda tus archivos operativos generales. Cuando un archivo sea sensible o el backend lo clasifique como privado, debe terminar en el baúl privado con una trazabilidad separada.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/professional/baul-privado"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0F1F63]/15 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+          >
+            <FolderLock className="h-4 w-4" />
+            Ver baúl privado
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Documentos generales</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{documents.length - sensitiveCandidates}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Archivos operativos normales en tu base documental.</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sensibles detectados</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{sensitiveCandidates}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Señales documentales que ya conviene separar del flujo general.</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Clasificación runtime</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+              {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">El backend nuevo debe decidir mejor qué queda en documentos y qué debe caer al vault.</p>
           </div>
         </div>
       </div>
