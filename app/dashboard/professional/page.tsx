@@ -164,6 +164,35 @@ function formatRuntimeDate(value: string | null | undefined, locale: string) {
   }).format(parsed)
 }
 
+function getRuntimeTone(status: string) {
+  const normalized = String(status || "").toLowerCase()
+  if (normalized.includes("enviado") || normalized.includes("conectado") || normalized.includes("verified") || normalized.includes("ok")) {
+    return {
+      card: "border-emerald-200 bg-emerald-50",
+      pill: "bg-emerald-100 text-emerald-700",
+    }
+  }
+
+  if (normalized.includes("pendiente") || normalized.includes("cola")) {
+    return {
+      card: "border-amber-200 bg-amber-50",
+      pill: "bg-amber-100 text-amber-700",
+    }
+  }
+
+  if (normalized.includes("fall")) {
+    return {
+      card: "border-red-200 bg-red-50",
+      pill: "bg-red-100 text-red-700",
+    }
+  }
+
+  return {
+    card: "border-slate-200 bg-slate-50",
+    pill: "bg-slate-200 text-slate-700",
+  }
+}
+
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
@@ -579,6 +608,27 @@ export default function ProfessionalDashboardPage() {
     return runtimeSnapshot.recentUnderstandingRuns[0] || null
   }, [runtimeSnapshot.recentUnderstandingRuns])
 
+  const operationalSignals = useMemo(() => {
+    const welcomeStatus = normalizeRuntimeStatus(
+      runtimeSnapshot.preferences.welcome_initial_status ||
+        runtimeSnapshot.welcome?.status ||
+        runtimeSnapshot.welcome?.message_status ||
+        "pending"
+    )
+    const phoneStatus = normalizeRuntimeStatus(runtimeSnapshot.phoneVerificationStatus || "pending")
+    const runtimeVoiceApplied = runtimeSnapshot.recentEvents.some((event) =>
+      String(event.event_type || event.action || "").toLowerCase().includes("voice")
+    )
+    const runtimeAssistantApplied = runtimeSnapshot.recentUnderstandingRuns.length > 0
+
+    return {
+      welcomeStatus,
+      phoneStatus,
+      runtimeVoiceApplied,
+      runtimeAssistantApplied,
+    }
+  }, [runtimeSnapshot])
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -824,9 +874,23 @@ export default function ProfessionalDashboardPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             {runtimeStatusCards.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <div
+                key={item.label}
+                className={`rounded-2xl border p-4 ${
+                  getRuntimeTone(item.value).card
+                }`}
+              >
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
-                <p className="mt-2 text-xl font-semibold text-[#0F1F63]">{item.value}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="text-xl font-semibold text-[#0F1F63]">{item.value}</p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                      getRuntimeTone(item.value).pill
+                    }`}
+                  >
+                    {item.value}
+                  </span>
+                </div>
                 <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
               </div>
             ))}
@@ -863,6 +927,36 @@ export default function ProfessionalDashboardPage() {
               </p>
             </div>
           </div>
+
+          <div className="mt-5 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Guardado vs aplicado</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Voz</p>
+                <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                  {runtimeSnapshot.voice?.voice_id ? "Guardada en Supabase" : "Sin guardar todavía"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {operationalSignals.runtimeVoiceApplied
+                    ? "Ya hay señales runtime relacionadas a voz."
+                    : "Todavía no vemos señal clara de aplicación en WhatsApp."}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Asistente</p>
+                <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                  {runtimeSnapshot.preferences.assistant_tone || runtimeSnapshot.preferences.assistant_style
+                    ? "Guardado en Supabase"
+                    : "Sin personalización guardada"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {operationalSignals.runtimeAssistantApplied
+                    ? "Ya hay entendimientos recientes para contrastar si el runtime lo honra."
+                    : "Todavía faltan señales recientes para confirmar aplicación real."}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-6">
@@ -897,6 +991,65 @@ export default function ProfessionalDashboardPage() {
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.welcomeStatus).card}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Bienvenida inicial</h3>
+              <p className="text-sm text-muted-foreground">
+                Estado real del primer mensaje de WhatsApp después del registro.
+              </p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRuntimeTone(operationalSignals.welcomeStatus).pill}`}>
+              {operationalSignals.welcomeStatus}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">provider message id</p>
+              <p className="mt-2 text-sm font-medium text-[#0F1F63] break-all">
+                {runtimeSnapshot.welcome?.provider_message_id || "Todavía no visible"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">último envío</p>
+              <p className="mt-2 text-sm font-medium text-[#0F1F63]">
+                {formatRuntimeDate(
+                  runtimeSnapshot.welcome?.sent_at ||
+                    runtimeSnapshot.welcome?.updated_at ||
+                    runtimeSnapshot.preferences.welcome_initial_sent_at,
+                  runtimeLocale
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.phoneStatus).card}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Estado del teléfono</h3>
+              <p className="text-sm text-muted-foreground">
+                Señal actual de la línea registrada para operar por WhatsApp.
+              </p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRuntimeTone(operationalSignals.phoneStatus).pill}`}>
+              {operationalSignals.phoneStatus}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">número registrado</p>
+              <p className="mt-2 text-sm font-medium text-[#0F1F63]">{profile?.phone || "-"}</p>
+            </div>
+            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">número normalizado</p>
+              <p className="mt-2 text-sm font-medium text-[#0F1F63]">{profile?.phoneNormalized || "-"}</p>
+            </div>
+          </div>
         </div>
       </div>
 
