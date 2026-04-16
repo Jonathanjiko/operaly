@@ -15,6 +15,11 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -214,6 +219,7 @@ export default function IntegracionesPage() {
   const [planCode, setPlanCode] = useState("trial")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const googleServerConfigured = !statusError.toLowerCase().includes("google oauth aún no está configurado")
 
   const getAuthHeaders = async () => {
@@ -259,6 +265,11 @@ export default function IntegracionesPage() {
       setPlanCode(getEffectivePlanCode(effectiveLimits))
       setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
       await loadGoogleStatus()
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime de integraciones:", runtimeError)
+      }
     } catch (err) {
       console.error(err)
       setStatusError(err instanceof Error ? err.message : "No se pudo cargar el estado de Google.")
@@ -441,6 +452,44 @@ export default function IntegracionesPage() {
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
         Lo que ves aquí ya está alineado al contrato: la conexión se hace manualmente desde tu dashboard, pero después debe quedar utilizable desde WhatsApp. Si el backend aún no tiene `GOOGLE_*`, esta pantalla lo mostrará como pendiente y no como si ya estuviera operando.
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">servidor oauth</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {googleServerConfigured ? "Listo" : "Pendiente"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {googleServerConfigured
+              ? "El backend ya permite abrir el flujo OAuth."
+              : "Faltan credenciales GOOGLE_* en el contenedor."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última señal</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {normalizeRuntimeStatus(
+              String(
+                runtimeSnapshot?.recentEvents?.find((event) =>
+                  String(event.event_type || event.action || "").toLowerCase().includes("google")
+                )?.event_type || ""
+              )
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Señal reciente del runtime para Google e integraciones.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">usable en whatsapp</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {googleServerConfigured && googleEnabled ? "En preparación" : "Todavía no"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Solo cuando el backend, OAuth y el add-on estén realmente operativos.
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

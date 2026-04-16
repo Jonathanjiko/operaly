@@ -26,6 +26,11 @@ import {
   Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -85,6 +90,7 @@ export default function AsistentePage() {
   const [loadError, setLoadError] = useState("")
   const [saveError, setSaveError] = useState("")
   const [lastSavedAt, setLastSavedAt] = useState("")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
 
   useEffect(() => {
     loadConfig()
@@ -129,6 +135,12 @@ export default function AsistentePage() {
         if (pref.pref_key === "assistant_profession" && !client?.profession_code) setProfessionCode(pref.pref_value || "consultor")
         if (pref.pref_key === "assistant_style" && !client?.preferred_style) setStyle(pref.pref_value || "balanceado")
       })
+
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime del asistente:", runtimeError)
+      }
     } catch (err) {
       console.error(err)
       setLoadError("No se pudo cargar la configuracion del asistente.")
@@ -263,6 +275,42 @@ export default function AsistentePage() {
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
           Profesión, tono, estilo y contexto se guardan en Supabase como tu configuración operativa. El backend debe usarlos para cómo Operaly piensa, responde y te representa en WhatsApp.
         </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">guardado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeSnapshot?.preferences?.assistant_tone || tone}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.preferences?.assistant_style || style} · {runtimeSnapshot?.preferences?.assistant_profession || professionCode}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">último entendimiento</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {normalizeRuntimeStatus(
+              String(
+                runtimeSnapshot?.recentUnderstandingRuns?.[0]?.decision ||
+                  runtimeSnapshot?.recentUnderstandingRuns?.[0]?.status ||
+                  ""
+              )
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.recentUnderstandingRuns?.[0]?.confidence != null
+              ? `Confianza ${(Number(runtimeSnapshot.recentUnderstandingRuns[0].confidence) * 100).toFixed(0)}%`
+              : "Todavía no hay corrida visible"}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Depende del runtime</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Si WhatsApp sigue respondiendo genérico, el backend aún no está honrando esta personalidad.
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

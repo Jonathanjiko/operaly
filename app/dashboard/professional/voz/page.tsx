@@ -16,6 +16,11 @@ import {
   Settings2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getCurrentPeriodMonth } from "@/lib/effective-limits"
@@ -63,6 +68,7 @@ export default function VozPage() {
   const [loadError, setLoadError] = useState("")
   const [saveError, setSaveError] = useState("")
   const [lastSavedAt, setLastSavedAt] = useState("")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
@@ -124,6 +130,12 @@ export default function VozPage() {
         setCallStyle(vs.call_style || "breve")
         setPreferAudio(vs.prefer_audio_over_call ?? true)
         setVoiceLang(vs.voice_language || "es")
+      }
+
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime de voz:", runtimeError)
       }
 
       setMinutesUsed(await loadUsageForCurrentPeriod(cid))
@@ -256,6 +268,40 @@ export default function VozPage() {
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
           Esta configuración se guarda en Supabase como tu fuente operativa de voz. El backend debe leer exactamente esta voz, este tono y este estilo cuando Operaly te responda por WhatsApp o por llamada.
         </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">guardado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeSnapshot?.voice?.voice_id ? "Sí" : "Pendiente"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.voice?.voice_name || "Todavía no hay voz runtime visible"}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última señal</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {normalizeRuntimeStatus(
+              String(
+                runtimeSnapshot?.recentEvents?.[0]?.event_type ||
+                  runtimeSnapshot?.recentEvents?.[0]?.action ||
+                  ""
+              )
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            La portada profesional te muestra el detalle completo del runtime.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Depende del backend</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Si WhatsApp sigue usando otra voz, todavía no hay señal de aplicación real.
+          </p>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5">
