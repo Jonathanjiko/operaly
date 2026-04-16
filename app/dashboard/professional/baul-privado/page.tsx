@@ -8,6 +8,7 @@ import {
   KeyRound,
   Link2,
   Lock,
+  Plus,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -277,6 +278,10 @@ export default function BaulPrivadoPage() {
   const [locale, setLocale] = useState("es-PE")
   const [errorMessage, setErrorMessage] = useState("")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("")
+  const [draft, setDraft] = useState({ title: "", type: "", detail: "" })
 
   const copy = COPY[language]
 
@@ -339,6 +344,37 @@ export default function BaulPrivadoPage() {
     return (runtimeSnapshot?.recentEvents || []).filter((event) => isVaultEvent(event?.event_type)).slice(0, 4)
   }, [runtimeSnapshot])
 
+  async function saveVaultItem() {
+    if (!clientId || !draft.title.trim()) return
+    setSaving(true)
+    setSaveMessage("")
+
+    const attempts = [
+      { client_id: clientId, title: draft.title.trim(), item_type: draft.type.trim() || "registro", notes: draft.detail.trim() || null, source: "dashboard" },
+      { client_id: clientId, title: draft.title.trim(), item_type: draft.type.trim() || "registro", notes: draft.detail.trim() || null },
+      { client_id: clientId, title: draft.title.trim(), type: draft.type.trim() || "registro", description: draft.detail.trim() || null },
+      { client_id: clientId, name: draft.title.trim(), type: draft.type.trim() || "registro", notes: draft.detail.trim() || null },
+    ]
+
+    let lastError: any = null
+    for (const payload of attempts) {
+      const result = await supabase.from("private_vault_items").insert(payload).select("*").single()
+      if (!result.error) {
+        setItems((prev) => [result.data as VaultRow, ...prev])
+        setDraft({ title: "", type: "", detail: "" })
+        setShowCreate(false)
+        setSaveMessage("Guardado correctamente.")
+        setSaving(false)
+        return
+      }
+      lastError = result.error
+    }
+
+    console.error(lastError)
+    setSaveMessage(lastError?.message || "No se pudo guardar. Intente de nuevo.")
+    setSaving(false)
+  }
+
   async function handleDelete(id: string) {
     if (!window.confirm("¿Eliminar este registro del baúl privado?")) return
     const { error } = await supabase.from("private_vault_items").delete().eq("id", id)
@@ -359,14 +395,47 @@ export default function BaulPrivadoPage() {
             {items.length} {copy.count} · {copy.sync} · {labelForLanguage(language)}
           </p>
         </div>
-        <button
-          onClick={() => load()}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {copy.refresh}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCreate((prev) => !prev)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#3B82F6]/20 bg-[#3B82F6]/5 px-4 text-sm font-medium text-[#0F1F63] hover:bg-[#3B82F6]/10"
+          >
+            <Plus className="h-4 w-4" />
+            Agregar
+          </button>
+          <button
+            onClick={() => load()}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            {copy.refresh}
+          </button>
+        </div>
       </div>
+
+      {saveMessage ? (
+        <div className={`rounded-2xl border px-4 py-3 text-sm ${saveMessage.toLowerCase().includes("no se pudo") ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          {saveMessage}
+        </div>
+      ) : null}
+
+      {showCreate ? (
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-3">
+            <input value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} placeholder="Nombre" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+            <input value={draft.type} onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))} placeholder="Qué es" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+            <input value={draft.detail} onChange={(event) => setDraft((prev) => ({ ...prev, detail: event.target.value }))} placeholder="Detalle" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => void saveVaultItem()} disabled={saving || !draft.title.trim()} className="inline-flex h-10 items-center justify-center rounded-xl bg-[#3B82F6] px-4 text-sm font-medium text-white hover:bg-[#2563EB] disabled:opacity-50">
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Guardar"}
+            </button>
+            <button onClick={() => setShowCreate(false)} className="inline-flex h-10 items-center justify-center rounded-xl border border-border px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
         <div className="flex items-center gap-2">
@@ -376,12 +445,12 @@ export default function BaulPrivadoPage() {
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{copy.runtimeHint}</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lectura</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Contenido visible</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {errorMessage ? copy.pending : copy.ready}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {errorMessage || "Ya podemos mostrar lo que realmente existe en private_vault_items para este client_id."}
+              {errorMessage || "Ya puede revisar lo que está guardado para su cuenta."}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">

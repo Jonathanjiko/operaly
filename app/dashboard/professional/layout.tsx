@@ -71,60 +71,60 @@ type SidebarProfile = {
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/professional": {
-    title: "Centro operativo",
-    subtitle: "Tu panel administrativo para controlar agenda, tareas, archivos y seguimiento.",
+    title: "Mi espacio",
+    subtitle: "Todo lo importante de su día en un solo lugar.",
   },
   "/dashboard/professional/agenda": {
     title: "Agenda",
-    subtitle: "Visualiza y organiza compromisos, horarios y continuidad diaria.",
+    subtitle: "Revise su día y ajuste compromisos en segundos.",
   },
   "/dashboard/professional/tareas": {
     title: "Tareas",
-    subtitle: "Gestiona pendientes reales con claridad, prioridad y seguimiento.",
+    subtitle: "Ordene lo pendiente y avance sin perder nada.",
   },
   "/dashboard/professional/listas": {
     title: "Listas",
-    subtitle: "Agrupa pendientes libres, checklists y contextos operativos.",
+    subtitle: "Anote rápido, ordene y marque lo que ya quedó.",
   },
   "/dashboard/professional/casos": {
     title: "Casos",
-    subtitle: "Centraliza contexto profesional, seguimiento y documentos asociados.",
+    subtitle: "Siga cada tema con sus personas y documentos clave.",
   },
   "/dashboard/professional/contactos": {
     title: "Contactos",
-    subtitle: "Manten relacion, idioma, notas y contexto util por persona.",
+    subtitle: "Tenga a mano las personas y datos que más usa.",
   },
   "/dashboard/professional/documentos": {
     title: "Documentos",
-    subtitle: "Ordena, analiza y reutiliza archivos dentro de tu operacion diaria.",
+    subtitle: "Encuentre, revise y use sus archivos sin vueltas.",
   },
   "/dashboard/professional/baul-privado": {
     title: "Baúl privado",
-    subtitle: "Controla credenciales, links y registros sensibles con una vista separada y clara.",
+    subtitle: "Guarde lo sensible en un lugar aparte y fácil de revisar.",
   },
   "/dashboard/professional/automatizaciones": {
     title: "Automatizaciones",
-    subtitle: "Controla rutinas, recordatorios y ejecucion programada de Operaly.",
+    subtitle: "Deje listos recordatorios y seguimientos que se repiten.",
   },
   "/dashboard/professional/analiticas": {
     title: "Analiticas",
-    subtitle: "Entiende consumo, actividad y capacidad disponible de un vistazo.",
+    subtitle: "Vea de forma simple cómo va el uso de su cuenta.",
   },
   "/dashboard/professional/configuracion": {
     title: "Perfil y plan",
-    subtitle: "Administra identidad, facturacion y configuracion de tu cuenta.",
+    subtitle: "Cambie sus datos, su plan y preferencias principales.",
   },
   "/dashboard/professional/asistente": {
     title: "Asistente",
-    subtitle: "Ajusta profesion, tono, contexto y estilo operativo de Operaly.",
+    subtitle: "Ajuste cómo quiere que Operaly le hable y le ayude.",
   },
   "/dashboard/professional/voz": {
     title: "Voz",
-    subtitle: "Configura audio, llamadas y la personalidad hablada del asistente.",
+    subtitle: "Defina voz, llamadas y estilo hablado de Operaly.",
   },
   "/dashboard/professional/integraciones": {
     title: "Integraciones",
-    subtitle: "Conecta herramientas externas desde el dashboard administrativo.",
+    subtitle: "Conecte sus herramientas y empiece a usarlas aquí y en WhatsApp.",
   },
 }
 
@@ -231,7 +231,7 @@ export default function ProfessionalDashboardLayout({
     return (
       pageTitles[pathname] ?? {
         title: "Panel profesional",
-        subtitle: "Administra tu operacion diaria con una experiencia clara y rapida.",
+        subtitle: "Mueva su cuenta con rapidez y sin complicarse.",
       }
     )
   }, [pathname])
@@ -407,7 +407,7 @@ export default function ProfessionalDashboardLayout({
               {!collapsed ? (
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#0F1F63]">{profile.fullName}</p>
-                  <p className="truncate text-xs text-slate-500">Dashboard administrativo</p>
+                  <p className="truncate text-xs text-slate-500">Su espacio de trabajo</p>
                 </div>
               ) : null}
             </div>
@@ -498,13 +498,13 @@ export default function ProfessionalDashboardLayout({
                   href="/dashboard/professional/contactos"
                   className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                 >
-                  Ir a contactos
+                  Contactos
                 </Link>
                 <Link
                   href="/dashboard/professional/documentos"
                   className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                 >
-                  Ir a documentos
+                  Documentos
                 </Link>
               </div>
               <NotificationBell />
