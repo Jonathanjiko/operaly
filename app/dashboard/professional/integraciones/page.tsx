@@ -439,6 +439,10 @@ export default function IntegracionesPage() {
         </div>
       )}
 
+      <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
+        Lo que ves aquí ya está alineado al contrato: la conexión se hace manualmente desde tu dashboard, pero después debe quedar utilizable desde WhatsApp. Si el backend aún no tiene `GOOGLE_*`, esta pantalla lo mostrará como pendiente y no como si ya estuviera operando.
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-3">
         {integrationStatuses.map((integration) => {
           const Icon = integration.icon

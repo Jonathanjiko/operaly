@@ -61,6 +61,8 @@ export default function VozPage() {
   const [preferAudio, setPreferAudio] = useState(true)
   const [voiceLang, setVoiceLang] = useState("es")
   const [loadError, setLoadError] = useState("")
+  const [saveError, setSaveError] = useState("")
+  const [lastSavedAt, setLastSavedAt] = useState("")
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
@@ -140,6 +142,7 @@ export default function VozPage() {
       return
     }
     setSaving(true)
+    setSaveError("")
     try {
       const resolvedVoiceId = useCustomVoice ? customVoiceId.trim() : voiceId
       const voice = ELEVENLABS_VOICES.find((item) => item.id === resolvedVoiceId)
@@ -159,9 +162,11 @@ export default function VozPage() {
       )
       if (error) throw error
       await loadConfig()
+      setLastSavedAt(new Date().toISOString())
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
+      setSaveError(err.message || "No se pudo guardar.")
       alert(err.message || "No se pudo guardar.")
     } finally {
       setSaving(false)
@@ -246,6 +251,13 @@ export default function VozPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#06B6D4]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lo que controlas aquí</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Esta configuración se guarda en Supabase como tu fuente operativa de voz. El backend debe leer exactamente esta voz, este tono y este estilo cuando Operaly te responda por WhatsApp o por llamada.
+        </p>
+      </div>
+
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -278,7 +290,7 @@ export default function VozPage() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">modo activo</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
@@ -292,6 +304,12 @@ export default function VozPage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo de llamada</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{callStyle}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">idioma de voz</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {voiceLang === "es" ? "Español" : voiceLang === "en" ? "Inglés" : "Todos"}
+          </p>
         </div>
       </div>
 
@@ -380,7 +398,7 @@ export default function VozPage() {
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">{voice.desc}</p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {voice.style} · {voice.lang === "es" ? "Espanol" : "Ingles"}
+                          {voice.style} · {voice.lang === "es" ? "Español" : "Inglés"}
                         </p>
                       </div>
                       {isSelected && (
@@ -486,9 +504,24 @@ export default function VozPage() {
         </Button>
         {saved && (
           <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-            <Check className="h-4 w-4" /> Guardado correctamente
+            <Check className="h-4 w-4" /> Guardado en Supabase
           </div>
         )}
+        {lastSavedAt ? (
+          <div className="text-xs text-muted-foreground">
+            Última actualización: {new Date(lastSavedAt).toLocaleString("es-PE")}
+          </div>
+        ) : null}
+      </div>
+
+      {saveError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {saveError}
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Si Operaly todavía te habla con otra voz, otro tono o mezcla idiomas en WhatsApp, el problema ya no es esta pantalla: el backend aún no está aplicando correctamente tu configuración runtime.
       </div>
     </div>
   )

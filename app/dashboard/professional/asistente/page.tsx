@@ -83,6 +83,8 @@ export default function AsistentePage() {
   const [customContext, setCustomContext] = useState("")
   const [saved, setSaved] = useState(false)
   const [loadError, setLoadError] = useState("")
+  const [saveError, setSaveError] = useState("")
+  const [lastSavedAt, setLastSavedAt] = useState("")
 
   useEffect(() => {
     loadConfig()
@@ -146,6 +148,7 @@ export default function AsistentePage() {
   const handleSave = async () => {
     if (!clientId) return
     setSaving(true)
+    setSaveError("")
     try {
       const { error: clientUpdateError } = await supabase
         .from("clients")
@@ -165,9 +168,11 @@ export default function AsistentePage() {
       await upsertPref("assistant_style", style)
 
       await loadConfig()
+      setLastSavedAt(new Date().toISOString())
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
+      setSaveError(err.message || "No se pudo guardar.")
       alert(err.message || "No se pudo guardar.")
     } finally {
       setSaving(false)
@@ -252,6 +257,13 @@ export default function AsistentePage() {
           {loadError}
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Contrato del asistente</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Profesión, tono, estilo y contexto se guardan en Supabase como tu configuración operativa. El backend debe usarlos para cómo Operaly piensa, responde y te representa en WhatsApp.
+        </p>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -440,9 +452,24 @@ export default function AsistentePage() {
         </Button>
         {saved && (
           <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-            <Check className="h-4 w-4" /> Guardado: Operaly ya usa esta configuracion
+            <Check className="h-4 w-4" /> Guardado en Supabase
           </div>
         )}
+        {lastSavedAt ? (
+          <div className="text-xs text-muted-foreground">
+            Última actualización: {new Date(lastSavedAt).toLocaleString("es-PE")}
+          </div>
+        ) : null}
+      </div>
+
+      {saveError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {saveError}
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Si Operaly todavía responde con un tono por defecto, mezcla idiomas o ignora tu profesión al leer agenda, archivos o tareas, el problema sigue estando en el backend runtime, no en esta pantalla.
       </div>
     </div>
   )
