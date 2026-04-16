@@ -21,6 +21,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
+import { labelForLanguage, localeFromLanguage } from "@/lib/runtime-locale"
 import {
   getCurrentPeriodMonth,
   getEffectivePlanCode,
@@ -66,6 +67,16 @@ type FeatureAccess = {
   voiceEnabled: boolean
   googleEnabled: boolean
   customAgentEnabled: boolean
+}
+
+type RuntimeSnapshot = {
+  voice: Record<string, any> | null
+  preferences: Record<string, string>
+  welcome: Record<string, any> | null
+  contextState: Record<string, any> | null
+  recentEvents: Array<Record<string, any>>
+  recentUnderstandingRuns: Array<Record<string, any>>
+  phoneVerificationStatus: string
 }
 
 function getUsagePercent(used: number, limit: number) {
@@ -130,6 +141,29 @@ function getUsageLevel(used: number, limit: number) {
   }
 }
 
+function normalizeRuntimeStatus(value: string | null | undefined) {
+  const normalized = String(value || "").toLowerCase()
+  if (!normalized) return "Sin señal"
+  if (normalized.includes("sent")) return "Enviado"
+  if (normalized.includes("failed")) return "Falló"
+  if (normalized.includes("pending")) return "Pendiente"
+  if (normalized.includes("queued")) return "En cola"
+  if (normalized.includes("connected")) return "Conectado"
+  return normalized.replace(/_/g, " ")
+}
+
+function formatRuntimeDate(value: string | null | undefined, locale: string) {
+  if (!value) return "Sin fecha"
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Sin fecha"
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed)
+}
+
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
@@ -148,6 +182,15 @@ export default function ProfessionalDashboardPage() {
     voiceEnabled: false,
     googleEnabled: false,
     customAgentEnabled: false,
+  })
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<RuntimeSnapshot>({
+    voice: null,
+    preferences: {},
+    welcome: null,
+    contextState: null,
+    recentEvents: [],
+    recentUnderstandingRuns: [],
+    phoneVerificationStatus: "",
   })
 
   const [greeting] = useState(() => {
@@ -209,6 +252,39 @@ export default function ProfessionalDashboardPage() {
         if (clientId) {
           const periodMonth = getCurrentPeriodMonth()
           const today = new Date().toISOString().slice(0, 10)
+          const session = await supabase.auth.getSession()
+          const accessToken = session.data.session?.access_token || ""
+
+          if (accessToken) {
+            try {
+              const runtimeResponse = await fetch("/api/professional/runtime", {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+                cache: "no-store",
+              })
+
+              const runtimePayload = await runtimeResponse.json().catch(() => ({}))
+              if (runtimeResponse.ok) {
+                setRuntimeSnapshot({
+                  voice: runtimePayload?.voice || null,
+                  preferences: runtimePayload?.preferences || {},
+                  welcome: runtimePayload?.welcome || null,
+                  contextState: runtimePayload?.contextState || null,
+                  recentEvents: Array.isArray(runtimePayload?.recentEvents) ? runtimePayload.recentEvents : [],
+                  recentUnderstandingRuns: Array.isArray(runtimePayload?.recentUnderstandingRuns)
+                    ? runtimePayload.recentUnderstandingRuns
+                    : [],
+                  phoneVerificationStatus: String(
+                    runtimePayload?.client?.phone_verification_status || client?.phone_verification_status || ""
+                  ),
+                })
+              }
+            } catch (runtimeError) {
+              console.error("Error cargando runtime dashboard:", runtimeError)
+            }
+          }
 
           const limitsResp = await supabase.rpc("get_my_effective_limits")
 
@@ -357,7 +433,7 @@ export default function ProfessionalDashboardPage() {
       },
       {
         label: "Idioma",
-        value: profile?.preferredLanguage || "-",
+        value: labelForLanguage(profile?.preferredLanguage || "es"),
         icon: FileText,
         color: "#7C3AED",
         change: "Idioma por defecto",
@@ -434,6 +510,74 @@ export default function ProfessionalDashboardPage() {
 
     return links
   }, [featureAccess])
+
+  const runtimeLocale = useMemo(() => localeFromLanguage(profile?.preferredLanguage), [profile?.preferredLanguage])
+  const runtimeLanguageLabel = useMemo(
+    () => labelForLanguage(profile?.preferredLanguage),
+    [profile?.preferredLanguage]
+  )
+
+  const runtimeStatusCards = useMemo(() => {
+    const voiceConfigured = Boolean(runtimeSnapshot.voice?.voice_id)
+    const assistantConfigured = Boolean(
+      runtimeSnapshot.preferences.assistant_tone ||
+        runtimeSnapshot.preferences.assistant_style ||
+        runtimeSnapshot.preferences.assistant_context
+    )
+    const welcomeStatus =
+      runtimeSnapshot.preferences.welcome_initial_status ||
+      runtimeSnapshot.welcome?.status ||
+      runtimeSnapshot.welcome?.message_status ||
+      "pending"
+    const phoneStatus = runtimeSnapshot.phoneVerificationStatus || "pending"
+
+    return [
+      {
+        label: "Voz runtime",
+        value: voiceConfigured ? "Guardada" : "Pendiente",
+        detail: voiceConfigured
+          ? `${runtimeSnapshot.voice?.voice_name || runtimeSnapshot.voice?.voice_id || "Configurada"} en Supabase`
+          : "Aún no configuras una voz para Operaly",
+      },
+      {
+        label: "Asistente",
+        value: assistantConfigured ? "Guardado" : "Base",
+        detail: assistantConfigured
+          ? `${runtimeSnapshot.preferences.assistant_tone || "tono"} · ${runtimeSnapshot.preferences.assistant_style || "estilo"}`
+          : "Todavía usa configuración por defecto",
+      },
+      {
+        label: "Welcome WhatsApp",
+        value: normalizeRuntimeStatus(welcomeStatus),
+        detail: runtimeSnapshot.welcome?.provider_message_id
+          ? "Meta aceptó el envío"
+          : "Sin provider_message_id todavía",
+      },
+      {
+        label: "Teléfono",
+        value: normalizeRuntimeStatus(phoneStatus),
+        detail:
+          phoneStatus === "verified"
+            ? "Línea lista para operar"
+            : "La verificación aún no quedó cerrada",
+      },
+    ]
+  }, [runtimeSnapshot])
+
+  const recentRuntimeActivity = useMemo(() => {
+    return runtimeSnapshot.recentEvents.slice(0, 5).map((event) => ({
+      id: String(event.id || Math.random()),
+      title: String(event.event_type || event.action || "Evento operativo"),
+      createdAt: String(event.created_at || event.updated_at || ""),
+      detail:
+        String(event.channel || event.module || "") ||
+        String(event.payload?.reason || event.payload?.status || ""),
+    }))
+  }, [runtimeSnapshot.recentEvents])
+
+  const lastUnderstanding = useMemo(() => {
+    return runtimeSnapshot.recentUnderstandingRuns[0] || null
+  }, [runtimeSnapshot.recentUnderstandingRuns])
 
   if (loading) {
     return (
@@ -658,6 +802,101 @@ export default function ProfessionalDashboardPage() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-[#0F1F63]">Estado runtime</h3>
+              <p className="text-sm text-muted-foreground">
+                Lo que ya quedó guardado en Supabase y las últimas señales que devolvió el runtime de WhatsApp.
+              </p>
+            </div>
+            <Link href="/dashboard/professional/configuracion">
+              <Button variant="ghost" size="sm" className="text-[#3B82F6]">
+                Ajustar
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {runtimeStatusCards.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
+                <p className="mt-2 text-xl font-semibold text-[#0F1F63]">{item.value}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-border p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Idioma runtime</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{runtimeLanguageLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Locale activo: {runtimeLocale}</p>
+            </div>
+            <div className="rounded-2xl border border-border p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Contexto corto</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {String(runtimeSnapshot.contextState?.module_context || runtimeSnapshot.contextState?.current_module || "Sin módulo")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {runtimeSnapshot.contextState?.pending_confirmation ? "Con confirmación pendiente" : "Sin confirmación pendiente"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Último entendimiento</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                {lastUnderstanding
+                  ? normalizeRuntimeStatus(
+                      lastUnderstanding.decision || lastUnderstanding.confirmation_decision || lastUnderstanding.status
+                    )
+                  : "Sin señal"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {lastUnderstanding?.confidence != null
+                  ? `Confianza ${(Number(lastUnderstanding.confidence) * 100).toFixed(0)}%`
+                  : "Todavía no hay corrida visible"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-[#0F1F63]">Actividad reciente de WhatsApp</h3>
+            <p className="text-sm text-muted-foreground">
+              Eventos recientes para comprobar si Operaly entendió, confirmó o ejecutó algo.
+            </p>
+          </div>
+
+          {recentRuntimeActivity.length > 0 ? (
+            <div className="space-y-3">
+              {recentRuntimeActivity.map((event) => (
+                <div key={event.id} className="rounded-2xl border border-border bg-secondary/20 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-[#0F1F63]">{event.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {event.detail || "Evento operacional"} · {formatRuntimeDate(event.createdAt, runtimeLocale)}
+                      </p>
+                    </div>
+                    <Bell className="h-4 w-4 text-[#7C3AED]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
+              <p className="font-medium text-[#0F1F63]">Todavía no hay actividad reciente visible.</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Cuando uses WhatsApp, aquí aparecerán señales de entendimiento, confirmación y ejecución.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
