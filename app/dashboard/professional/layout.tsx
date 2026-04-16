@@ -23,6 +23,7 @@ import {
   CreditCard,
   FileText,
   FolderOpen,
+  FolderLock,
   LayoutDashboard,
   List,
   LogOut,
@@ -49,6 +50,7 @@ const sidebarItems = [
   { href: "/dashboard/professional/casos", label: "Casos", icon: FolderOpen },
   { href: "/dashboard/professional/contactos", label: "Contactos", icon: Users },
   { href: "/dashboard/professional/documentos", label: "Documentos", icon: FileText },
+  { href: "/dashboard/professional/baul-privado", label: "Baúl privado", icon: FolderLock },
   { href: "/dashboard/professional/automatizaciones", label: "Automatizaciones", icon: Zap },
   { href: "/dashboard/professional/analiticas", label: "Analiticas", icon: BarChart3 },
 ]
@@ -95,6 +97,10 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/professional/documentos": {
     title: "Documentos",
     subtitle: "Ordena, analiza y reutiliza archivos dentro de tu operacion diaria.",
+  },
+  "/dashboard/professional/baul-privado": {
+    title: "Baúl privado",
+    subtitle: "Controla credenciales, links y registros sensibles con una vista separada y clara.",
   },
   "/dashboard/professional/automatizaciones": {
     title: "Automatizaciones",
