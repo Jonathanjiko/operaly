@@ -1000,12 +1000,15 @@ export default function ProfessionalSettingsPage() {
                 </div>
 
                 <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Asistente</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Asistente por usuario</p>
                   <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                    Guardado: {preferredLanguage || "es"} · {profession || "sin profesión"}
+                    Guardado: {preferredLanguage || "es"} · {profession || "sin profesión"} · {fullName || "sin nombre"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Runtime: {runtimeSnapshot?.preferences?.assistant_tone || "Sin señal de tono"} · {runtimeSnapshot?.preferences?.assistant_style || "Sin señal de estilo"}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Esto debería definir cómo le habla Operaly a usted, qué tono usa y desde qué profesión o rol lo acompaña.
                   </p>
                 </div>
               </div>
@@ -1030,7 +1033,7 @@ export default function ProfessionalSettingsPage() {
                   {phoneNormalized || phone || "No configurado"}
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Este numero es la llave del Registration Gate: solo el WhatsApp registrado puede usar Operaly. Si lo cambias, el backend debe usar el nuevo numero para responder y enviar la bienvenida.
+                  Este es el WhatsApp principal de su cuenta. Si cambia, Operaly debe reconocerlo y responderle por aquí sin perder el contexto.
                 </p>
               </div>
 
