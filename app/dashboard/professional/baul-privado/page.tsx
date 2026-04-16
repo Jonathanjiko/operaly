@@ -34,32 +34,32 @@ type VaultRow = Record<string, any> & {
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     title: "Baúl privado",
-    subtitle: "Vista separada para links, credenciales y registros sensibles ligados a tu cuenta.",
-    sync: "Sincronizado con Supabase como fuente de verdad",
+    subtitle: "Guarde aquí lo delicado: accesos, referencias privadas y archivos sensibles.",
+    sync: "Lo que se guarde aquí debe mantenerse ligado a su cuenta",
     search: "Buscar por nombre, tipo o referencia...",
     empty: "Aún no hay elementos visibles",
-    emptyHint: "Cuando el backend clasifique o guarde información sensible, aparecerá aquí con trazabilidad.",
-    contract: "Este módulo ya te muestra el estado real de lectura. La alta y edición completa siguen dependiendo del contrato backend final.",
+    emptyHint: "Cuando usted u Operaly separen algo sensible, debería aparecer aquí.",
+    contract: "Todavía hay partes que backend debe terminar de cerrar para que todo quede completo.",
     refresh: "Actualizar",
     delete: "Eliminar",
     type: "Tipo",
     created: "Creado",
     updated: "Actualizado",
     details: "Detalle",
-    runtime: "Estado del módulo",
-    runtimeHint: "Aquí diferenciamos lo que ya existe realmente en tu vault de lo que todavía depende del backend.",
-    pending: "Gestión completa pendiente",
-    ready: "Lectura disponible",
+    runtime: "Estado actual",
+    runtimeHint: "Aquí puede ver si ya tiene contenido visible y qué parte sigue pendiente de completarse mejor.",
+    pending: "Todavía incompleto",
+    ready: "Ya visible",
     count: "registros",
-    protected: "Cobertura esperada",
-    protectedHint: "El baúl debe separar credenciales, links y archivos sensibles del resto de la operación.",
+    protected: "Qué debería vivir aquí",
+    protectedHint: "Este espacio sirve para separar lo sensible del resto de su operación diaria.",
     credentials: "Credenciales y accesos",
     links: "Links y referencias privadas",
     files: "Archivos sensibles",
-    recent: "Actividad reciente",
-    recentHint: "Aquí verás señales recientes del runtime cuando el backend clasifique o use contenido sensible.",
-    noRecent: "Aún no hay eventos recientes del baúl privado para mostrar.",
-    backendSource: "Señal backend",
+    recent: "Movimientos recientes",
+    recentHint: "Cuando Operaly use o clasifique algo delicado, debería reflejarse aquí.",
+    noRecent: "Aún no hay movimientos recientes del baúl privado.",
+    backendSource: "Origen",
   },
   en: {
     title: "Private vault",
@@ -422,9 +422,9 @@ export default function BaulPrivadoPage() {
       {showCreate ? (
         <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
           <div className="grid gap-3 md:grid-cols-3">
-            <input value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} placeholder="Nombre" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
-            <input value={draft.type} onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))} placeholder="Qué es" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
-            <input value={draft.detail} onChange={(event) => setDraft((prev) => ({ ...prev, detail: event.target.value }))} placeholder="Detalle" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+            <input value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} placeholder="Nombre o referencia" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+            <input value={draft.type} onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))} placeholder="Qué quiere guardar" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+            <input value={draft.detail} onChange={(event) => setDraft((prev) => ({ ...prev, detail: event.target.value }))} placeholder="Dato o nota breve" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
           </div>
           <div className="mt-3 flex gap-2">
             <button onClick={() => void saveVaultItem()} disabled={saving || !draft.title.trim()} className="inline-flex h-10 items-center justify-center rounded-xl bg-[#3B82F6] px-4 text-sm font-medium text-white hover:bg-[#2563EB] disabled:opacity-50">
@@ -445,16 +445,16 @@ export default function BaulPrivadoPage() {
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{copy.runtimeHint}</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Contenido visible</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que ya ve</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {errorMessage ? copy.pending : copy.ready}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {errorMessage || "Ya puede revisar lo que está guardado para su cuenta."}
+                {errorMessage || "Ya puede revisar lo que está separado para su cuenta."}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Captura y edición</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que falta cerrar</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{copy.pending}</p>
             <p className="mt-1 text-xs text-muted-foreground">{copy.contract}</p>
           </div>
@@ -515,9 +515,9 @@ export default function BaulPrivadoPage() {
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Separación con documentos</h2>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Relación con documentos</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              El baúl privado no reemplaza tu base documental. Aquí deben vivir credenciales, links y archivos sensibles cuando el runtime o tú decidan aislarlos del flujo operativo general.
+              El baúl privado no reemplaza sus documentos. Sirve para apartar lo delicado cuando conviene que no quede mezclado con el resto.
             </p>
           </div>
           <Link
@@ -532,22 +532,43 @@ export default function BaulPrivadoPage() {
           <div className="rounded-2xl border border-border bg-white/80 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visibles</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{items.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Elementos ya separados dentro de `private_vault_items`.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Elementos ya apartados para usted en esta vista.</p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Origen documental</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Vienen de documentos</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {items.filter((item) => inferOriginLabel(item).toLowerCase().includes("document")).length}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Registros que ya parecen venir de clasificación documental o runtime similar.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Registros que parecen haber llegado desde archivos o clasificación previa.</p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Separación viva</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Movimiento reciente</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {recentVaultEvents.length > 0 ? "Con señal" : "Pendiente"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">La clasificación sensible desde documentos y WhatsApp todavía seguirá ganando profundidad en backend.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Le ayuda a ver si Operaly ya está separando mejor lo sensible.</p>
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Para accesos y claves</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Guarde aquí referencias, accesos o datos que no conviene mezclar con el trabajo diario.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Para enlaces privados</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Si necesita apartar links de bancos, plataformas o servicios delicados, este es su lugar.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Para archivos reservados</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Sirve para tener más a la mano lo sensible sin perderlo dentro del resto de documentos.
+          </p>
         </div>
       </div>
 

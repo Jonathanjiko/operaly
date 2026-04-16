@@ -37,7 +37,7 @@ type DocumentRow = {
 }
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
-  es: { title: "Documentos", subtitle: "Tu base operativa de archivos para consultar, asociar y reutilizar desde WhatsApp.", sync: "Sincronizado con Supabase y WhatsApp", reminder: "Los archivos procesados quedan listos para análisis, continuidad por caso y envíos posteriores.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haz clic para seleccionar", dragActive: "Suelta para subir", dragHint: "PDF, Word, Excel, imágenes y comprimidos · máx. 50 MB", empty: "Sin documentos", emptyHint: "Sube tu primer archivo o envíaselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamaño", type: "Tipo", pages: "Páginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
+  es: { title: "Documentos", subtitle: "Vea sus archivos, tráigalos cuando haga falta y trabájelos con Operaly.", sync: "Todo lo importante debe reflejarse aquí y en WhatsApp", reminder: "Un archivo puede quedarse como vista rápida o entrar de lleno al análisis cuando usted lo pida.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haz clic para seleccionar", dragActive: "Suelta para subir", dragHint: "PDF, Word, Excel, imágenes y comprimidos · máx. 50 MB", empty: "Sin documentos", emptyHint: "Suba su primer archivo o envíeselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamaño", type: "Tipo", pages: "Páginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
   en: { title: "Documents", subtitle: "Your operational file base to query, associate, and reuse from WhatsApp.", sync: "Synced with Supabase and WhatsApp", reminder: "Processed files stay ready for analysis, case continuity, and later sending.", upload: "Upload file", uploading: "Uploading...", search: "Search documents...", drag: "Drag files here or click to select", dragActive: "Drop to upload", dragHint: "PDF, Word, Excel, images, archives · max 50 MB", empty: "No documents", emptyHint: "Upload your first file or send it to Operaly through WhatsApp.", processed: "Processed", processing: "Processing", error: "Error", close: "Close", delete: "Delete", deleteConfirm: "Delete this document?", size: "Size", type: "Type", pages: "Pages", chunks: "AI chunks", source: "Source", uploaded: "Uploaded", readyHint: "Operaly can already analyze and answer questions about this file.", total: "files", processedCount: "processed", mb: "MB" },
   pt: { title: "Documentos", subtitle: "Sua base operacional de arquivos para consultar, associar e reutilizar pelo WhatsApp.", sync: "Sincronizado com Supabase e WhatsApp", reminder: "Arquivos processados ficam prontos para análise, continuidade por caso e envios futuros.", upload: "Enviar arquivo", uploading: "Enviando...", search: "Buscar documentos...", drag: "Arraste arquivos ou clique para selecionar", dragActive: "Solte para enviar", dragHint: "PDF, Word, Excel, imagens e compactados · máx. 50 MB", empty: "Sem documentos", emptyHint: "Envie seu primeiro arquivo ou mande para a Operaly pelo WhatsApp.", processed: "Processado", processing: "Processando", error: "Erro", close: "Fechar", delete: "Excluir", deleteConfirm: "Excluir este documento?", size: "Tamanho", type: "Tipo", pages: "Páginas", chunks: "Chunks IA", source: "Origem", uploaded: "Enviado", readyHint: "A Operaly já pode analisar e responder sobre este arquivo.", total: "arquivos", processedCount: "processados", mb: "MB" },
   de: { title: "Dokumente", subtitle: "Deine operative Dateibasis zum Nachschlagen, Verknüpfen und Wiederverwenden über WhatsApp.", sync: "Mit Supabase und WhatsApp synchronisiert", reminder: "Verarbeitete Dateien bleiben bereit für Analyse, Fall-Kontinuität und späteres Senden.", upload: "Datei hochladen", uploading: "Lädt hoch...", search: "Dokumente suchen...", drag: "Dateien hierher ziehen oder klicken", dragActive: "Zum Hochladen loslassen", dragHint: "PDF, Word, Excel, Bilder, Archive · max. 50 MB", empty: "Keine Dokumente", emptyHint: "Lade deine erste Datei hoch oder sende sie an Operaly per WhatsApp.", processed: "Verarbeitet", processing: "In Verarbeitung", error: "Fehler", close: "Schließen", delete: "Löschen", deleteConfirm: "Dieses Dokument löschen?", size: "Größe", type: "Typ", pages: "Seiten", chunks: "KI-Chunks", source: "Quelle", uploaded: "Hochgeladen", readyHint: "Operaly kann diese Datei bereits analysieren und Fragen dazu beantworten.", total: "Dateien", processedCount: "verarbeitet", mb: "MB" },
@@ -60,6 +60,16 @@ function looksSensitiveDocument(doc: DocumentRow) {
     haystack.includes("privado") ||
     haystack.includes("private")
   )
+}
+
+function isDriveDocument(doc: DocumentRow) {
+  const source = String(doc.source || "").toLowerCase()
+  return source.includes("drive")
+}
+
+function isImportedDocument(doc: DocumentRow) {
+  const source = String(doc.source || "").toLowerCase()
+  return source.includes("import")
 }
 
 function formatSize(bytes: number | null) {
@@ -140,14 +150,14 @@ function DetailModal({ doc, locale, copy, onClose, onDelete }: { doc: DocumentRo
             <div className="mt-2 flex flex-wrap gap-1.5">
               {doc.embedding_status ? (
                 <RuntimeTag
-                  label="Embeddings"
+                  label="Búsqueda"
                   value={normalizeRuntimeStatus(doc.embedding_status)}
                   tone={doc.embedding_status === "indexed" ? "emerald" : doc.embedding_status === "failed" ? "amber" : "blue"}
                 />
               ) : null}
               {doc.vision_status ? (
                 <RuntimeTag
-                  label="Visión"
+                  label="Lectura"
                   value={normalizeRuntimeStatus(doc.vision_status)}
                   tone={doc.vision_status === "ready" || doc.vision_status === "processed" ? "purple" : "amber"}
                 />
@@ -181,21 +191,21 @@ function DetailModal({ doc, locale, copy, onClose, onDelete }: { doc: DocumentRo
           {(doc.indexed_at || doc.extraction_source || doc.case_id || doc.contact_id) ? (
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-secondary/40 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Indexado</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Listo para búsqueda</p>
                 <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">
                   {doc.indexed_at ? new Date(doc.indexed_at).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" }) : "Pendiente"}
                 </p>
               </div>
               <div className="bg-secondary/40 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Extracción</p>
-                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.extraction_source || "Base"}</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Cómo se leyó</p>
+                <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.extraction_source || "Lectura base"}</p>
               </div>
               <div className="bg-secondary/40 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Caso ligado</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ligado a caso</p>
                 <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.case_id ? "Sí" : "No"}</p>
               </div>
               <div className="bg-secondary/40 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Contacto ligado</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ligado a contacto</p>
                 <p className="text-sm font-semibold text-[#0F1F63] mt-0.5">{doc.contact_id ? "Sí" : "No"}</p>
               </div>
             </div>
@@ -306,6 +316,8 @@ export default function DocumentosPage() {
   const totalMb = documents.reduce((sum, doc) => sum + (doc.file_size_bytes || 0), 0) / 1048576
   const processed = documents.filter((doc) => doc.status === "processed" || doc.status === "ready").length
   const sensitiveCandidates = documents.filter((doc) => looksSensitiveDocument(doc)).length
+  const driveDocuments = documents.filter((doc) => isDriveDocument(doc)).length
+  const importedDocuments = documents.filter((doc) => isImportedDocument(doc)).length
   const indexedDocuments = documents.filter((doc) => String(doc.embedding_status || "").toLowerCase() === "indexed").length
   const visionReady = documents.filter((doc) => {
     const status = String(doc.vision_status || "").toLowerCase()
@@ -340,58 +352,58 @@ export default function DocumentosPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad documental</h2>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Este módulo ya separa lo que está visible en tu base documental de lo que el backend todavía debe cerrar para asociación automática con casos, contactos y memoria larga.
-          </p>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad documental</h2>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Aquí debería ver tanto lo que ya está dentro de Operaly como lo que viene de integraciones y puede traer cuando lo necesite.
+        </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Base visible</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">En Operaly</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{documents.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Archivos ya ligados a tu `client_id`.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos ya visibles dentro de su cuenta.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para análisis</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para revisar</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{processed}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Documentos que ya muestran estado procesado o listo.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Ya se pueden consultar mejor desde Operaly.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Backend documental</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Actividad reciente</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
                 {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">Asociación profunda con casos y envío todavía depende del backend.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Le muestra si hubo movimiento reciente con archivos.</p>
             </div>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Indexación semántica</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con análisis listo</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{indexedDocuments}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Archivos con embeddings listos para retrieval semántico.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos con análisis más completo para búsqueda y respuestas.</p>
             </div>
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Visión/OCR útil</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Imágenes entendidas</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{visionReady}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Imágenes con señal de extracción visual útil dentro del runtime.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Imágenes donde Operaly ya logró sacar contenido útil.</p>
             </div>
           </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#0F1F63]">Señales recientes</h2>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Movimientos recientes</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Aquí se reflejan eventos recientes ligados a documentos y uso desde WhatsApp cuando el backend los registra.
+            Aquí ve si hubo importaciones, análisis o uso reciente de documentos.
           </p>
           <div className="mt-4 space-y-3">
             {recentDocumentEvents.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
-                Aún no hay eventos documentales recientes en runtime.
+                Aún no hay movimientos recientes de documentos.
               </div>
             ) : (
               recentDocumentEvents.map((event) => (
                 <div key={String(event.id || event.created_at)} className="rounded-2xl border border-border bg-secondary/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Runtime</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Origen</p>
                   <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
                     {normalizeRuntimeStatus(String(event.event_type || "document_event"))}
                   </p>
@@ -408,9 +420,9 @@ export default function DocumentosPage() {
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Puente con baúl privado</h2>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Contenido sensible</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              La base documental guarda tus archivos operativos generales. Cuando un archivo sea sensible o el backend lo clasifique como privado, debe terminar en el baúl privado con una trazabilidad separada.
+              Si un archivo resulta sensible, debe terminar también en el baúl privado para que quede mejor separado del resto.
             </p>
           </div>
           <Link
@@ -423,22 +435,40 @@ export default function DocumentosPage() {
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Documentos generales</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Uso general</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{documents.length - sensitiveCandidates}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Archivos operativos normales en tu base documental.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Archivos de trabajo que puede revisar sin moverlos al baúl.</p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sensibles detectados</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sensibles</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{sensitiveCandidates}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Señales documentales que ya conviene separar del flujo general.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Archivos que conviene revisar o separar en el baúl privado.</p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Clasificación runtime</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Clasificación</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">El backend nuevo debe decidir mejor qué queda en documentos y qué debe caer al vault.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Aquí debería verse mejor qué se queda en documentos y qué se manda al baúl.</p>
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Google Drive visibles</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{driveDocuments}</p>
+          <p className="mt-1 text-xs text-slate-600">Archivos que ya muestran origen en Drive dentro de esta vista.</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Traídos a Operaly</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{importedDocuments}</p>
+          <p className="mt-1 text-xs text-slate-600">Archivos que ya fueron bajados o incorporados para análisis completo.</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Pendiente de puente</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{Math.max(driveDocuments - importedDocuments, 0)}</p>
+          <p className="mt-1 text-xs text-slate-600">Sirve para mostrar mejor lo remoto frente a lo que ya está dentro de Operaly.</p>
         </div>
       </div>
 
@@ -471,14 +501,14 @@ export default function DocumentosPage() {
                       <span className="text-[10px] text-muted-foreground">{formatSize(doc.file_size_bytes)}</span>
                       {doc.embedding_status ? (
                         <RuntimeTag
-                          label="Emb"
+                          label="Búsq."
                           value={normalizeRuntimeStatus(doc.embedding_status)}
                           tone={String(doc.embedding_status).toLowerCase() === "indexed" ? "emerald" : "amber"}
                         />
                       ) : null}
                       {doc.vision_status ? (
                         <RuntimeTag
-                          label="Visión"
+                          label="Lect."
                           value={normalizeRuntimeStatus(doc.vision_status)}
                           tone={String(doc.vision_status).toLowerCase() === "ready" ? "purple" : "amber"}
                         />

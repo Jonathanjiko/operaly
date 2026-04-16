@@ -21,9 +21,9 @@ const TYPE_COLORS: Record<string, string> = { shopping: "#F59E0B", project: "#7C
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     title: "Listas y checklists",
-    subtitle: "Anote pendientes, compras e ideas en un formato rápido y simple.",
-    sync: "Se guarda en su cuenta y también puede aparecer en WhatsApp",
-    reminder: "Si después le pone fecha, Operaly puede llevarlo a la agenda.",
+    subtitle: "Guarde compras, pendientes, pasos e indicaciones sin complicarse.",
+    sync: "Todo lo que sí se guarde aquí debe volver a aparecerle en su cuenta y en Operaly",
+    reminder: "Si algo lleva fecha, después puede convertirlo en recordatorio o agenda.",
     new: "Nueva",
     newList: "Nueva lista",
     newChecklist: "Nuevo checklist",
@@ -42,7 +42,7 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
     clearDone: "Quitar marcadas",
     listFallback: "Lista",
     savedOk: "Cambios guardados.",
-    saveError: "No se pudo guardar. Revise la conexión e intente de nuevo.",
+    saveError: "No se pudo guardar todavía. Revise la conexión e intente de nuevo.",
   },
   en: { title: "Lists and checklists", subtitle: "Capture tasks, shopping, and ideas in a quick and simple format.", sync: "Saved to your account and also available for WhatsApp flows", reminder: "If you later add a date, Operaly can move it into your agenda.", new: "New", newList: "New list", newChecklist: "New checklist", create: "Create", listPlaceholder: "Example: Grocery list", checklistPlaceholder: "Example: Meeting steps", initialItems: "Write several points separated by commas or lines (optional)", addItem: "Add item", addChecklistItem: "Add step", emptyLists: "No lists yet", emptyListsHint: "Use them for shopping, quick ideas, or things to solve.", emptyChecklists: "No checklists yet", emptyChecklistsHint: "Useful for repeatable steps and quick controls.", listsTab: "Lists", checklistsTab: "Checklists", clearDone: "Remove checked", listFallback: "List", savedOk: "Changes saved.", saveError: "Could not save. Please try again." },
   pt: { title: "Listas e checklists", subtitle: "Anote pendências, compras e ideias de forma rápida e simples.", sync: "Salvo na sua conta e também disponível para o WhatsApp", reminder: "Se depois colocar data, a Operaly pode levar para a agenda.", new: "Nova", newList: "Nova lista", newChecklist: "Novo checklist", create: "Criar", listPlaceholder: "Ex.: Lista do mercado", checklistPlaceholder: "Ex.: Passos da reunião", initialItems: "Escreva vários pontos separados por vírgula ou linha (opcional)", addItem: "Adicionar ponto", addChecklistItem: "Adicionar passo", emptyLists: "Ainda não há listas", emptyListsHint: "Use para compras, ideias rápidas ou coisas para resolver.", emptyChecklists: "Ainda não há checklists", emptyChecklistsHint: "Úteis para processos e controles rápidos.", listsTab: "Listas", checklistsTab: "Checklists", clearDone: "Remover marcadas", listFallback: "Lista", savedOk: "Alterações salvas.", saveError: "Não foi possível salvar. Tente novamente." },
@@ -291,9 +291,32 @@ export default function ListasPage() {
 
       {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm ${feedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{feedback.message}</div> : null}
 
+      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Úselo para lo rápido</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Compras, pendientes, ideas, pasos, controles o cualquier cosa que quiera tener a mano.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Después puede crecer</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si algo termina teniendo fecha, pago o seguimiento, Operaly luego podrá llevarlo a agenda o automatizaciones.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si es sensible</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Para documentos privados, credenciales o temas delicados conviene usar también el baúl privado.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{copy.listsTab}</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{lists.length}</p><p className="mt-1 text-xs text-slate-600">Listas activas para resolver hoy o después.</p></div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{copy.checklistsTab}</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{checklists.length}</p><p className="mt-1 text-xs text-slate-600">Procesos o pasos repetidos que ya dejó listos.</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{copy.checklistsTab}</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{checklists.length}</p><p className="mt-1 text-xs text-slate-600">Pasos o controles que quiere repetir sin olvidar nada.</p></div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contenido</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{topSummary.totalItems + topSummary.totalChecks}</p><p className="mt-1 text-xs text-slate-600">Puntos guardados entre listas y checklists.</p></div>
       </div>
 
