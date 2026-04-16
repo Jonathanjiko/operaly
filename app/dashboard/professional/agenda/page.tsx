@@ -8,6 +8,21 @@ import { supabase } from "@/lib/supabase"
 
 type EventItem = { id: string; title: string; dateKey: string; timeLabel: string; hour: number; minute: number; type: "task" | "automation"; sourceAt: string }
 type ViewMode = "month" | "week" | "day" | "agenda"
+type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
+type GoogleProductState = {
+  enabled?: boolean | null
+  sync_status?: string | null
+  last_synced_at?: string | null
+  last_error?: string | null
+}
+type GoogleStatusPayload = {
+  products?: Partial<Record<GoogleProduct, GoogleProductState>>
+  calendar?: GoogleProductState
+  contacts?: GoogleProductState
+  connection?: {
+    authorized_products?: string[] | null
+  } | null
+}
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: { title: "Agenda", subtitle: "Vista operativa de fechas, recordatorios y automatizaciones activas.", sync: "Sincronizado con Supabase y WhatsApp", reminder: "Por contrato, lo programado aquí respeta timezone y usa recordatorio base de 10 min salvo cambio explícito.", task: "Tarea", automation: "Automatización", dateTime: "Fecha y hora", close: "Cerrar", today: "Hoy", month: "Mes", week: "Semana", day: "Día", agenda: "Agenda", more: "más", noEvents: "No hay eventos próximos", noEventsHint: "Tus tareas y automatizaciones con fecha aparecerán aquí.", totalEvents: "eventos en total" },
@@ -119,6 +134,12 @@ export default function AgendaPage() {
     withEmail: 0,
     googleLike: 0,
   })
+  const [googleSignals, setGoogleSignals] = useState({
+    calendarConnected: false,
+    contactsConnected: false,
+    calendarSyncStatus: "",
+    contactsSyncStatus: "",
+  })
 
   const copy = COPY[language]
 
@@ -171,6 +192,23 @@ export default function AgendaPage() {
             return source.includes("google") || source.includes("merge")
           }).length,
         })
+        try {
+          const googleResponse = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+          const googlePayload = (await googleResponse.json().catch(() => ({}))) as GoogleStatusPayload
+          if (googleResponse.ok) {
+            const authorizedProducts = googlePayload?.connection?.authorized_products || []
+            const calendarState = googlePayload?.products?.calendar || googlePayload?.calendar || null
+            const contactsState = googlePayload?.products?.contacts || googlePayload?.contacts || null
+            setGoogleSignals({
+              calendarConnected: Boolean(calendarState?.enabled) || authorizedProducts.includes("calendar"),
+              contactsConnected: Boolean(contactsState?.enabled) || authorizedProducts.includes("contacts"),
+              calendarSyncStatus: String(calendarState?.sync_status || ""),
+              contactsSyncStatus: String(contactsState?.sync_status || ""),
+            })
+          }
+        } catch (googleError) {
+          console.error("No se pudo leer el estado Google de agenda:", googleError)
+        }
       } finally {
         setLoading(false)
       }
@@ -266,6 +304,29 @@ export default function AgendaPage() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600">puente Google</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{contactSignals.googleLike > 0 ? "Con senal" : "Pendiente"}</p>
           <p className="mt-1 text-xs text-slate-600">{contactSignals.googleLike} contacto{contactSignals.googleLike !== 1 ? "s" : ""} Google o fusionados visibles.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className={`rounded-2xl border p-4 ${googleSignals.calendarConnected ? "border-emerald-200 bg-emerald-50" : "border-sky-200 bg-sky-50"}`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Google Calendar</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.calendarConnected ? "Operativo" : "Pendiente"}</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {googleSignals.calendarConnected
+              ? `El runtime ya puede leer y escribir sobre Calendar. Estado: ${googleSignals.calendarSyncStatus || "ok"}.`
+              : "La agenda interna ya esta visible aqui. El siguiente salto es reflejar con mas fuerza el calendario Google conectado."}
+          </p>
+        </div>
+        <div className={`rounded-2xl border p-4 ${googleSignals.contactsConnected ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personas para agenda</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {googleSignals.contactsConnected ? "Contacts conectado" : contactSignals.googleLike > 0 ? "Con senal local" : "Base interna"}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            {googleSignals.contactsConnected
+              ? `Google Contacts ya puede alimentar reuniones, cumpleanos y contexto de personas. Estado: ${googleSignals.contactsSyncStatus || "ok"}.`
+              : "Mientras tanto, esta agenda sigue apoyandose en la base interna y en cualquier contacto fusionado ya visible."}
+          </p>
         </div>
       </div>
 

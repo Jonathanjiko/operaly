@@ -33,6 +33,20 @@ type CaseRow = {
 }
 
 type Toast = { open: boolean; msg: string; type: "success" | "error" | "info" }
+type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
+type GoogleProductState = {
+  enabled?: boolean | null
+  sync_status?: string | null
+}
+type GoogleStatusPayload = {
+  products?: Partial<Record<GoogleProduct, GoogleProductState>>
+  drive?: GoogleProductState
+  gmail?: GoogleProductState
+  contacts?: GoogleProductState
+  connection?: {
+    authorized_products?: string[] | null
+  } | null
+}
 
 const STATUS = [
   { value: "open", label: "Abierto", color: "#3B82F6", bg: "bg-blue-50", border: "border-blue-200", icon: FolderOpen },
@@ -190,6 +204,14 @@ export default function CasosPage() {
     googleLike: 0,
     withEmail: 0,
   })
+  const [googleSignals, setGoogleSignals] = useState({
+    gmailConnected: false,
+    driveConnected: false,
+    contactsConnected: false,
+    gmailSyncStatus: "",
+    driveSyncStatus: "",
+    contactsSyncStatus: "",
+  })
 
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
@@ -219,6 +241,26 @@ export default function CasosPage() {
         }).length,
         withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
       })
+      try {
+        const googleResponse = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+        const googlePayload = (await googleResponse.json().catch(() => ({}))) as GoogleStatusPayload
+        if (googleResponse.ok) {
+          const authorizedProducts = googlePayload?.connection?.authorized_products || []
+          const gmailState = googlePayload?.products?.gmail || googlePayload?.gmail || null
+          const driveState = googlePayload?.products?.drive || googlePayload?.drive || null
+          const contactsState = googlePayload?.products?.contacts || googlePayload?.contacts || null
+          setGoogleSignals({
+            gmailConnected: Boolean(gmailState?.enabled) || authorizedProducts.includes("gmail"),
+            driveConnected: Boolean(driveState?.enabled) || authorizedProducts.includes("drive"),
+            contactsConnected: Boolean(contactsState?.enabled) || authorizedProducts.includes("contacts"),
+            gmailSyncStatus: String(gmailState?.sync_status || ""),
+            driveSyncStatus: String(driveState?.sync_status || ""),
+            contactsSyncStatus: String(contactsState?.sync_status || ""),
+          })
+        }
+      } catch (googleError) {
+        console.error("No se pudo cargar estado Google de casos:", googleError)
+      }
       try {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
@@ -341,6 +383,35 @@ export default function CasosPage() {
                 {recentCaseEvents.length > 0 ? "Con señal" : "Pendiente"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">El backend ya refresca mejor el resumen y los hitos del caso.</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className={`rounded-2xl border p-4 ${googleSignals.contactsConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personas</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.contactsConnected ? "Contacts activo" : "Base interna"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {googleSignals.contactsConnected
+                  ? `Los casos ya pueden apoyarse en contactos Google o fusionados. Estado: ${googleSignals.contactsSyncStatus || "ok"}.`
+                  : `Todavia dependemos de la base interna y de ${contactSignals.googleLike} contacto${contactSignals.googleLike !== 1 ? "s" : ""} con senal Google local.`}
+              </p>
+            </div>
+            <div className={`rounded-2xl border p-4 ${googleSignals.gmailConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Correo del caso</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.gmailConnected ? "Gmail activo" : "Pendiente"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {googleSignals.gmailConnected
+                  ? `Ya puede escalar a correo operativo desde el runtime. Estado: ${googleSignals.gmailSyncStatus || "ok"}.`
+                  : `${contactSignals.withEmail} contacto${contactSignals.withEmail !== 1 ? "s" : ""} con email ya preparan el terreno para Gmail.`}
+              </p>
+            </div>
+            <div className={`rounded-2xl border p-4 ${googleSignals.driveConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Documentos del caso</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.driveConnected ? "Drive activo" : "Pendiente"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {googleSignals.driveConnected
+                  ? `Los casos ya pueden nutrirse con importacion y busqueda documental remota. Estado: ${googleSignals.driveSyncStatus || "ok"}.`
+                  : "La continuidad documental local ya existe, pero el puente operativo con Drive aun no se refleja aqui con toda su fuerza."}
+              </p>
             </div>
           </div>
           <div className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${contactSignals.googleLike > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
