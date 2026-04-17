@@ -11,12 +11,33 @@ export type ProfessionalRuntimeSnapshot = {
   recentUnderstandingRuns?: Array<Record<string, any>>
 }
 
+const PROFESSIONAL_RUNTIME_TIMEOUT_MS = 8000
+
+async function fetchWithProfessionalTimeout(input: string, init: RequestInit) {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), PROFESSIONAL_RUNTIME_TIMEOUT_MS)
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("El runtime profesional tardó demasiado. Supabase o el backend siguen degradados.")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export async function fetchProfessionalRuntime(): Promise<ProfessionalRuntimeSnapshot | null> {
   const session = await supabase.auth.getSession()
   const accessToken = session.data.session?.access_token || ""
   if (!accessToken) return null
 
-  const response = await fetch("/api/professional/runtime", {
+  const response = await fetchWithProfessionalTimeout("/api/professional/runtime", {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
