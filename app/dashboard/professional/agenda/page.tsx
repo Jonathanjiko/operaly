@@ -24,6 +24,12 @@ type GoogleStatusPayload = {
   } | null
 }
 
+type DashboardAgendaPayload = {
+  events?: Array<Record<string, any>>
+  google_calendar_count?: number
+  google_calendar_connected?: boolean
+}
+
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: { title: "Agenda", subtitle: "Vea su dia con claridad y sin enredos.", sync: "Se mantiene al dia con sus cambios", reminder: "Lo que programe aqui ayuda a que Operaly le recuerde, le acompane y no pierda contexto.", task: "Tarea", automation: "Automatizacion", dateTime: "Fecha y hora", close: "Cerrar", today: "Hoy", month: "Mes", week: "Semana", day: "Dia", agenda: "Agenda", more: "mas", noEvents: "No tiene nada proximo", noEventsHint: "Lo que programe aparecera aqui.", totalEvents: "eventos" },
   en: { title: "Agenda", subtitle: "Operational view of dates, reminders, and active automations.", sync: "Synced with Supabase and WhatsApp", reminder: "By contract, scheduled items respect timezone and use the default 10-minute reminder unless changed explicitly.", task: "Task", automation: "Automation", dateTime: "Date and time", close: "Close", today: "Today", month: "Month", week: "Week", day: "Day", agenda: "Agenda", more: "more", noEvents: "No upcoming events", noEventsHint: "Your dated tasks and automations will appear here.", totalEvents: "total events" },
@@ -53,6 +59,10 @@ function weekdayShort(date: Date, locale: string, timezone: string) {
 
 function monthLabel(date: Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { month: "long" }).format(date)
+}
+
+function asArray<T = Record<string, any>>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
 }
 
 function getWeekDates(source: Date) {
@@ -162,26 +172,98 @@ export default function AgendaPage() {
         const todayKey = dateKey(new Date(), resolvedTimezone)
         setSelectedKey(todayKey)
 
+        const session = await supabase.auth.getSession()
+        const accessToken = session.data.session?.access_token || ""
+        let usedDashboardAgenda = false
+
         const [{ data: tasks }, { data: recurring }, { data: contacts }] = await Promise.all([
           supabase.from("tasks").select("id,title,due_at").eq("client_id", currentClientId).not("due_at", "is", null),
           supabase.from("recurring_tasks").select("id,title,next_run").eq("client_id", currentClientId).not("next_run", "is", null),
           supabase.from("contacts").select("id,email,birthday,source").eq("client_id", currentClientId),
         ])
 
-        const mapped = [
-          ...(tasks || []).map((task) => {
-            const date = safeDate(task.due_at)
-            if (!date) return null
-            return { id: task.id, title: task.title || copy.task, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "task" as const, sourceAt: task.due_at }
-          }),
-          ...(recurring || []).map((automation) => {
-            const date = safeDate(automation.next_run)
-            if (!date) return null
-            return { id: automation.id, title: automation.title || copy.automation, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "automation" as const, sourceAt: automation.next_run }
-          }),
-        ].filter(Boolean) as EventItem[]
+        if (accessToken) {
+          try {
+            const dashboardAgendaResponse = await fetch("/api/dashboard/agenda", {
+              method: "GET",
+              headers: { Authorization: `Bearer ${accessToken}` },
+              cache: "no-store",
+            })
+            const dashboardAgendaPayload = (await dashboardAgendaResponse.json().catch(() => ({}))) as DashboardAgendaPayload
+            if (dashboardAgendaResponse.ok) {
+              const liveEvents = asArray<Record<string, any>>(dashboardAgendaPayload?.events)
+                .map((event) => {
+                  const sourceAt = String(
+                    event.scheduled_at ||
+                      event.start_at ||
+                      event.starts_at ||
+                      event.start_time ||
+                      event.due_at ||
+                      ""
+                  )
+                  const date = safeDate(sourceAt)
+                  if (!date) return null
+                  return {
+                    id: String(event.id || event.external_id || event.google_event_id || Math.random()),
+                    title: String(event.title || event.summary || event.name || copy.task),
+                    dateKey: dateKey(date, resolvedTimezone),
+                    timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone),
+                    hour:
+                      Number(
+                        new Intl.DateTimeFormat("en-US", {
+                          timeZone: resolvedTimezone,
+                          hour: "numeric",
+                          hour12: false,
+                        }).format(date)
+                      ) % 24,
+                    minute: Number(
+                      new Intl.DateTimeFormat("en-US", {
+                        timeZone: resolvedTimezone,
+                        minute: "2-digit",
+                      }).format(date)
+                    ),
+                    type: String(event.type || event.kind || event.source || "").toLowerCase().includes("automation")
+                      ? ("automation" as const)
+                      : ("task" as const),
+                    sourceAt,
+                  }
+                })
+                .filter(Boolean) as EventItem[]
 
-        setEvents(mapped)
+              if (liveEvents.length > 0) {
+                usedDashboardAgenda = true
+                setEvents(liveEvents)
+              }
+
+              setGoogleSignals((current) => ({
+                ...current,
+                calendarConnected:
+                  Boolean(dashboardAgendaPayload?.google_calendar_connected) ||
+                  Number(dashboardAgendaPayload?.google_calendar_count || 0) > 0,
+              }))
+            }
+          } catch (dashboardAgendaError) {
+            console.error("No se pudo leer la agenda auth-bound:", dashboardAgendaError)
+          }
+        }
+
+        if (!usedDashboardAgenda) {
+          const mapped = [
+            ...(tasks || []).map((task) => {
+              const date = safeDate(task.due_at)
+              if (!date) return null
+              return { id: task.id, title: task.title || copy.task, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "task" as const, sourceAt: task.due_at }
+            }),
+            ...(recurring || []).map((automation) => {
+              const date = safeDate(automation.next_run)
+              if (!date) return null
+              return { id: automation.id, title: automation.title || copy.automation, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "automation" as const, sourceAt: automation.next_run }
+            }),
+          ].filter(Boolean) as EventItem[]
+
+          setEvents(mapped)
+        }
+
         const contactRows = contacts || []
         setContactSignals({
           total: contactRows.length,

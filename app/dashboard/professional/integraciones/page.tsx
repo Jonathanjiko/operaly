@@ -543,7 +543,7 @@ export default function IntegracionesPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Conecte sus herramientas y deje todo listo para usarlo despues con Operaly.
+            Conecte sus herramientas y deje todo listo para verlo y usarlo despues con Operaly.
           </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">
@@ -562,7 +562,7 @@ export default function IntegracionesPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                Desde aqui deja lista su agenda, sus archivos, su correo y sus personas para usarlos luego por WhatsApp o desde este panel.
+                Desde aqui deja lista su agenda, sus archivos, su correo y sus personas para verlos en este panel y usarlos luego por WhatsApp.
               </p>
             </div>
             {googleEnabled ? (
@@ -605,7 +605,7 @@ export default function IntegracionesPage() {
       )}
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
-        Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez.
+        Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez 🙂
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -622,7 +622,7 @@ export default function IntegracionesPage() {
             {connectedProductsCount > 0 ? `${connectedProductsCount}/${INTEGRATIONS.length} conectadas` : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Aqui ve que parte de Google ya quedo lista en su cuenta.
+            Aqui ve que parte de Google ya quedo lista y visible en su cuenta.
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -745,7 +745,11 @@ export default function IntegracionesPage() {
                     : !googleServerConfigured
                       ? "Esta pantalla ya esta preparada, pero todavia falta que la conexion quede disponible."
                       : runtimeStatus === "connected"
-                        ? "Esta herramienta ya puede empezar a ayudarle desde Operaly segun el uso que necesite."
+                        ? integration.product === "calendar"
+                          ? "Lo que mueva en Google deberia verse al volver a abrir su agenda en Operaly."
+                          : integration.product === "drive"
+                            ? "Sus archivos remotos ya pueden quedar visibles aqui y traerse solo cuando hagan falta."
+                            : "Esta herramienta ya puede empezar a ayudarle desde Operaly segun el uso que necesite."
                         : "El siguiente paso es conectar este producto para empezar a usarlo desde Operaly."}
                 </div>
               </div>
@@ -769,7 +773,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Drive</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Buscar, traer y trabajar sus archivos sin salir de Operaly.
+              Ver sus archivos remotos y traer solo lo que quiera trabajar sin salir de Operaly.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -778,7 +782,7 @@ export default function IntegracionesPage() {
               <p className="text-sm font-semibold text-[#0F1F63]">Calendar</p>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Ver su agenda real y crear reuniones sin desordenar sus recordatorios.
+              Ver su agenda real y reflejar cambios hechos en Google sin desordenar sus recordatorios.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

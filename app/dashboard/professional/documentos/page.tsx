@@ -36,6 +36,21 @@ type DocumentRow = {
   case_id?: string | null
 }
 
+type DashboardDocumentsPayload = {
+  imported_documents?: Array<Record<string, any>>
+  remote_documents?: Array<Record<string, any>>
+}
+
+type RemoteDocumentRow = {
+  id: string
+  title: string | null
+  file_name: string | null
+  mime_type: string | null
+  modified_at: string | null
+  availability: string | null
+  source: string | null
+}
+
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: { title: "Documentos", subtitle: "Vea sus archivos, traigalos cuando haga falta y trabaje con Operaly sin perder el orden.", sync: "Todo lo importante deberia sentirse aqui y tambien en WhatsApp", reminder: "Un archivo puede quedarse solo visible o entrar de lleno al analisis cuando usted lo pida.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haga clic para seleccionar", dragActive: "Suelte para subir", dragHint: "PDF, Word, Excel, imagenes y comprimidos · max. 50 MB", empty: "Sin documentos", emptyHint: "Suba su primer archivo o envieselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamano", type: "Tipo", pages: "Paginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
   en: { title: "Documents", subtitle: "Your operational file base to query, associate, and reuse from WhatsApp.", sync: "Synced with Supabase and WhatsApp", reminder: "Processed files stay ready for analysis, case continuity, and later sending.", upload: "Upload file", uploading: "Uploading...", search: "Search documents...", drag: "Drag files here or click to select", dragActive: "Drop to upload", dragHint: "PDF, Word, Excel, images, archives · max 50 MB", empty: "No documents", emptyHint: "Upload your first file or send it to Operaly through WhatsApp.", processed: "Processed", processing: "Processing", error: "Error", close: "Close", delete: "Delete", deleteConfirm: "Delete this document?", size: "Size", type: "Type", pages: "Pages", chunks: "AI chunks", source: "Source", uploaded: "Uploaded", readyHint: "Operaly can already analyze and answer questions about this file.", total: "files", processedCount: "processed", mb: "MB" },
@@ -77,6 +92,10 @@ function formatSize(bytes: number | null) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1048576).toFixed(2)} MB`
+}
+
+function asArray<T = Record<string, any>>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
 }
 
 function FileIcon({ mime }: { mime: string | null }) {
@@ -224,6 +243,7 @@ export default function DocumentosPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [documents, setDocuments] = useState<DocumentRow[]>([])
+  const [remoteDocuments, setRemoteDocuments] = useState<RemoteDocumentRow[]>([])
   const [search, setSearch] = useState("")
   const [detail, setDetail] = useState<DocumentRow | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -239,6 +259,8 @@ export default function DocumentosPage() {
     setLoading(true)
     try {
       const clientId = await getCurrentClientId()
+      const session = await supabase.auth.getSession()
+      const accessToken = session.data.session?.access_token || ""
       const [{ data: client }, { data, error }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", clientId).maybeSingle(),
         supabase.from("documents").select("id,client_id,title,file_name,mime_type,file_size_bytes,page_count,chunk_count,status,source,channel,storage_path,created_at").eq("client_id", clientId).order("created_at", { ascending: false }),
@@ -248,7 +270,65 @@ export default function DocumentosPage() {
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
-      setDocuments((data || []) as DocumentRow[])
+      let usedDashboardDocuments = false
+
+      if (accessToken) {
+        try {
+          const dashboardDocumentsResponse = await fetch("/api/dashboard/documents", {
+            method: "GET",
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          })
+          const dashboardDocumentsPayload = (await dashboardDocumentsResponse.json().catch(() => ({}))) as DashboardDocumentsPayload
+          if (dashboardDocumentsResponse.ok) {
+            const importedDocuments = asArray<Record<string, any>>(dashboardDocumentsPayload?.imported_documents)
+            const remoteDocs = asArray<Record<string, any>>(dashboardDocumentsPayload?.remote_documents)
+
+            if (importedDocuments.length > 0) {
+              usedDashboardDocuments = true
+              setDocuments(
+                importedDocuments.map((doc) => ({
+                  id: String(doc.id || doc.document_id || Math.random()),
+                  client_id: String(doc.client_id || clientId),
+                  title: (doc.title as string | null) || null,
+                  file_name: (doc.file_name as string | null) || (doc.name as string | null) || null,
+                  mime_type: (doc.mime_type as string | null) || null,
+                  file_size_bytes: Number(doc.file_size_bytes ?? 0) || null,
+                  page_count: Number(doc.page_count ?? 0) || null,
+                  chunk_count: Number(doc.chunk_count ?? 0) || null,
+                  status: (doc.status as string | null) || (doc.availability as string | null) || null,
+                  source: (doc.source as string | null) || (doc.origin as string | null) || null,
+                  channel: (doc.channel as string | null) || null,
+                  storage_path: (doc.storage_path as string | null) || null,
+                  created_at: (doc.created_at as string | null) || (doc.imported_at as string | null) || null,
+                  embedding_status: (doc.embedding_status as string | null) || null,
+                  vision_status: (doc.vision_status as string | null) || null,
+                }))
+              )
+            } else {
+              setDocuments((data || []) as DocumentRow[])
+            }
+
+            setRemoteDocuments(
+              remoteDocs.map((doc) => ({
+                id: String(doc.id || doc.remote_id || doc.file_id || Math.random()),
+                title: (doc.title as string | null) || null,
+                file_name: (doc.file_name as string | null) || (doc.name as string | null) || null,
+                mime_type: (doc.mime_type as string | null) || null,
+                modified_at: (doc.modified_at as string | null) || (doc.updated_at as string | null) || null,
+                availability: (doc.availability as string | null) || "remote",
+                source: (doc.source as string | null) || "google_drive",
+              }))
+            )
+          }
+        } catch (dashboardDocumentsError) {
+          console.error("No se pudo leer documentos auth-bound:", dashboardDocumentsError)
+        }
+      }
+
+      if (!usedDashboardDocuments) {
+        setDocuments((data || []) as DocumentRow[])
+      }
       try {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
@@ -316,7 +396,7 @@ export default function DocumentosPage() {
   const totalMb = documents.reduce((sum, doc) => sum + (doc.file_size_bytes || 0), 0) / 1048576
   const processed = documents.filter((doc) => doc.status === "processed" || doc.status === "ready").length
   const sensitiveCandidates = documents.filter((doc) => looksSensitiveDocument(doc)).length
-  const driveDocuments = documents.filter((doc) => isDriveDocument(doc)).length
+  const driveDocuments = remoteDocuments.length || documents.filter((doc) => isDriveDocument(doc)).length
   const importedDocuments = documents.filter((doc) => isImportedDocument(doc)).length
   const indexedDocuments = documents.filter((doc) => String(doc.embedding_status || "").toLowerCase() === "indexed").length
   const visionReady = documents.filter((doc) => {
@@ -471,6 +551,44 @@ export default function DocumentosPage() {
           <p className="mt-1 text-xs text-slate-600">Sirve para distinguir lo remoto de lo que ya forma parte de Operaly.</p>
         </div>
       </div>
+
+      {remoteDocuments.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[#0F1F63]">Tambien visible desde Drive ☁️</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Esto ya se alcanza a ver desde su Drive, aunque todavia no se haya traido completo a Operaly.
+              </p>
+            </div>
+            <Link href="/dashboard/professional/integraciones" className="text-sm font-medium text-[#2563EB] hover:underline">
+              Revisar conexión
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {remoteDocuments.slice(0, 6).map((doc) => (
+              <div key={doc.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start gap-3">
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${FileBg({ mime: doc.mime_type })}`}>
+                    <FileIcon mime={doc.mime_type} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#0F1F63] line-clamp-2">
+                      {doc.title || doc.file_name || "Archivo remoto"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {doc.source || "google_drive"} · {doc.availability || "remote"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {doc.modified_at ? new Date(doc.modified_at).toLocaleDateString(locale) : "Visible para traer cuando haga falta"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div onDragOver={(event) => { event.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={(event) => { event.preventDefault(); setDragOver(false); handleUpload(event.dataTransfer.files) }} className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${dragOver ? "border-[#3B82F6] bg-[#EFF6FF]" : "border-border hover:border-[#3B82F6]/40 hover:bg-secondary/30"}`} onClick={() => inputRef.current?.click()}>
         <Upload className={`w-8 h-8 mx-auto mb-2 ${dragOver ? "text-[#3B82F6]" : "text-muted-foreground/40"}`} />

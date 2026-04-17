@@ -22,11 +22,7 @@ import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { labelForLanguage, localeFromLanguage } from "@/lib/runtime-locale"
-import {
-  getCurrentPeriodMonth,
-  getEffectivePlanCode,
-  type EffectiveLimitsRuntime,
-} from "@/lib/effective-limits"
+import { getCurrentPeriodMonth, getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type DashboardProfile = {
@@ -79,6 +75,35 @@ type RuntimeSnapshot = {
   phoneVerificationStatus: string
 }
 
+type DashboardRuntimePayload = {
+  client?: Record<string, any> | null
+  runtime?: Record<string, any> | null
+  voice?: Record<string, any> | null
+  preferences?: Record<string, string> | null
+  welcome?: Record<string, any> | null
+  contextState?: Record<string, any> | null
+  recentEvents?: Array<Record<string, any>>
+  recentUnderstandingRuns?: Array<Record<string, any>>
+  plan?: Record<string, any> | null
+  effective_plan_code?: string | null
+  usage?: Record<string, any> | null
+  limits?: Record<string, any> | null
+  feature_access?: Record<string, any> | null
+  offers?: Array<Record<string, any>>
+  addon_offers?: Array<Record<string, any>>
+}
+
+type DashboardAgendaPayload = {
+  events?: Array<Record<string, any>>
+  google_calendar_count?: number
+  google_calendar_connected?: boolean
+}
+
+type DashboardDocumentsPayload = {
+  imported_documents?: Array<Record<string, any>>
+  remote_documents?: Array<Record<string, any>>
+}
+
 function getUsagePercent(used: number, limit: number) {
   if (!limit || limit <= 0) return 0
   return Math.min((used / limit) * 100, 100)
@@ -120,7 +145,7 @@ function getUsageLevel(used: number, limit: number) {
     }
   }
 
-  if (percent >= 70) {
+  if (percent >= 75) {
     return {
       level: "warning",
       percent,
@@ -139,6 +164,43 @@ function getUsageLevel(used: number, limit: number) {
     toneClass: "border-[#D9E1EC] bg-white",
     badgeClass: "bg-[#E8F1FF] text-[#2563EB]",
   }
+}
+
+function normalizeOfferLabel(value: Record<string, any>) {
+  return String(
+    value.label ||
+      value.title ||
+      value.name ||
+      value.addon_code ||
+      value.offer_code ||
+      "Add-on disponible"
+  )
+    .replace(/_/g, " ")
+    .trim()
+}
+
+function normalizeOfferDetail(value: Record<string, any>) {
+  return String(
+    value.description ||
+      value.message ||
+      value.reason ||
+      value.summary ||
+      "Puede activarlo si quiere seguir avanzando sin friccion."
+  ).trim()
+}
+
+function describeThreshold(value: string) {
+  const normalized = String(value || "").toLowerCase()
+  if (normalized.includes("blocked") || normalized.includes("100")) {
+    return "Este mes ya toco tope en al menos un frente."
+  }
+  if (normalized.includes("critical") || normalized.includes("90")) {
+    return "Ya va muy cerca del tope y conviene ajustar antes de frenarse."
+  }
+  if (normalized.includes("warning") || normalized.includes("75")) {
+    return "El uso ya pide mirarlo con calma para no apretarse despues."
+  }
+  return "Su plan y sus recursos se estan leyendo desde la cuenta real."
 }
 
 function normalizeRuntimeStatus(value: string | null | undefined) {
@@ -193,6 +255,15 @@ function getRuntimeTone(status: string) {
   }
 }
 
+function toNumber(value: unknown) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function asArray<T = Record<string, any>>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
 export default function ProfessionalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<DashboardProfile | null>(null)
@@ -220,6 +291,12 @@ export default function ProfessionalDashboardPage() {
     recentEvents: [],
     recentUnderstandingRuns: [],
     phoneVerificationStatus: "",
+  })
+  const [commercialSignals, setCommercialSignals] = useState({
+    highestThreshold: "",
+    offers: [] as Array<Record<string, any>>,
+    googleCalendarCount: 0,
+    remoteDocumentsCount: 0,
   })
 
   const [greeting] = useState(() => {
@@ -283,31 +360,169 @@ export default function ProfessionalDashboardPage() {
           const today = new Date().toISOString().slice(0, 10)
           const session = await supabase.auth.getSession()
           const accessToken = session.data.session?.access_token || ""
+          let usedDashboardSnapshot = false
+          let receivedAgendaSnapshot = false
+          let receivedDocumentsSnapshot = false
 
           if (accessToken) {
             try {
-              const runtimeResponse = await fetch("/api/professional/runtime", {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                },
-                cache: "no-store",
-              })
+              const [dashboardRuntimeResponse, legacyRuntimeResponse, dashboardAgendaResponse, dashboardDocumentsResponse] =
+                await Promise.all([
+                  fetch("/api/dashboard/runtime", {
+                    method: "GET",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    cache: "no-store",
+                  }),
+                  fetch("/api/professional/runtime", {
+                    method: "GET",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    cache: "no-store",
+                  }),
+                  fetch("/api/dashboard/agenda", {
+                    method: "GET",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    cache: "no-store",
+                  }),
+                  fetch("/api/dashboard/documents", {
+                    method: "GET",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    cache: "no-store",
+                  }),
+                ])
 
-              const runtimePayload = await runtimeResponse.json().catch(() => ({}))
-              if (runtimeResponse.ok) {
+              const dashboardRuntimePayload = (await dashboardRuntimeResponse.json().catch(() => ({}))) as DashboardRuntimePayload
+              const legacyRuntimePayload = await legacyRuntimeResponse.json().catch(() => ({}))
+              const dashboardAgendaPayload = (await dashboardAgendaResponse.json().catch(() => ({}))) as DashboardAgendaPayload
+              const dashboardDocumentsPayload = (await dashboardDocumentsResponse.json().catch(() => ({}))) as DashboardDocumentsPayload
+
+              if (legacyRuntimeResponse.ok || dashboardRuntimeResponse.ok) {
+                const mergedRuntime = dashboardRuntimeResponse.ok ? dashboardRuntimePayload : legacyRuntimePayload
                 setRuntimeSnapshot({
-                  voice: runtimePayload?.voice || null,
-                  preferences: runtimePayload?.preferences || {},
-                  welcome: runtimePayload?.welcome || null,
-                  contextState: runtimePayload?.contextState || null,
-                  recentEvents: Array.isArray(runtimePayload?.recentEvents) ? runtimePayload.recentEvents : [],
-                  recentUnderstandingRuns: Array.isArray(runtimePayload?.recentUnderstandingRuns)
-                    ? runtimePayload.recentUnderstandingRuns
-                    : [],
-                  phoneVerificationStatus: String(
-                    runtimePayload?.client?.phone_verification_status || client?.phone_verification_status || ""
+                  voice: mergedRuntime?.voice || legacyRuntimePayload?.voice || null,
+                  preferences: (mergedRuntime?.preferences || legacyRuntimePayload?.preferences || {}) as Record<string, string>,
+                  welcome: mergedRuntime?.welcome || legacyRuntimePayload?.welcome || null,
+                  contextState: mergedRuntime?.contextState || legacyRuntimePayload?.contextState || null,
+                  recentEvents: asArray(mergedRuntime?.recentEvents || legacyRuntimePayload?.recentEvents),
+                  recentUnderstandingRuns: asArray(
+                    mergedRuntime?.recentUnderstandingRuns || legacyRuntimePayload?.recentUnderstandingRuns
                   ),
+                  phoneVerificationStatus: String(
+                    mergedRuntime?.client?.phone_verification_status ||
+                      legacyRuntimePayload?.client?.phone_verification_status ||
+                      client?.phone_verification_status ||
+                      ""
+                  ),
+                })
+              }
+
+              if (dashboardRuntimeResponse.ok) {
+                usedDashboardSnapshot = true
+                const effectivePlanCode =
+                  String(
+                    dashboardRuntimePayload?.plan?.effective_plan_code ||
+                      dashboardRuntimePayload?.effective_plan_code ||
+                      dashboardRuntimePayload?.limits?.effective_plan_code ||
+                      ""
+                  ) || null
+
+                const usage = dashboardRuntimePayload?.usage || {}
+                const limits = dashboardRuntimePayload?.limits || {}
+                const featureAccess = dashboardRuntimePayload?.feature_access || dashboardRuntimePayload?.limits || {}
+
+                setUsageSummary({
+                  messagesUsed: toNumber(
+                    usage?.messages_used ?? usage?.messages?.used ?? usage?.messages?.current ?? usage?.messages
+                  ),
+                  messagesLimit: toNumber(
+                    limits?.max_messages_month ?? usage?.messages_limit ?? usage?.messages?.limit
+                  ),
+                  audioUsed: toNumber(
+                    usage?.audio_minutes_used ?? usage?.audio?.used ?? usage?.voice_minutes?.used ?? usage?.audio
+                  ),
+                  audioLimit: toNumber(
+                    limits?.max_audio_minutes ?? usage?.audio_limit ?? usage?.audio?.limit ?? usage?.voice_minutes?.limit
+                  ),
+                  automationsUsed: toNumber(
+                    usage?.automations_used ?? usage?.automations?.used ?? usage?.automations
+                  ),
+                  automationsLimit: toNumber(
+                    limits?.max_automations ?? usage?.automations_limit ?? usage?.automations?.limit
+                  ),
+                })
+
+                setFeatureAccess({
+                  voiceEnabled: Boolean(featureAccess?.voice_enabled ?? false),
+                  googleEnabled: Boolean(featureAccess?.google_enabled ?? false),
+                  customAgentEnabled: Boolean(featureAccess?.custom_agent_enabled ?? false),
+                })
+
+                setProfile((current) =>
+                  current
+                    ? {
+                        ...current,
+                        planCode: effectivePlanCode || current.planCode,
+                        preferredLanguage:
+                          String(
+                            dashboardRuntimePayload?.client?.preferred_language ||
+                              dashboardRuntimePayload?.client?.default_language ||
+                              current.preferredLanguage ||
+                              "es"
+                          ) || "es",
+                      }
+                    : current
+                )
+
+                const agendaEvents = asArray<Record<string, any>>(dashboardAgendaPayload?.events)
+                const upcomingFromAgenda = agendaEvents
+                  .map((event) => ({
+                    id: String(event.id || event.external_id || event.google_event_id || Math.random()),
+                    title: String(event.title || event.summary || event.name || "Evento"),
+                    scheduledAt: String(
+                      event.scheduled_at ||
+                        event.start_at ||
+                        event.starts_at ||
+                        event.start_time ||
+                        event.due_at ||
+                        ""
+                    ),
+                    type: String(event.type || event.kind || event.source || "").toLowerCase().includes("automation")
+                      ? ("automation" as const)
+                      : ("task" as const),
+                  }))
+                  .filter((event) => Boolean(event.scheduledAt))
+                  .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+                  .slice(0, 5)
+
+                if (upcomingFromAgenda.length > 0) {
+                  receivedAgendaSnapshot = true
+                  setUpcomingEvents(upcomingFromAgenda)
+                }
+
+                const importedDocuments = asArray<Record<string, any>>(dashboardDocumentsPayload?.imported_documents)
+                if (importedDocuments.length > 0) {
+                  receivedDocumentsSnapshot = true
+                  setRecentDocuments(
+                    importedDocuments.slice(0, 5).map((doc) => ({
+                      id: String(doc.id || doc.document_id || Math.random()),
+                      title: (doc.title as string | null) || null,
+                      file_name: (doc.file_name as string | null) || (doc.name as string | null) || null,
+                      created_at: (doc.created_at as string | null) || (doc.imported_at as string | null) || null,
+                      status: (doc.status as string | null) || (doc.availability as string | null) || null,
+                    }))
+                  )
+                }
+
+                setCommercialSignals({
+                  highestThreshold: String(
+                    usage?.highest_threshold_crossed ||
+                      dashboardRuntimePayload?.plan?.highest_threshold_crossed ||
+                      ""
+                  ),
+                  offers: asArray(dashboardRuntimePayload?.offers || dashboardRuntimePayload?.addon_offers),
+                  googleCalendarCount: toNumber(
+                    dashboardAgendaPayload?.google_calendar_count || usage?.google_calendar_count
+                  ),
+                  remoteDocumentsCount: asArray(dashboardDocumentsPayload?.remote_documents).length,
                 })
               }
             } catch (runtimeError) {
@@ -315,61 +530,65 @@ export default function ProfessionalDashboardPage() {
             }
           }
 
-          const limitsResp = await supabase.rpc("get_my_effective_limits")
+          if (!usedDashboardSnapshot) {
+            const limitsResp = await supabase.rpc("get_my_effective_limits")
 
-          if (limitsResp.error) {
-            console.error("Error cargando get_my_effective_limits:", limitsResp.error)
+            if (limitsResp.error) {
+              console.error("Error cargando get_my_effective_limits:", limitsResp.error)
+            }
+
+            const effectiveLimits = (limitsResp.data || {}) as EffectiveLimitsRuntime
+            const effectivePlanCode = getEffectivePlanCode(effectiveLimits)
+
+            const usageResp = await supabase
+              .from("usage_monthly")
+              .select("messages_used, audio_minutes_used, automations_used")
+              .eq("client_id", clientId)
+              .eq("period_month", periodMonth)
+              .maybeSingle()
+
+            if (usageResp.error) {
+              console.error("Error cargando usage_monthly:", usageResp.error)
+            }
+
+            setUsageSummary({
+              messagesUsed: Number(usageResp.data?.messages_used ?? 0),
+              messagesLimit: Number(effectiveLimits.max_messages_month ?? 0),
+              audioUsed: Number(usageResp.data?.audio_minutes_used ?? 0),
+              audioLimit: Number(effectiveLimits.max_audio_minutes ?? 0),
+              automationsUsed: Number(usageResp.data?.automations_used ?? 0),
+              automationsLimit: Number(effectiveLimits.max_automations ?? 0),
+            })
+
+            setFeatureAccess({
+              voiceEnabled: Boolean(effectiveLimits.voice_enabled ?? false),
+              googleEnabled: Boolean(effectiveLimits.google_enabled ?? false),
+              customAgentEnabled: Boolean(effectiveLimits.custom_agent_enabled ?? false),
+            })
+
+            setProfile((current) =>
+              current
+                ? {
+                    ...current,
+                    planCode: effectivePlanCode,
+                  }
+                : current
+            )
           }
 
-          const effectiveLimits = (limitsResp.data || {}) as EffectiveLimitsRuntime
-          const effectivePlanCode = getEffectivePlanCode(effectiveLimits)
+          if (!receivedDocumentsSnapshot) {
+            const documentsResp = await supabase
+              .from("documents")
+              .select("id, title, file_name, created_at, status")
+              .eq("client_id", clientId)
+              .order("created_at", { ascending: false })
+              .limit(5)
 
-          const usageResp = await supabase
-            .from("usage_monthly")
-            .select("messages_used, audio_minutes_used, automations_used")
-            .eq("client_id", clientId)
-            .eq("period_month", periodMonth)
-            .maybeSingle()
-
-          if (usageResp.error) {
-            console.error("Error cargando usage_monthly:", usageResp.error)
-          }
-
-          setUsageSummary({
-            messagesUsed: Number(usageResp.data?.messages_used ?? 0),
-            messagesLimit: Number(effectiveLimits.max_messages_month ?? 0),
-            audioUsed: Number(usageResp.data?.audio_minutes_used ?? 0),
-            audioLimit: Number(effectiveLimits.max_audio_minutes ?? 0),
-            automationsUsed: Number(usageResp.data?.automations_used ?? 0),
-            automationsLimit: Number(effectiveLimits.max_automations ?? 0),
-          })
-
-          setFeatureAccess({
-            voiceEnabled: Boolean(effectiveLimits.voice_enabled ?? false),
-            googleEnabled: Boolean(effectiveLimits.google_enabled ?? false),
-            customAgentEnabled: Boolean(effectiveLimits.custom_agent_enabled ?? false),
-          })
-
-          setProfile((current) =>
-            current
-              ? {
-                  ...current,
-                  planCode: effectivePlanCode,
-                }
-              : current
-          )
-
-          const documentsResp = await supabase
-            .from("documents")
-            .select("id, title, file_name, created_at, status")
-            .eq("client_id", clientId)
-            .order("created_at", { ascending: false })
-            .limit(5)
-
-          if (documentsResp.error) {
-            console.error("Error cargando documents:", documentsResp.error)
-          } else {
-            setRecentDocuments((documentsResp.data || []) as RecentDocument[])
+            if (documentsResp.error) {
+              console.error("Error cargando documents:", documentsResp.error)
+            } else {
+              setRecentDocuments((documentsResp.data || []) as RecentDocument[])
+            }
           }
 
           const tasksResp = await supabase
@@ -391,40 +610,42 @@ export default function ProfessionalDashboardPage() {
             setTodayTasks(filteredTasks)
           }
 
-          const recurringResp = await supabase
-            .from("recurring_tasks")
-            .select("id, title, next_run, status")
-            .eq("client_id", clientId)
-            .eq("status", "active")
-            .order("next_run", { ascending: true })
-            .limit(5)
+          if (!receivedAgendaSnapshot) {
+            const recurringResp = await supabase
+              .from("recurring_tasks")
+              .select("id, title, next_run, status")
+              .eq("client_id", clientId)
+              .eq("status", "active")
+              .order("next_run", { ascending: true })
+              .limit(5)
 
-          if (recurringResp.error) {
-            console.error("Error cargando recurring_tasks:", recurringResp.error)
-          } else {
-            const mappedTaskEvents: UpcomingEvent[] = ((tasksResp.data || []) as any[])
-              .filter((task) => task.due_at)
-              .map((task) => ({
-                id: task.id,
-                title: task.title || "Tarea",
-                scheduledAt: String(task.due_at),
-                type: "task" as const,
-              }))
+            if (recurringResp.error) {
+              console.error("Error cargando recurring_tasks:", recurringResp.error)
+            } else {
+              const mappedTaskEvents: UpcomingEvent[] = ((tasksResp.data || []) as any[])
+                .filter((task) => task.due_at)
+                .map((task) => ({
+                  id: task.id,
+                  title: task.title || "Tarea",
+                  scheduledAt: String(task.due_at),
+                  type: "task" as const,
+                }))
 
-            const mappedRecurringEvents: UpcomingEvent[] = ((recurringResp.data || []) as any[])
-              .filter((item) => item.next_run)
-              .map((item) => ({
-                id: item.id,
-                title: item.title || "Automatización",
-                scheduledAt: String(item.next_run),
-                type: "automation" as const,
-              }))
+              const mappedRecurringEvents: UpcomingEvent[] = ((recurringResp.data || []) as any[])
+                .filter((item) => item.next_run)
+                .map((item) => ({
+                  id: item.id,
+                  title: item.title || "Automatización",
+                  scheduledAt: String(item.next_run),
+                  type: "automation" as const,
+                }))
 
-            const merged = [...mappedTaskEvents, ...mappedRecurringEvents]
-              .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
-              .slice(0, 5)
+              const merged = [...mappedTaskEvents, ...mappedRecurringEvents]
+                .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+                .slice(0, 5)
 
-            setUpcomingEvents(merged)
+              setUpcomingEvents(merged)
+            }
           }
         }
       } catch (err) {
@@ -481,6 +702,43 @@ export default function ProfessionalDashboardPage() {
   const automationsUsageState = useMemo(() => {
     return getUsageLevel(usageSummary.automationsUsed, usageSummary.automationsLimit)
   }, [usageSummary.automationsUsed, usageSummary.automationsLimit])
+
+  const commercialHighlights = useMemo(() => {
+    return [
+      {
+        label: "Plan aplicado",
+        value: getDisplayPlanName(profile?.planCode || "trial"),
+        detail: describeThreshold(commercialSignals.highestThreshold),
+      },
+      {
+        label: "Agenda Google",
+        value:
+          commercialSignals.googleCalendarCount > 0
+            ? `${commercialSignals.googleCalendarCount} visto${commercialSignals.googleCalendarCount === 1 ? "" : "s"}`
+            : "Sin cambios recientes",
+        detail:
+          commercialSignals.googleCalendarCount > 0
+            ? "Los cambios hechos en Google ya deben verse al entrar a agenda."
+            : "Si agrega algo desde Google, aqui deberia reflejarse al volver a abrir la agenda.",
+      },
+      {
+        label: "Drive visible",
+        value:
+          commercialSignals.remoteDocumentsCount > 0
+            ? `${commercialSignals.remoteDocumentsCount} archivo${commercialSignals.remoteDocumentsCount === 1 ? "" : "s"}`
+            : "Sin remotos",
+        detail:
+          commercialSignals.remoteDocumentsCount > 0
+            ? "Tiene archivos visibles desde Drive sin bajarlos todavia."
+            : "Cuando Drive este leyendo en vivo, aqui aparecera lo remoto sin ocupar espacio extra.",
+      },
+    ]
+  }, [
+    commercialSignals.googleCalendarCount,
+    commercialSignals.highestThreshold,
+    commercialSignals.remoteDocumentsCount,
+    profile?.planCode,
+  ])
 
   const quickLinks = useMemo(() => {
     const links = [
@@ -759,6 +1017,44 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {commercialHighlights.map((item) => (
+          <div key={item.label} className="rounded-2xl border border-[#D9E1EC] bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{item.label}</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{item.value}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {commercialSignals.offers.length > 0 && (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#0F1F63]">Ideas para seguir creciendo 💡</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Operaly ya detecto opciones utiles para que no se le corte el ritmo.
+              </p>
+            </div>
+            <Link href="/precios" className="text-sm font-semibold text-[#2563EB] hover:underline">
+              Ver planes y add-ons
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {commercialSignals.offers.slice(0, 4).map((offer, index) => (
+              <div
+                key={`${normalizeOfferLabel(offer)}-${index}`}
+                className="rounded-xl border border-white/70 bg-white/80 p-4"
+              >
+                <p className="text-sm font-semibold text-[#0F1F63]">{normalizeOfferLabel(offer)}</p>
+                <p className="mt-1 text-sm text-slate-600">{normalizeOfferDetail(offer)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {(messagesUsageState.level !== "normal" ||
         audioUsageState.level !== "normal" ||
