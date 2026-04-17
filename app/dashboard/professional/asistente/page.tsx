@@ -31,7 +31,7 @@ import {
   normalizeRuntimeStatus,
   type ProfessionalRuntimeSnapshot,
 } from "@/lib/professional-runtime"
-import { fetchDashboardRuntime } from "@/lib/dashboard-runtime"
+import { fetchDashboardJson, fetchDashboardRuntime } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -115,17 +115,59 @@ export default function AsistentePage() {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      const { data: client } = await supabase
-        .from("clients")
-        .select("profession_code, preferred_name, treatment, preferred_style, plan_code")
-        .eq("id", cid)
-        .maybeSingle()
+      let client:
+        | {
+            profession_code?: string | null
+            preferred_name?: string | null
+            treatment?: string | null
+            preferred_style?: string | null
+            plan_code?: string | null
+          }
+        | null = null
 
-      if (client) {
-        setProfessionCode(client.profession_code || "consultor")
-        setPreferredName(client.preferred_name || "")
-        setTreatment(client.treatment || "")
-        setStyle(client.preferred_style || "balanceado")
+      try {
+        const assistantPayload = await fetchDashboardJson<{
+          client?: {
+            profession_code?: string | null
+            preferred_name?: string | null
+            treatment?: string | null
+            preferred_style?: string | null
+            plan_code?: string | null
+          } | null
+          preferences?: Record<string, string>
+        }>("/api/dashboard/assistant")
+
+        client = assistantPayload?.client || null
+        if (client) {
+          setProfessionCode(client.profession_code || "consultor")
+          setPreferredName(client.preferred_name || "")
+          setTreatment(client.treatment || "")
+          setStyle(client.preferred_style || "balanceado")
+        }
+
+        const prefs = assistantPayload?.preferences || {}
+        setTone(prefs.assistant_tone || "profesional")
+        setCustomContext(prefs.assistant_context || "")
+        if (!client?.profession_code) setProfessionCode(prefs.assistant_profession || "consultor")
+        if (!client?.preferred_style) setStyle(prefs.assistant_style || "balanceado")
+      } catch (assistantError) {
+        console.error("No se pudo cargar snapshot auth-bound del asistente:", assistantError)
+      }
+
+      if (!client) {
+        const clientResponse = await supabase
+          .from("clients")
+          .select("profession_code, preferred_name, treatment, preferred_style, plan_code")
+          .eq("id", cid)
+          .maybeSingle()
+        client = clientResponse.data || null
+
+        if (client) {
+          setProfessionCode(client.profession_code || "consultor")
+          setPreferredName(client.preferred_name || "")
+          setTreatment(client.treatment || "")
+          setStyle(client.preferred_style || "balanceado")
+        }
       }
 
       let dashboardRuntimeLoaded = false
@@ -158,18 +200,20 @@ export default function AsistentePage() {
         setRuntimeSource("legacy")
       }
 
-      const { data: prefs } = await supabase
-        .from("client_preferences")
-        .select("pref_key, pref_value")
-        .eq("client_id", cid)
-        .in("pref_key", ["assistant_tone", "assistant_context", "assistant_profession", "assistant_style"])
+      if (!customContext) {
+        const { data: prefs } = await supabase
+          .from("client_preferences")
+          .select("pref_key, pref_value")
+          .eq("client_id", cid)
+          .in("pref_key", ["assistant_tone", "assistant_context", "assistant_profession", "assistant_style"])
 
-      prefs?.forEach((pref: any) => {
-        if (pref.pref_key === "assistant_tone") setTone(pref.pref_value || "profesional")
-        if (pref.pref_key === "assistant_context") setCustomContext(pref.pref_value || "")
-        if (pref.pref_key === "assistant_profession" && !client?.profession_code) setProfessionCode(pref.pref_value || "consultor")
-        if (pref.pref_key === "assistant_style" && !client?.preferred_style) setStyle(pref.pref_value || "balanceado")
-      })
+        prefs?.forEach((pref: any) => {
+          if (pref.pref_key === "assistant_tone") setTone(pref.pref_value || "profesional")
+          if (pref.pref_key === "assistant_context") setCustomContext(pref.pref_value || "")
+          if (pref.pref_key === "assistant_profession" && !client?.profession_code) setProfessionCode(pref.pref_value || "consultor")
+          if (pref.pref_key === "assistant_style" && !client?.preferred_style) setStyle(pref.pref_value || "balanceado")
+        })
+      }
 
       try {
         setRuntimeSnapshot(await fetchProfessionalRuntime())

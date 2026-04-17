@@ -21,7 +21,7 @@ import {
   normalizeRuntimeStatus,
   type ProfessionalRuntimeSnapshot,
 } from "@/lib/professional-runtime"
-import { fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
+import { fetchDashboardJson, fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getCurrentPeriodMonth } from "@/lib/effective-limits"
@@ -152,22 +152,44 @@ export default function VozPage() {
         setRuntimeSource("legacy")
       }
 
-      const { data: vs } = await supabase
-        .from("user_voice_settings")
-        .select("*")
-        .eq("client_id", cid)
-        .maybeSingle()
+      let voiceSnapshotLoaded = false
+      try {
+        const voicePayload = await fetchDashboardJson<{ voice?: Record<string, any> | null }>("/api/dashboard/voice")
+        const vs = voicePayload?.voice
+        if (vs) {
+          const savedVoiceId = String(vs.voice_id || "")
+          const builtInVoice = ELEVENLABS_VOICES.find((voice) => voice.id === savedVoiceId)
+          setVoiceId(builtInVoice ? savedVoiceId : "")
+          setCustomVoiceId(!builtInVoice && savedVoiceId ? savedVoiceId : "")
+          setUseCustomVoice(Boolean(savedVoiceId && !builtInVoice))
+          setToneStyle(vs.tone_style || "profesional")
+          setCallStyle(vs.call_style || "breve")
+          setPreferAudio(vs.prefer_audio_over_call ?? true)
+          setVoiceLang(vs.voice_language || "es")
+        }
+        voiceSnapshotLoaded = true
+      } catch (voiceError) {
+        console.error("No se pudo cargar snapshot auth-bound de voz:", voiceError)
+      }
 
-      if (vs) {
-        const savedVoiceId = String(vs.voice_id || "")
-        const builtInVoice = ELEVENLABS_VOICES.find((voice) => voice.id === savedVoiceId)
-        setVoiceId(builtInVoice ? savedVoiceId : "")
-        setCustomVoiceId(!builtInVoice && savedVoiceId ? savedVoiceId : "")
-        setUseCustomVoice(Boolean(savedVoiceId && !builtInVoice))
-        setToneStyle(vs.tone_style || "profesional")
-        setCallStyle(vs.call_style || "breve")
-        setPreferAudio(vs.prefer_audio_over_call ?? true)
-        setVoiceLang(vs.voice_language || "es")
+      if (!voiceSnapshotLoaded) {
+        const { data: vs } = await supabase
+          .from("user_voice_settings")
+          .select("*")
+          .eq("client_id", cid)
+          .maybeSingle()
+
+        if (vs) {
+          const savedVoiceId = String(vs.voice_id || "")
+          const builtInVoice = ELEVENLABS_VOICES.find((voice) => voice.id === savedVoiceId)
+          setVoiceId(builtInVoice ? savedVoiceId : "")
+          setCustomVoiceId(!builtInVoice && savedVoiceId ? savedVoiceId : "")
+          setUseCustomVoice(Boolean(savedVoiceId && !builtInVoice))
+          setToneStyle(vs.tone_style || "profesional")
+          setCallStyle(vs.call_style || "breve")
+          setPreferAudio(vs.prefer_audio_over_call ?? true)
+          setVoiceLang(vs.voice_language || "es")
+        }
       }
 
       try {

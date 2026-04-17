@@ -5,6 +5,7 @@ import { Briefcase, Check, ChevronDown, ChevronRight, FileText, List, Pencil, Pl
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { fetchDashboardJson } from "@/lib/dashboard-runtime"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
@@ -78,7 +79,7 @@ export default function ListasPage() {
   const [timezone, setTimezone] = useState("America/Lima")
   const [locale, setLocale] = useState("es-PE")
   const [feedback, setFeedback] = useState<Feedback>(null)
-  const [syncSource] = useState<"direct_rls">("direct_rls")
+  const [syncSource, setSyncSource] = useState<"auth_bound" | "direct_rls">("direct_rls")
 
   const copy = COPY[language]
 
@@ -169,19 +170,42 @@ export default function ListasPage() {
     if (!clientId) return
     setLoading(true)
     try {
+      let dashboardSnapshotLoaded = false
+      try {
+        const listsPayload = await fetchDashboardJson<{
+          lists?: ListRow[]
+          checklists?: ChecklistRow[]
+        }>("/api/dashboard/lists")
+        setLists((listsPayload?.lists || []).map((row) => ({ ...row, expanded: false })))
+        setChecklists((listsPayload?.checklists || []).map((row) => ({ ...row, expanded: false })))
+        setSyncSource("auth_bound")
+        dashboardSnapshotLoaded = true
+      } catch (dashboardError) {
+        console.error("No se pudo cargar snapshot auth-bound de listas:", dashboardError)
+      }
+
       const [{ data: lr, error: listsError }, { data: cr, error: checklistsError }, { data: profile }] = await Promise.all([
-        supabase.from("lists").select("id,title,list_type,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
-        supabase.from("checklists").select("id,title,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
+        dashboardSnapshotLoaded
+          ? Promise.resolve({ data: [], error: null } as any)
+          : supabase.from("lists").select("id,title,list_type,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
+        dashboardSnapshotLoaded
+          ? Promise.resolve({ data: [], error: null } as any)
+          : supabase.from("checklists").select("id,title,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", clientId).maybeSingle(),
       ])
-      if (listsError) throw listsError
-      if (checklistsError) throw checklistsError
+      if (!dashboardSnapshotLoaded) {
+        if (listsError) throw listsError
+        if (checklistsError) throw checklistsError
+      }
       const resolvedLanguage = resolveLanguageCode(profile?.preferred_language || profile?.language || "es")
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(profile?.timezone_auto || profile?.timezone || "America/Lima")
-      setLists((lr || []).map((row) => ({ ...row, expanded: false })))
-      setChecklists((cr || []).map((row) => ({ ...row, expanded: false })))
+      if (!dashboardSnapshotLoaded) {
+        setLists((lr || []).map((row) => ({ ...row, expanded: false })))
+        setChecklists((cr || []).map((row) => ({ ...row, expanded: false })))
+        setSyncSource("direct_rls")
+      }
     } catch (error) {
       console.error(error)
       showFeedback("error", explainSaveError(error))
@@ -353,9 +377,9 @@ export default function ListasPage() {
           <p className="mt-1 text-xs text-slate-500">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
           <p className="mt-1 text-xs text-[#5F6B7A]">{copy.reminder}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {syncSource === "direct_rls"
-              ? "Esta vista lee directo desde su cuenta por RLS. Si una lista creada en WhatsApp no aparece, el hueco ya no es solo visual: conviene revisar sesión, JWT o backend."
-              : ""}
+            {syncSource === "auth_bound"
+              ? "Esta vista ya prioriza el snapshot auth-bound para reflejar mejor lo que Operaly guarda por WhatsApp."
+              : "Esta vista lee directo desde su cuenta por RLS. Si una lista creada en WhatsApp no aparece, el hueco ya no es solo visual: conviene revisar sesión, JWT o backend."}
           </p>
         </div>
         <div className="flex gap-2">

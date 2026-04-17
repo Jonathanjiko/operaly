@@ -45,3 +45,24 @@ export async function fetchDashboardRuntime(): Promise<DashboardRuntimePayload |
 
   return payload
 }
+
+export async function fetchDashboardJson<T = Record<string, any>>(path: string): Promise<T | null> {
+  const session = await supabase.auth.getSession()
+  const accessToken = session.data.session?.access_token || ""
+  if (!accessToken) return null
+
+  const response = await fetch(path, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as T & { detail?: string; error?: string }
+  if (!response.ok) {
+    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar el dashboard auth-bound."))
+  }
+
+  return payload as T
+}
