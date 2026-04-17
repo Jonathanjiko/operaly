@@ -37,7 +37,7 @@ type DocumentRow = {
 }
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
-  es: { title: "Documentos", subtitle: "Vea sus archivos, tráigalos cuando haga falta y trabájelos con Operaly.", sync: "Todo lo importante debe reflejarse aquí y en WhatsApp", reminder: "Un archivo puede quedarse como vista rápida o entrar de lleno al análisis cuando usted lo pida.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haz clic para seleccionar", dragActive: "Suelta para subir", dragHint: "PDF, Word, Excel, imágenes y comprimidos · máx. 50 MB", empty: "Sin documentos", emptyHint: "Suba su primer archivo o envíeselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamaño", type: "Tipo", pages: "Páginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
+  es: { title: "Documentos", subtitle: "Vea sus archivos, traigalos cuando haga falta y trabaje con Operaly sin perder el orden.", sync: "Todo lo importante deberia sentirse aqui y tambien en WhatsApp", reminder: "Un archivo puede quedarse solo visible o entrar de lleno al analisis cuando usted lo pida.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haga clic para seleccionar", dragActive: "Suelte para subir", dragHint: "PDF, Word, Excel, imagenes y comprimidos · max. 50 MB", empty: "Sin documentos", emptyHint: "Suba su primer archivo o envieselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamano", type: "Tipo", pages: "Paginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
   en: { title: "Documents", subtitle: "Your operational file base to query, associate, and reuse from WhatsApp.", sync: "Synced with Supabase and WhatsApp", reminder: "Processed files stay ready for analysis, case continuity, and later sending.", upload: "Upload file", uploading: "Uploading...", search: "Search documents...", drag: "Drag files here or click to select", dragActive: "Drop to upload", dragHint: "PDF, Word, Excel, images, archives · max 50 MB", empty: "No documents", emptyHint: "Upload your first file or send it to Operaly through WhatsApp.", processed: "Processed", processing: "Processing", error: "Error", close: "Close", delete: "Delete", deleteConfirm: "Delete this document?", size: "Size", type: "Type", pages: "Pages", chunks: "AI chunks", source: "Source", uploaded: "Uploaded", readyHint: "Operaly can already analyze and answer questions about this file.", total: "files", processedCount: "processed", mb: "MB" },
   pt: { title: "Documentos", subtitle: "Sua base operacional de arquivos para consultar, associar e reutilizar pelo WhatsApp.", sync: "Sincronizado com Supabase e WhatsApp", reminder: "Arquivos processados ficam prontos para análise, continuidade por caso e envios futuros.", upload: "Enviar arquivo", uploading: "Enviando...", search: "Buscar documentos...", drag: "Arraste arquivos ou clique para selecionar", dragActive: "Solte para enviar", dragHint: "PDF, Word, Excel, imagens e compactados · máx. 50 MB", empty: "Sem documentos", emptyHint: "Envie seu primeiro arquivo ou mande para a Operaly pelo WhatsApp.", processed: "Processado", processing: "Processando", error: "Erro", close: "Fechar", delete: "Excluir", deleteConfirm: "Excluir este documento?", size: "Tamanho", type: "Tipo", pages: "Páginas", chunks: "Chunks IA", source: "Origem", uploaded: "Enviado", readyHint: "A Operaly já pode analisar e responder sobre este arquivo.", total: "arquivos", processedCount: "processados", mb: "MB" },
   de: { title: "Dokumente", subtitle: "Deine operative Dateibasis zum Nachschlagen, Verknüpfen und Wiederverwenden über WhatsApp.", sync: "Mit Supabase und WhatsApp synchronisiert", reminder: "Verarbeitete Dateien bleiben bereit für Analyse, Fall-Kontinuität und späteres Senden.", upload: "Datei hochladen", uploading: "Lädt hoch...", search: "Dokumente suchen...", drag: "Dateien hierher ziehen oder klicken", dragActive: "Zum Hochladen loslassen", dragHint: "PDF, Word, Excel, Bilder, Archive · max. 50 MB", empty: "Keine Dokumente", emptyHint: "Lade deine erste Datei hoch oder sende sie an Operaly per WhatsApp.", processed: "Verarbeitet", processing: "In Verarbeitung", error: "Fehler", close: "Schließen", delete: "Löschen", deleteConfirm: "Dieses Dokument löschen?", size: "Größe", type: "Typ", pages: "Seiten", chunks: "KI-Chunks", source: "Quelle", uploaded: "Hochgeladen", readyHint: "Operaly kann diese Datei bereits analysieren und Fragen dazu beantworten.", total: "Dateien", processedCount: "verarbeitet", mb: "MB" },
@@ -352,16 +352,16 @@ export default function DocumentosPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-          <h2 className="text-lg font-semibold text-[#0F1F63]">Continuidad documental</h2>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Documentos listos para usar 📂</h2>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Aquí debería ver tanto lo que ya está dentro de Operaly como lo que viene de integraciones y puede traer cuando lo necesite.
+          Aqui deberia ver tanto lo que ya esta dentro de Operaly como lo que solo esta visible desde integraciones y puede traer cuando lo necesite.
         </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">En Operaly</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ya dentro de Operaly</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{documents.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Archivos ya visibles dentro de su cuenta.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos que ya forman parte de su base documental.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para revisar</p>
@@ -378,14 +378,14 @@ export default function DocumentosPage() {
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con análisis listo</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Con analisis listo</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{indexedDocuments}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Archivos con análisis más completo para búsqueda y respuestas.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Archivos con lectura mas completa para busqueda y respuestas.</p>
             </div>
             <div className="rounded-2xl border border-border bg-white/80 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Imágenes entendidas</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Imagenes entendidas</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{visionReady}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Imágenes donde Operaly ya logró sacar contenido útil.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Imagenes donde Operaly ya logro sacar contenido util.</p>
             </div>
           </div>
         </div>
@@ -393,12 +393,12 @@ export default function DocumentosPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-[#0F1F63]">Movimientos recientes</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Aquí ve si hubo importaciones, análisis o uso reciente de documentos.
+            Aqui ve si hubo importaciones, analisis o uso reciente de documentos.
           </p>
           <div className="mt-4 space-y-3">
             {recentDocumentEvents.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
-                Aún no hay movimientos recientes de documentos.
+                Aun no hay movimientos recientes de documentos.
               </div>
             ) : (
               recentDocumentEvents.map((event) => (
@@ -420,9 +420,9 @@ export default function DocumentosPage() {
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Contenido sensible</h2>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Contenido sensible 🔒</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              Si un archivo resulta sensible, debe terminar también en el baúl privado para que quede mejor separado del resto.
+              Si un archivo resulta sensible, deberia terminar tambien en el baul privado para que quede mejor separado del resto.
             </p>
           </div>
           <Link
@@ -449,26 +449,26 @@ export default function DocumentosPage() {
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Aquí debería verse mejor qué se queda en documentos y qué se manda al baúl.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Aqui deberia verse mejor que se queda en documentos y que se manda al baul.</p>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Google Drive visibles</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Solo visibles desde Drive</p>
           <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{driveDocuments}</p>
-          <p className="mt-1 text-xs text-slate-600">Archivos que ya muestran origen en Drive dentro de esta vista.</p>
+          <p className="mt-1 text-xs text-slate-600">Archivos que ya se alcanzan a ver aqui aunque todavia no se hayan traido completos.</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Traídos a Operaly</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Traidos a Operaly</p>
           <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{importedDocuments}</p>
-          <p className="mt-1 text-xs text-slate-600">Archivos que ya fueron bajados o incorporados para análisis completo.</p>
+          <p className="mt-1 text-xs text-slate-600">Archivos que ya fueron traidos para lectura, analisis o reutilizacion completa.</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Pendiente de puente</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Falta traer si hace falta</p>
           <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{Math.max(driveDocuments - importedDocuments, 0)}</p>
-          <p className="mt-1 text-xs text-slate-600">Sirve para mostrar mejor lo remoto frente a lo que ya está dentro de Operaly.</p>
+          <p className="mt-1 text-xs text-slate-600">Sirve para distinguir lo remoto de lo que ya forma parte de Operaly.</p>
         </div>
       </div>
 

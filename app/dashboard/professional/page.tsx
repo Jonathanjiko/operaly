@@ -89,8 +89,8 @@ function getUsageLevel(used: number, limit: number) {
     return {
       level: "normal",
       percent: 0,
-      title: "Uso dentro del plan",
-      message: "Tu consumo está bajo control.",
+      title: "Todo en orden 🙂",
+      message: "Su consumo se mantiene dentro de lo previsto.",
       toneClass: "border-[#D9E1EC] bg-white",
       badgeClass: "bg-[#E8F1FF] text-[#2563EB]",
     }
@@ -102,8 +102,8 @@ function getUsageLevel(used: number, limit: number) {
     return {
       level: "blocked",
       percent,
-      title: "Límite alcanzado",
-      message: "Ya consumiste el 100% de este recurso.",
+      title: "Límite alcanzado 🚨",
+      message: "Este recurso ya llegó al tope del plan actual.",
       toneClass: "border-[#FCA5A5] bg-[#FEF2F2]",
       badgeClass: "bg-[#FEE2E2] text-[#DC2626]",
     }
@@ -113,8 +113,8 @@ function getUsageLevel(used: number, limit: number) {
     return {
       level: "critical",
       percent,
-      title: "Uso crítico",
-      message: "Estás por llegar al límite de tu plan.",
+      title: "Muy cerca del límite ⚠️",
+      message: "Conviene revisar un add-on o un cambio de plan antes de frenarse.",
       toneClass: "border-[#FCD34D] bg-[#FFFBEB]",
       badgeClass: "bg-[#FEF3C7] text-[#D97706]",
     }
@@ -124,8 +124,8 @@ function getUsageLevel(used: number, limit: number) {
     return {
       level: "warning",
       percent,
-      title: "Atención",
-      message: "Ya consumiste una parte importante de tu plan.",
+      title: "Va avanzando 👀",
+      message: "Ya se usó una parte importante de este recurso.",
       toneClass: "border-[#BFDBFE] bg-[#EFF6FF]",
       badgeClass: "bg-[#DBEAFE] text-[#2563EB]",
     }
@@ -134,8 +134,8 @@ function getUsageLevel(used: number, limit: number) {
   return {
     level: "normal",
     percent,
-    title: "Uso dentro del plan",
-    message: "Tu consumo está bajo control.",
+    title: "Todo en orden 🙂",
+    message: "Su consumo se mantiene dentro de lo previsto.",
     toneClass: "border-[#D9E1EC] bg-white",
     badgeClass: "bg-[#E8F1FF] text-[#2563EB]",
   }
@@ -440,11 +440,11 @@ export default function ProfessionalDashboardPage() {
   const statCards = useMemo(() => {
     return [
       {
-        label: "Plan",
+        label: "Plan activo",
         value: getDisplayPlanName(profile?.planCode),
         icon: Sparkles,
         color: "#3B82F6",
-        change: "Cuenta activa",
+        change: "Aplicado hoy en su cuenta",
       },
       {
         label: "Profesión",
@@ -487,25 +487,25 @@ export default function ProfessionalDashboardPage() {
       {
         href: "/dashboard/professional/documentos",
         title: "Documentos",
-        description: "Sube, revisa y organiza tus archivos",
+        description: "Suba, revise y organice sus archivos",
         icon: FileText,
       },
       {
         href: "/dashboard/professional/agenda",
         title: "Agenda",
-        description: "Visualiza tus citas y eventos programados",
+        description: "Vea sus citas y eventos programados",
         icon: Calendar,
       },
       {
         href: "/dashboard/professional/tareas",
         title: "Pendientes",
-        description: "Trabaja tus tareas como tablero de control",
+        description: "Trabaje sus tareas como tablero de control",
         icon: CheckSquare,
       },
       {
         href: "/dashboard/professional/automatizaciones",
         title: "Automatizaciones",
-        description: "Programa acciones y seguimientos automáticos",
+        description: "Programe acciones y seguimientos automáticos",
         icon: Zap,
       },
     ]
@@ -514,7 +514,7 @@ export default function ProfessionalDashboardPage() {
       links.unshift({
         href: "/dashboard/professional/asistente",
         title: "Asistente",
-        description: "Personaliza el comportamiento de tu agente",
+        description: "Personalice cómo debe hablarle y acompañarle",
         icon: Bot,
       })
     }
@@ -523,7 +523,7 @@ export default function ProfessionalDashboardPage() {
       links.push({
         href: "/dashboard/professional/voz",
         title: "Voz",
-        description: "Configura voz, tonos y estilo de llamadas",
+        description: "Configure voz, tono y estilo de llamadas",
         icon: Mic,
       })
     }
@@ -532,7 +532,7 @@ export default function ProfessionalDashboardPage() {
       links.push({
         href: "/dashboard/professional/integraciones",
         title: "Integraciones",
-        description: "Conecta Google Calendar, Drive y más",
+        description: "Conecte Calendar, Drive, Gmail y más",
         icon: Plug,
       })
     }
@@ -693,8 +693,8 @@ export default function ProfessionalDashboardPage() {
 
       <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
         <div className="mb-4">
-          <p className="text-sm font-medium text-muted-foreground">Uso del plan</p>
-          <h3 className="text-lg font-semibold text-[#0F1F63]">Consumo mensual</h3>
+          <p className="text-sm font-medium text-muted-foreground">Plan y consumo</p>
+          <h3 className="text-lg font-semibold text-[#0F1F63]">Cómo va su cuenta este mes</h3>
         </div>
 
         <div className="space-y-4">
@@ -808,6 +808,16 @@ export default function ProfessionalDashboardPage() {
                     item.label !== "Audio" || featureAccess.voiceEnabled
                   )}
                 </p>
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/70 px-3 py-2">
+                  <p className="text-xs text-slate-600">
+                    {item.state.level === "critical" || item.state.level === "blocked"
+                      ? "Puede revisar add-ons o subir de plan para no frenarse."
+                      : "Todavía hay margen, pero ya conviene mirar cómo viene el mes."}
+                  </p>
+                  <Link href="/precios" className="shrink-0 text-xs font-semibold text-[#2563EB] hover:underline">
+                    Ver planes
+                  </Link>
+                </div>
               </div>
             ))}
         </div>
@@ -1049,6 +1059,30 @@ export default function ProfessionalDashboardPage() {
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">número normalizado</p>
               <p className="mt-2 text-sm font-medium text-[#0F1F63]">{profile?.phoneNormalized || "-"}</p>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Plan aplicado</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(profile?.planCode)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Este es el plan que hoy se está usando para calcular funciones y consumo.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avisos</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+              {messagesUsageState.level !== "normal" || audioUsageState.level !== "normal" || automationsUsageState.level !== "normal"
+                ? "Revise consumo 👀"
+                : "Todo al día 🙂"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Aquí debería sentirse cuando su cuenta ya se acerca a un límite importante.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Crecimiento</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+              {featureAccess.googleEnabled || featureAccess.voiceEnabled || featureAccess.customAgentEnabled ? "Con extras ✨" : "Base"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Si llega al límite, aquí debería notarse cuándo conviene sumar un add-on.</p>
           </div>
         </div>
       </div>
