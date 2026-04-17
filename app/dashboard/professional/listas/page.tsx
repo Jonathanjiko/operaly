@@ -80,6 +80,7 @@ export default function ListasPage() {
   const [locale, setLocale] = useState("es-PE")
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [syncSource, setSyncSource] = useState<"auth_bound" | "direct_rls">("direct_rls")
+  const [operationalWarning, setOperationalWarning] = useState("")
 
   const copy = COPY[language]
 
@@ -169,6 +170,7 @@ export default function ListasPage() {
   const loadAll = useCallback(async () => {
     if (!clientId) return
     setLoading(true)
+    setOperationalWarning("")
     try {
       let dashboardSnapshotLoaded = false
       try {
@@ -182,6 +184,7 @@ export default function ListasPage() {
         dashboardSnapshotLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar snapshot auth-bound de listas:", dashboardError)
+        setOperationalWarning("La lectura auth-bound de listas no respondió a tiempo. Se muestra la mejor lectura directa disponible.")
       }
 
       const [{ data: lr, error: listsError }, { data: cr, error: checklistsError }, { data: profile }] = await Promise.all([
@@ -387,6 +390,12 @@ export default function ListasPage() {
           <Button onClick={() => setShowNew((prev) => !prev)} className="rounded-xl bg-[#3B82F6] text-white hover:bg-[#2563EB]"><Plus className="mr-1.5 h-4 w-4" />{copy.new}</Button>
         </div>
       </div>
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
 
       {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm ${feedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{feedback.message}</div> : null}
 

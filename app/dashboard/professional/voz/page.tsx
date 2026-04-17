@@ -71,6 +71,7 @@ export default function VozPage() {
   const [lastSavedAt, setLastSavedAt] = useState("")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [operationalWarning, setOperationalWarning] = useState("")
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
@@ -116,6 +117,7 @@ export default function VozPage() {
   const loadConfig = async () => {
     setLoading(true)
     setLoadError("")
+    setOperationalWarning("")
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
@@ -141,6 +143,7 @@ export default function VozPage() {
         dashboardRuntimeLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar dashboard runtime para voz:", dashboardError)
+        setOperationalWarning("El runtime auth-bound de voz no respondió a tiempo. Se muestra la mejor señal local disponible.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -170,6 +173,7 @@ export default function VozPage() {
         voiceSnapshotLoaded = true
       } catch (voiceError) {
         console.error("No se pudo cargar snapshot auth-bound de voz:", voiceError)
+        setOperationalWarning((current) => current || "La lectura auth-bound de voz sigue degradada. La pantalla cayó a una lectura más frágil.")
       }
 
       if (!voiceSnapshotLoaded) {
@@ -196,6 +200,7 @@ export default function VozPage() {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
         console.error("No se pudo cargar runtime de voz:", runtimeError)
+        setOperationalWarning((current) => current || "No se pudo confirmar el runtime profesional de voz en tiempo útil.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -243,7 +248,6 @@ export default function VozPage() {
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
       setSaveError(err.message || "No se pudo guardar.")
-      alert(err.message || "No se pudo guardar.")
     } finally {
       setSaving(false)
     }
@@ -344,6 +348,12 @@ export default function VozPage() {
               : "Esta vista todavía está preparando la lectura operativa de voz."}
         </p>
       </div>
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">

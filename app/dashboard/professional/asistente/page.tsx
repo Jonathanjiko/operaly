@@ -93,6 +93,7 @@ export default function AsistentePage() {
   const [lastSavedAt, setLastSavedAt] = useState("")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [operationalWarning, setOperationalWarning] = useState("")
 
   useEffect(() => {
     loadConfig()
@@ -111,6 +112,7 @@ export default function AsistentePage() {
   const loadConfig = async () => {
     setLoading(true)
     setLoadError("")
+    setOperationalWarning("")
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
@@ -152,6 +154,7 @@ export default function AsistentePage() {
         if (!client?.preferred_style) setStyle(prefs.assistant_style || "balanceado")
       } catch (assistantError) {
         console.error("No se pudo cargar snapshot auth-bound del asistente:", assistantError)
+        setOperationalWarning("La lectura auth-bound del asistente no respondió a tiempo. Se muestra la mejor señal local disponible.")
       }
 
       if (!client) {
@@ -188,6 +191,7 @@ export default function AsistentePage() {
         dashboardRuntimeLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar dashboard runtime del asistente:", dashboardError)
+        setOperationalWarning((current) => current || "El runtime auth-bound del asistente sigue degradado.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -219,6 +223,7 @@ export default function AsistentePage() {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
         console.error("No se pudo cargar runtime del asistente:", runtimeError)
+        setOperationalWarning((current) => current || "No se pudo confirmar el runtime profesional del asistente en tiempo útil.")
       }
     } catch (err) {
       console.error(err)
@@ -257,7 +262,6 @@ export default function AsistentePage() {
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
       setSaveError(err.message || "No se pudo guardar.")
-      alert(err.message || "No se pudo guardar.")
     } finally {
       setSaving(false)
     }
@@ -359,6 +363,12 @@ export default function AsistentePage() {
               : "Esta vista todavía está preparando la lectura operativa del asistente."}
         </p>
       </div>
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
