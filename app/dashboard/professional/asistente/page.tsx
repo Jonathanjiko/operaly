@@ -98,6 +98,16 @@ export default function AsistentePage() {
     loadConfig()
   }, [])
 
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }
+  }
+
   const loadConfig = async () => {
     setLoading(true)
     setLoadError("")
@@ -174,35 +184,28 @@ export default function AsistentePage() {
     }
   }
 
-  const upsertPref = async (key: string, value: string) => {
-    const { error } = await supabase.from("client_preferences").upsert(
-      { client_id: clientId, pref_key: key, pref_value: value, source: "dashboard", updated_at: new Date().toISOString() },
-      { onConflict: "client_id,pref_key" },
-    )
-    if (error) throw error
-  }
-
   const handleSave = async () => {
     if (!clientId) return
     setSaving(true)
     setSaveError("")
     try {
-      const { error: clientUpdateError } = await supabase
-        .from("clients")
-        .update({
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/professional/assistant", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
           profession_code: professionCode,
           preferred_name: preferredName.trim() || null,
           treatment: treatment || null,
-          preferred_style: style,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", clientId)
-      if (clientUpdateError) throw clientUpdateError
-
-      await upsertPref("assistant_tone", tone)
-      await upsertPref("assistant_context", customContext.trim())
-      await upsertPref("assistant_profession", professionCode)
-      await upsertPref("assistant_style", style)
+          tone,
+          style,
+          assistant_context: customContext.trim(),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(String(payload?.error || payload?.detail || "No se pudo guardar el asistente."))
+      }
 
       await loadConfig()
       setLastSavedAt(new Date().toISOString())

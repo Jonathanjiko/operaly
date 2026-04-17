@@ -74,6 +74,16 @@ export default function VozPage() {
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }
+  }
+
   useEffect(() => {
     loadConfig()
   }, [])
@@ -188,21 +198,23 @@ export default function VozPage() {
     try {
       const resolvedVoiceId = useCustomVoice ? customVoiceId.trim() : voiceId
       const voice = ELEVENLABS_VOICES.find((item) => item.id === resolvedVoiceId)
-      const { error } = await supabase.from("user_voice_settings").upsert(
-        {
-          client_id: clientId,
-          voice_provider: "elevenlabs",
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/professional/voice", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
           voice_id: resolvedVoiceId || null,
           voice_name: voice?.name || "custom",
           voice_language: voiceLang || "es",
           tone_style: toneStyle,
           call_style: callStyle,
           prefer_audio_over_call: preferAudio,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "client_id" },
-      )
-      if (error) throw error
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(String(payload?.error || payload?.detail || "No se pudo guardar la voz."))
+      }
       await loadConfig()
       setLastSavedAt(new Date().toISOString())
       setSaved(true)
