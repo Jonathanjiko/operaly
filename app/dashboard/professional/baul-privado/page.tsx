@@ -483,17 +483,17 @@ export default function BaulPrivadoPage() {
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{copy.runtimeHint}</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que ya ve</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que ya está operativo</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-              {errorMessage ? copy.pending : copy.ready}
+              {errorMessage ? copy.pending : recentVaultEvents.length > 0 || items.length > 0 ? copy.ready : copy.pending}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
                 {errorMessage || "Ya puede revisar lo que está separado para su cuenta."}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que falta cerrar</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{copy.pending}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que sigue afinándose</p>
+            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Coordinación multi-módulo</p>
             <p className="mt-1 text-xs text-muted-foreground">{copy.contract}</p>
           </div>
         </div>
