@@ -43,13 +43,20 @@ function shouldRefreshAuth(pathname: string) {
   return pathname.startsWith("/dashboard") || pathname.startsWith("/connect-whatsapp")
 }
 
+function getSupabaseClientKey() {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const webLocale = detectWebLocale(request)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseClientKey = getSupabaseClientKey()
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabaseClientKey) {
     const response = NextResponse.next({ request })
     response.cookies.set("operaly_country", webLocale.country || "OT", { path: "/", sameSite: "lax" })
     response.cookies.set("operaly_web_locale", webLocale.locale, { path: "/", sameSite: "lax" })
@@ -59,7 +66,7 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 
   if (shouldRefreshAuth(pathname)) {
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    const supabase = createServerClient(supabaseUrl, supabaseClientKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll()

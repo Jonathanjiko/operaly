@@ -26,6 +26,14 @@ function getEnv(name: string): string {
   return value
 }
 
+function getClientKey() {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    ""
+  )
+}
+
 export function getAdminClient() {
   return createClient(getEnv("NEXT_PUBLIC_SUPABASE_URL"), getEnv("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -35,7 +43,7 @@ export function getAdminClient() {
 export function getAnonClient() {
   return createClient(
     getEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    getClientKey() || getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       auth: { autoRefreshToken: false, persistSession: false },
     }
