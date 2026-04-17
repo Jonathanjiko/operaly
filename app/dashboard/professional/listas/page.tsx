@@ -13,10 +13,12 @@ type ListRow = { id: string; title: string; list_type: string; status: string; c
 type ChecklistItem = { id: string; content: string; is_checked: boolean; position: number }
 type ChecklistRow = { id: string; title: string; status: string; created_at: string; items?: ChecklistItem[]; expanded?: boolean }
 type Feedback = { type: "success" | "error"; message: string } | null
+type DatabaseError = { message?: string; details?: string; hint?: string; code?: string } | null
 
 const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = { shopping: ShoppingCart, project: Briefcase, personal: User, work: Briefcase, free: List }
 const TYPE_LABELS: Record<string, string> = { shopping: "Compras", project: "Proyecto", personal: "Personal", work: "Trabajo", free: "Lista libre" }
 const TYPE_COLORS: Record<string, string> = { shopping: "#F59E0B", project: "#7C3AED", personal: "#10B981", work: "#3B82F6", free: "#64748B" }
+const LIST_TYPE_FALLBACKS = ["free", "personal", "work", "project", "shopping"] as const
 
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
@@ -55,6 +57,7 @@ const parseInitialItems = (raw: string) => raw.split(/[\n,]/).map((content) => c
 
 export default function ListasPage() {
   const [clientId, setClientId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [lists, setLists] = useState<ListRow[]>([])
   const [checklists, setChecklists] = useState<ChecklistRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,15 +92,76 @@ export default function ListasPage() {
 
   useEffect(() => {
     getCurrentClientId().then(setClientId).catch(console.error)
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id || null)).catch(console.error)
   }, [])
 
-  const withSourceFallback = useCallback(async (table: "lists" | "checklists", payload: Record<string, unknown>) => {
-    const firstAttempt = await supabase.from(table).insert(payload).select("id").single()
-    if (!firstAttempt.error) return firstAttempt
-    const fallbackPayload = { ...payload }
-    delete fallbackPayload.source
-    return supabase.from(table).insert(fallbackPayload).select("id").single()
-  }, [])
+  const buildPayloadVariants = useCallback((payload: Record<string, unknown>) => {
+    const baseVariants: Record<string, unknown>[] = [{ ...payload }]
+
+    if (payload.source) {
+      const withoutSource = { ...payload }
+      delete withoutSource.source
+      baseVariants.push(withoutSource)
+    }
+
+    const authorKeys: Array<"created_by" | "created_by_user_id" | "user_id" | "owner_user_id"> = [
+      "created_by",
+      "created_by_user_id",
+      "user_id",
+      "owner_user_id",
+    ]
+
+    if (userId) {
+      for (const key of authorKeys) {
+        baseVariants.push({ ...payload, [key]: userId })
+        if (payload.source) {
+          const variant = { ...payload, [key]: userId }
+          delete variant.source
+          baseVariants.push(variant)
+        }
+      }
+    }
+
+    if (typeof payload.list_type === "string") {
+      for (const candidate of LIST_TYPE_FALLBACKS) {
+        if (candidate === payload.list_type) continue
+        baseVariants.push({ ...payload, list_type: candidate })
+        if (payload.source) {
+          const variant = { ...payload, list_type: candidate }
+          delete variant.source
+          baseVariants.push(variant)
+        }
+      }
+    }
+
+    return baseVariants
+  }, [userId])
+
+  const insertWithFallback = useCallback(async (table: "lists" | "checklists" | "list_items" | "checklist_items", payload: Record<string, unknown>) => {
+    const variants = buildPayloadVariants(payload)
+    let lastError: DatabaseError = null
+
+    for (const variant of variants) {
+      const attempt = await supabase.from(table).insert(variant).select("id").single()
+      if (!attempt.error) return attempt
+      lastError = attempt.error as DatabaseError
+    }
+
+    return { data: null, error: lastError }
+  }, [buildPayloadVariants])
+
+  const explainSaveError = useCallback((error: unknown) => {
+    const message = typeof error === "object" && error && "message" in error ? String((error as DatabaseError)?.message || "") : ""
+    const normalized = message.toLowerCase()
+
+    if (normalized.includes("row-level security") || normalized.includes("permission")) {
+      return "No pude guardarlo en su cuenta por permisos. Revise la sesion e intente otra vez."
+    }
+    if (normalized.includes("violates") || normalized.includes("constraint") || normalized.includes("column")) {
+      return "No pude guardarlo todavia porque la estructura de listas sigue desalineada. Voy a necesitar cerrar ese ajuste tambien en backend."
+    }
+    return copy.saveError
+  }, [copy.saveError])
 
   const loadAll = useCallback(async () => {
     if (!clientId) return
@@ -118,11 +182,11 @@ export default function ListasPage() {
       setChecklists((cr || []).map((row) => ({ ...row, expanded: false })))
     } catch (error) {
       console.error(error)
-      showFeedback("error", COPY.es.saveError)
+      showFeedback("error", explainSaveError(error))
     } finally {
       setLoading(false)
     }
-  }, [clientId, showFeedback])
+  }, [clientId, explainSaveError, showFeedback])
 
   useEffect(() => {
     if (clientId) void loadAll()
@@ -190,8 +254,8 @@ export default function ListasPage() {
   const addItem = async (listId: string) => {
     if (!addText.trim() || !clientId) return
     const position = lists.find((row) => row.id === listId)?.items?.length || 0
-    const { error } = await supabase.from("list_items").insert({ list_id: listId, client_id: clientId, content: addText.trim(), position })
-    if (error) return showFeedback("error", copy.saveError)
+    const { error } = await insertWithFallback("list_items", { list_id: listId, client_id: clientId, content: addText.trim(), position })
+    if (error) return showFeedback("error", explainSaveError(error))
     const items = await loadItems(listId)
     setLists((prev) => prev.map((row) => row.id === listId ? { ...row, items } : row))
     setAddText("")
@@ -202,8 +266,8 @@ export default function ListasPage() {
   const addChecklistItem = async (checklistId: string) => {
     if (!checklistAddText.trim() || !clientId) return
     const position = checklists.find((row) => row.id === checklistId)?.items?.length || 0
-    const { error } = await supabase.from("checklist_items").insert({ checklist_id: checklistId, client_id: clientId, content: checklistAddText.trim(), position })
-    if (error) return showFeedback("error", copy.saveError)
+    const { error } = await insertWithFallback("checklist_items", { checklist_id: checklistId, client_id: clientId, content: checklistAddText.trim(), position })
+    if (error) return showFeedback("error", explainSaveError(error))
     const items = await loadChecklistItems(checklistId)
     setChecklists((prev) => prev.map((row) => row.id === checklistId ? { ...row, items } : row))
     setChecklistAddText("")
@@ -232,22 +296,26 @@ export default function ListasPage() {
     setCreating(true)
     try {
       if (tab === "listas") {
-        const { data, error } = await withSourceFallback("lists", { client_id: clientId, title: newTitle.trim(), list_type: newType, status: "active", source: "dashboard" })
+        const { data, error } = await insertWithFallback("lists", { client_id: clientId, title: newTitle.trim(), list_type: newType, status: "active", source: "dashboard" })
         if (error) throw error
         const parsedItems = parseInitialItems(newItems)
         if (data && parsedItems.length) {
           const rows = parsedItems.map((content, index) => ({ list_id: data.id, client_id: clientId, content, position: index }))
-          const { error: itemsError } = await supabase.from("list_items").insert(rows)
-          if (itemsError) throw itemsError
+          for (const row of rows) {
+            const { error: itemsError } = await insertWithFallback("list_items", row)
+            if (itemsError) throw itemsError
+          }
         }
       } else {
-        const { data, error } = await withSourceFallback("checklists", { client_id: clientId, title: newTitle.trim(), status: "active", source: "dashboard" })
+        const { data, error } = await insertWithFallback("checklists", { client_id: clientId, title: newTitle.trim(), status: "active", source: "dashboard" })
         if (error) throw error
         const parsedItems = parseInitialItems(newItems)
         if (data && parsedItems.length) {
           const rows = parsedItems.map((content, index) => ({ checklist_id: data.id, client_id: clientId, content, position: index }))
-          const { error: itemsError } = await supabase.from("checklist_items").insert(rows)
-          if (itemsError) throw itemsError
+          for (const row of rows) {
+            const { error: itemsError } = await insertWithFallback("checklist_items", row)
+            if (itemsError) throw itemsError
+          }
         }
       }
       setNewTitle("")
@@ -257,7 +325,7 @@ export default function ListasPage() {
       showFeedback("success", copy.savedOk)
     } catch (error) {
       console.error(error)
-      showFeedback("error", copy.saveError)
+      showFeedback("error", explainSaveError(error))
     } finally {
       setCreating(false)
     }
