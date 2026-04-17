@@ -437,6 +437,44 @@ export default function BaulPrivadoPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#10B981]/5 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Cómo debería llegar algo aquí 🔒</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Ya no debería depender solo de que usted lo cargue a mano. Si un documento, enlace o nota resulta sensible, Operaly debería proponer dejarlo aquí y explicarle también si lo moverá a agenda, casos o correo.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/professional/listas"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+          >
+            <Link2 className="h-4 w-4" />
+            Ver listas
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Desde documentos</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cuando un archivo trae datos delicados, debería terminar aquí sin perder la referencia al documento original.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Desde WhatsApp</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si usted escribe o manda algo sensible, Operaly debería proponérselo antes de dejarlo mezclado en otros módulos.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Con seguimiento</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si además hay fecha, contacto o envío, debería coordinarse con agenda, casos o correo.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />

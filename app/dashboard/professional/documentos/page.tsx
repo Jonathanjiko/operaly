@@ -534,6 +534,44 @@ export default function DocumentosPage() {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-[#10B981]/15 bg-gradient-to-r from-[#10B981]/5 via-white to-[#3B82F6]/5 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Cuando un archivo pide más de un destino 💡</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Operaly ya viene mejor preparado para detectar si algo debe quedarse como documento, pasar al baúl privado, crear recordatorio o abrir seguimiento en otra parte.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/professional/baul-privado"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+          >
+            <FolderLock className="h-4 w-4" />
+            Revisar baúl
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Solo documento</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Contratos, informes o archivos de trabajo que solo necesitan quedar visibles y buscables.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Documento + baúl</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cheques, datos bancarios, recetas o contenido delicado que conviene separar mejor.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Documento + acción</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si detecta fecha o recurrencia, debería proponer agenda o automatización antes de dejarlo suelto.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Solo visibles desde Drive</p>

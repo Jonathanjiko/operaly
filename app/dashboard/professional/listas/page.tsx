@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react"
 import { Briefcase, Check, ChevronDown, ChevronRight, FileText, List, Pencil, Plus, RefreshCw, Save, ShoppingCart, Trash2, User, X } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getCurrentClientId } from "@/lib/dashboard-client"
@@ -377,6 +378,48 @@ export default function ListasPage() {
             <p className="text-sm font-semibold text-[#0F1F63]">Si es sensible</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               Para documentos privados, credenciales o temas delicados conviene usar también el baúl privado.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Si algo crece, Operaly ya puede repartirlo 🙂</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Una nota simple puede quedarse en lista, pero si detecta fecha, documento sensible o seguimiento, ahora deberia proponer agenda, automatizaciones, documentos o baul privado sin que usted lo reconstruya todo.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/professional/agenda" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver agenda
+            </Link>
+            <Link href="/dashboard/professional/documentos" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver documentos
+            </Link>
+            <Link href="/dashboard/professional/baul-privado" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver baúl
+            </Link>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se queda en lista</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Compras, pasos, pendientes cortos o cosas que solo quiere tener a mano por ahora.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se mueve a agenda</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Pagos, citas, vencimientos o seguimientos que ya tienen fecha o necesitan una hora.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se separa mejor</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si aparece algo sensible, deberia proponerse tambien para documentos o baúl privado.
             </p>
           </div>
         </div>
