@@ -16,6 +16,7 @@ import {
   type EffectiveLimitsRuntime,
 } from "@/lib/effective-limits"
 import { getDefaultOwnerCatalog, type OwnerCatalogAddon } from "@/lib/owner-catalog"
+import { fetchDashboardRuntime, type DashboardRuntimePayload, toNumber } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
@@ -24,6 +25,7 @@ type EffectiveLimits = EffectiveLimitsRuntime & {
   plan: Record<string, any>
   addons: Record<string, any>
   usage: Record<string, any>
+  usage_period_month?: string
   limits: {
     calls_minutes_total: number
     storage_gb_total: number
@@ -116,6 +118,7 @@ export default function ProfessionalAnalyticsPage() {
   const [catalogAddons, setCatalogAddons] = useState<OwnerCatalogAddon[]>(
     getDefaultOwnerCatalog().addons.filter((addon) => addon.active !== false)
   )
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
   const [addonLoading, setAddonLoading] = useState<string | null>(null)
   const [addonError, setAddonError]   = useState("")
   const [documentsCount, setDocumentsCount] = useState(0)
@@ -131,38 +134,80 @@ export default function ProfessionalAnalyticsPage() {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      // Effective limits from RPC only; avoid direct tenant_effective_limits reads in frontend.
+      // Prefer the auth-bound dashboard snapshot before falling back to RPCs.
       try {
-        const { data: limitsData, error: limitsError } = await supabase
-          .rpc("get_client_effective_limits", { p_client_id: cid })
-        if (!limitsError && limitsData) {
-          setLimits(limitsData as EffectiveLimits)
+        const dashboardRuntime = (await fetchDashboardRuntime()) as DashboardRuntimePayload | null
+        if (dashboardRuntime) {
+          const usage = dashboardRuntime.usage || {}
+          const runtimeLimits = dashboardRuntime.limits || {}
+          const plan = dashboardRuntime.plan || {}
+          const featureAccess = dashboardRuntime.feature_access || runtimeLimits || {}
+
+          setLimits({
+            effective_plan_code:
+              String(
+                plan?.effective_plan_code ||
+                  dashboardRuntime.effective_plan_code ||
+                  runtimeLimits?.effective_plan_code ||
+                  ""
+              ) || null,
+            plan: {
+              ...plan,
+              plan_type: plan?.plan_type || plan?.code || dashboardRuntime.effective_plan_code || "trial",
+              calls_minutes: toNumber(plan?.calls_minutes ?? runtimeLimits?.max_audio_minutes),
+              storage_gb: toNumber(plan?.storage_gb ?? runtimeLimits?.max_storage_mb) / 1024,
+              ia_limit: toNumber(plan?.ia_limit ?? runtimeLimits?.max_messages_month),
+              automations_limit: toNumber(plan?.automations_limit ?? runtimeLimits?.max_automations),
+            },
+            addons: {},
+            usage,
+            limits: {
+              calls_minutes_total: toNumber(runtimeLimits?.max_audio_minutes),
+              storage_gb_total: toNumber(runtimeLimits?.max_storage_mb) / 1024,
+              ia_limit_total: toNumber(runtimeLimits?.max_messages_month),
+              voice_enabled: Boolean(featureAccess?.voice_enabled ?? false),
+              google_enabled: Boolean(featureAccess?.google_enabled ?? false),
+            },
+            period: getCurrentPeriodMonth(),
+          } as EffectiveLimits)
+          setRuntimeSource("auth_bound")
         } else {
-          // Fallback via user-scoped RPC segura
-          try {
-            const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
-            if (myLimits) {
-              const tel = myLimits as any
-              setLimits({
-                effective_plan_code: getEffectivePlanCode(tel),
-                plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
-                addons: {},
-                usage: {},
-                limits: {
-                  calls_minutes_total: (tel.max_audio_minutes || 0),
-                  storage_gb_total:    (tel.max_storage_mb || 0) / 1024,
-                  ia_limit_total:      (tel.max_messages_month || 0),
-                  voice_enabled:       tel.voice_enabled || false,
-                  google_enabled:      tel.google_enabled || false,
-                },
-                usage_period_month: getCurrentPeriodMonth(),
-                period: getCurrentPeriodMonth(),
-              } as EffectiveLimits)
-            }
-          } catch (_) {}
+          throw new Error("dashboard_runtime_unavailable")
         }
-      } catch (limitsErr) {
-        console.warn("Error cargando límites:", limitsErr)
+      } catch (dashboardRuntimeError) {
+        console.warn("Error cargando dashboard runtime en analíticas:", dashboardRuntimeError)
+        try {
+          const { data: limitsData, error: limitsError } = await supabase
+            .rpc("get_client_effective_limits", { p_client_id: cid })
+          if (!limitsError && limitsData) {
+            setLimits(limitsData as EffectiveLimits)
+          } else {
+            try {
+              const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
+              if (myLimits) {
+                const tel = myLimits as any
+                setLimits({
+                  effective_plan_code: getEffectivePlanCode(tel),
+                  plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
+                  addons: {},
+                  usage: {},
+                  limits: {
+                    calls_minutes_total: (tel.max_audio_minutes || 0),
+                    storage_gb_total: (tel.max_storage_mb || 0) / 1024,
+                    ia_limit_total: (tel.max_messages_month || 0),
+                    voice_enabled: tel.voice_enabled || false,
+                    google_enabled: tel.google_enabled || false,
+                  },
+                  usage_period_month: getCurrentPeriodMonth(),
+                  period: getCurrentPeriodMonth(),
+                } as EffectiveLimits)
+                setRuntimeSource("legacy")
+              }
+            } catch (_) {}
+          }
+        } catch (limitsErr) {
+          console.warn("Error cargando límites:", limitsErr)
+        }
       }
 
       // Active add-ons

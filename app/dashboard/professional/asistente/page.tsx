@@ -31,6 +31,7 @@ import {
   normalizeRuntimeStatus,
   type ProfessionalRuntimeSnapshot,
 } from "@/lib/professional-runtime"
+import { fetchDashboardRuntime } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -91,6 +92,7 @@ export default function AsistentePage() {
   const [saveError, setSaveError] = useState("")
   const [lastSavedAt, setLastSavedAt] = useState("")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
 
   useEffect(() => {
     loadConfig()
@@ -116,12 +118,35 @@ export default function AsistentePage() {
         setStyle(client.preferred_style || "balanceado")
       }
 
-      const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
-      if (limitsError) throw limitsError
+      let dashboardRuntimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        const featureAccess = runtime?.feature_access || runtime?.limits || {}
+        const resolvedPlanCode = String(
+          runtime?.plan?.effective_plan_code ||
+            runtime?.effective_plan_code ||
+            runtime?.limits?.effective_plan_code ||
+            client?.plan_code ||
+            "trial"
+        )
 
-      const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
-      setPlanCode(getEffectivePlanCode(effectiveLimits))
-      setCustomAgentEnabled(Boolean(limits?.custom_agent_enabled ?? false))
+        setPlanCode(resolvedPlanCode)
+        setCustomAgentEnabled(Boolean(featureAccess?.custom_agent_enabled ?? false))
+        setRuntimeSource("auth_bound")
+        dashboardRuntimeLoaded = true
+      } catch (dashboardError) {
+        console.error("No se pudo cargar dashboard runtime del asistente:", dashboardError)
+      }
+
+      if (!dashboardRuntimeLoaded) {
+        const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
+        if (limitsError) throw limitsError
+
+        const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+        setPlanCode(getEffectivePlanCode(effectiveLimits))
+        setCustomAgentEnabled(Boolean(limits?.custom_agent_enabled ?? false))
+        setRuntimeSource("legacy")
+      }
 
       const { data: prefs } = await supabase
         .from("client_preferences")
@@ -274,6 +299,17 @@ export default function AsistentePage() {
         <p className="text-sm font-semibold text-[#0F1F63]">Qué define aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
           Aquí decide cómo debe representarlo Operaly: desde qué profesión lo acompaña, qué tono usa, qué tan breve o detallado responde y qué contexto debe tener siempre presente.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {runtimeSource === "auth_bound"
+            ? "Esta vista ya toma primero el runtime auth-bound para plan y personalización avanzada."
+            : runtimeSource === "legacy"
+              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
+              : "Esta vista todavía está preparando la lectura operativa del asistente."}
         </p>
       </div>
 

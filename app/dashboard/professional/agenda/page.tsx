@@ -150,8 +150,16 @@ export default function AgendaPage() {
     calendarSyncStatus: "",
     contactsSyncStatus: "",
   })
+  const [agendaSource, setAgendaSource] = useState<"auth_bound" | "fallback" | "mixed" | "unknown">("unknown")
 
   const copy = COPY[language]
+
+  async function getAuthHeaders() {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return { Authorization: `Bearer ${token}` }
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -172,8 +180,7 @@ export default function AgendaPage() {
         const todayKey = dateKey(new Date(), resolvedTimezone)
         setSelectedKey(todayKey)
 
-        const session = await supabase.auth.getSession()
-        const accessToken = session.data.session?.access_token || ""
+        const headers = await getAuthHeaders().catch(() => null)
         let usedDashboardAgenda = false
 
         const [{ data: tasks }, { data: recurring }, { data: contacts }] = await Promise.all([
@@ -182,11 +189,11 @@ export default function AgendaPage() {
           supabase.from("contacts").select("id,email,birthday,source").eq("client_id", currentClientId),
         ])
 
-        if (accessToken) {
+        if (headers) {
           try {
             const dashboardAgendaResponse = await fetch("/api/dashboard/agenda", {
               method: "GET",
-              headers: { Authorization: `Bearer ${accessToken}` },
+              headers,
               cache: "no-store",
             })
             const dashboardAgendaPayload = (await dashboardAgendaResponse.json().catch(() => ({}))) as DashboardAgendaPayload
@@ -233,7 +240,9 @@ export default function AgendaPage() {
               if (liveEvents.length > 0) {
                 usedDashboardAgenda = true
                 setEvents(liveEvents)
+                setAgendaSource("auth_bound")
               }
+              if (!liveEvents.length) setAgendaSource("mixed")
 
               setGoogleSignals((current) => ({
                 ...current,
@@ -262,6 +271,7 @@ export default function AgendaPage() {
           ].filter(Boolean) as EventItem[]
 
           setEvents(mapped)
+          setAgendaSource("fallback")
         }
 
         const contactRows = contacts || []
@@ -275,7 +285,8 @@ export default function AgendaPage() {
           }).length,
         })
         try {
-          const googleResponse = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+          const googleHeaders = headers || (await getAuthHeaders().catch(() => null))
+          const googleResponse = await fetch("/api/google/status", { method: "GET", headers: googleHeaders || undefined, cache: "no-store" })
           const googlePayload = (await googleResponse.json().catch(() => ({}))) as GoogleStatusPayload
           if (googleResponse.ok) {
             const authorizedProducts = googlePayload?.connection?.authorized_products || []
@@ -307,6 +318,13 @@ export default function AgendaPage() {
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [clientId])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setReloadKey((prev) => prev + 1)
+    }, 45000)
+    return () => window.clearInterval(interval)
+  }, [])
 
   const weekDates = useMemo(() => getWeekDates(current), [current])
   const monthGrid = useMemo(() => getMonthGrid(current), [current])
@@ -350,8 +368,20 @@ export default function AgendaPage() {
           <p className="text-sm text-muted-foreground mt-0.5">{events.length} {copy.totalEvents}</p>
           <p className="text-xs text-muted-foreground mt-1">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
           <p className="text-xs text-[#5F6B7A] mt-1">{copy.reminder}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {agendaSource === "auth_bound"
+              ? "Leyendo agenda desde el snapshot auth-bound con señal viva de Google Calendar."
+              : agendaSource === "mixed"
+                ? "El snapshot auth-bound respondió, pero sin eventos visibles; se complementa con tareas locales."
+                : agendaSource === "fallback"
+                  ? "Mostrando tareas y automatizaciones locales mientras la lectura auth-bound no respondió."
+                  : "Preparando lectura operativa de la agenda."}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setReloadKey((prev) => prev + 1)} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary" title="Actualizar agenda">
+            <RefreshCw className="w-4 h-4" />
+          </button>
           <button onClick={() => { setCurrent(new Date()); setSelectedKey(todayKey) }} className="h-9 px-4 rounded-xl border border-border bg-white text-sm font-medium text-[#0F1F63] hover:bg-secondary">{copy.today}</button>
           <div className="flex rounded-xl border border-border bg-secondary/30 p-1 gap-0.5">
             {(["month", "week", "day", "agenda"] as ViewMode[]).map((mode) => <button key={mode} onClick={() => setView(mode)} className={`h-7 px-3 rounded-lg text-xs font-medium transition-all ${view === mode ? "bg-white shadow-sm text-[#0F1F63]" : "text-muted-foreground hover:text-foreground"}`}>{copy[mode]}</button>)}

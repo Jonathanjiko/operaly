@@ -21,6 +21,7 @@ import {
   normalizeRuntimeStatus,
   type ProfessionalRuntimeSnapshot,
 } from "@/lib/professional-runtime"
+import { fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getCurrentPeriodMonth } from "@/lib/effective-limits"
@@ -69,6 +70,7 @@ export default function VozPage() {
   const [saveError, setSaveError] = useState("")
   const [lastSavedAt, setLastSavedAt] = useState("")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
 
   const minutesPct = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
@@ -108,11 +110,37 @@ export default function VozPage() {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
-      if (limitsError) throw limitsError
+      let dashboardRuntimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        const featureAccess = runtime?.feature_access || runtime?.limits || {}
+        const limits = runtime?.limits || {}
+        const usage = runtime?.usage || {}
 
-      setVoiceEnabled(Boolean(limits?.voice_enabled ?? false))
-      setMinutesLimit(Number(limits?.max_audio_minutes ?? 0))
+        setVoiceEnabled(Boolean(featureAccess?.voice_enabled ?? false))
+        setMinutesLimit(toNumber(limits?.max_audio_minutes))
+        setMinutesUsed(
+          toNumber(
+            usage?.audio_minutes_used ??
+              usage?.audio?.used ??
+              usage?.voice_minutes?.used ??
+              usage?.audio
+          )
+        )
+        setRuntimeSource("auth_bound")
+        dashboardRuntimeLoaded = true
+      } catch (dashboardError) {
+        console.error("No se pudo cargar dashboard runtime para voz:", dashboardError)
+      }
+
+      if (!dashboardRuntimeLoaded) {
+        const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
+        if (limitsError) throw limitsError
+
+        setVoiceEnabled(Boolean(limits?.voice_enabled ?? false))
+        setMinutesLimit(Number(limits?.max_audio_minutes ?? 0))
+        setRuntimeSource("legacy")
+      }
 
       const { data: vs } = await supabase
         .from("user_voice_settings")
@@ -138,7 +166,9 @@ export default function VozPage() {
         console.error("No se pudo cargar runtime de voz:", runtimeError)
       }
 
-      setMinutesUsed(await loadUsageForCurrentPeriod(cid))
+      if (!dashboardRuntimeLoaded) {
+        setMinutesUsed(await loadUsageForCurrentPeriod(cid))
+      }
     } catch (err) {
       console.error(err)
       setLoadError("No se pudo cargar la configuracion de voz.")
@@ -267,6 +297,17 @@ export default function VozPage() {
         <p className="text-sm font-semibold text-[#0F1F63]">Lo que puede ajustar aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
           Aquí decide cómo debe sonar Operaly. Puede elegir una voz sugerida, pegar una voz propia de ElevenLabs y definir cómo quiere que le hable en audios y llamadas.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {runtimeSource === "auth_bound"
+            ? "Esta vista ya toma primero el runtime auth-bound para minutos y habilitación de voz."
+            : runtimeSource === "legacy"
+              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
+              : "Esta vista todavía está preparando la lectura operativa de voz."}
         </p>
       </div>
 

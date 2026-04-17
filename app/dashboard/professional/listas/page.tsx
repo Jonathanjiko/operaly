@@ -78,6 +78,7 @@ export default function ListasPage() {
   const [timezone, setTimezone] = useState("America/Lima")
   const [locale, setLocale] = useState("es-PE")
   const [feedback, setFeedback] = useState<Feedback>(null)
+  const [syncSource] = useState<"direct_rls">("direct_rls")
 
   const copy = COPY[language]
 
@@ -351,6 +352,11 @@ export default function ListasPage() {
           <p className="text-sm text-muted-foreground">{copy.subtitle}</p>
           <p className="mt-1 text-xs text-slate-500">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
           <p className="mt-1 text-xs text-[#5F6B7A]">{copy.reminder}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {syncSource === "direct_rls"
+              ? "Esta vista lee directo desde su cuenta por RLS. Si una lista creada en WhatsApp no aparece, el hueco ya no es solo visual: conviene revisar sesión, JWT o backend."
+              : ""}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadAll()} className="rounded-xl"><RefreshCw className="h-4 w-4" /></Button>

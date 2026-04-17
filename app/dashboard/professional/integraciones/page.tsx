@@ -19,6 +19,7 @@ import {
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
+import { fetchDashboardRuntime } from "@/lib/dashboard-runtime"
 import { getDisplayPlanName } from "@/lib/plans"
 
 type GoogleStatusPayload = {
@@ -226,6 +227,7 @@ export default function IntegracionesPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [googleEnabled, setGoogleEnabled] = useState(false)
   const [planCode, setPlanCode] = useState("trial")
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
   const [contactsSyncState, setContactsSyncState] = useState<{
@@ -368,12 +370,36 @@ export default function IntegracionesPage() {
     setStatusError("")
     try {
       const cid = await getCurrentClientId()
-      const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
-      if (limitsError) throw limitsError
+      let runtimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        const featureAccess = runtime?.feature_access || runtime?.limits || {}
+        const resolvedPlanCode = String(
+          runtime?.plan?.effective_plan_code ||
+            runtime?.effective_plan_code ||
+            runtime?.limits?.effective_plan_code ||
+            ""
+        )
 
-      const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
-      setPlanCode(getEffectivePlanCode(effectiveLimits))
-      setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+        if (resolvedPlanCode) {
+          setPlanCode(resolvedPlanCode)
+          setGoogleEnabled(Boolean(featureAccess?.google_enabled ?? false))
+          setRuntimeSource("auth_bound")
+          runtimeLoaded = true
+        }
+      } catch (dashboardRuntimeError) {
+        console.error("No se pudo cargar dashboard runtime de integraciones:", dashboardRuntimeError)
+      }
+
+      if (!runtimeLoaded) {
+        const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
+        if (limitsError) throw limitsError
+
+        const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+        setPlanCode(getEffectivePlanCode(effectiveLimits))
+        setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+        setRuntimeSource("legacy")
+      }
 
       await loadContactsSnapshot(cid)
 
@@ -593,6 +619,13 @@ export default function IntegracionesPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">estado general</p>
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {runtimeSource === "auth_bound"
+                  ? "Leyendo su plan real desde el runtime nuevo."
+                  : runtimeSource === "legacy"
+                    ? "Cayendo al contrato anterior mientras el runtime nuevo no responde."
+                    : "Preparando la lectura operativa de su cuenta."}
+              </p>
             </div>
           </div>
         </div>
@@ -603,6 +636,14 @@ export default function IntegracionesPage() {
           {statusError === "google_addon_required" ? "Activa el add-on Google Suite para conectar tu cuenta." : statusError}
         </div>
       )}
+
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Esta vista ya intenta decidir primero desde el runtime auth-bound si Google está habilitado en su plan.
+          Si aquí ve algo distinto a lo que luego siente por WhatsApp o en agenda, el hueco restante ya no es solo visual.
+        </p>
+      </div>
 
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
         Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez 🙂

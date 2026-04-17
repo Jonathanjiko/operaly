@@ -32,6 +32,7 @@ import {
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
+import { fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
 import {
   fetchProfessionalRuntime,
   normalizeRuntimeStatus,
@@ -174,6 +175,7 @@ export default function ProfessionalSettingsPage() {
   const [voiceMinutesUsed, setVoiceMinutesUsed] = useState(0)
   const [voiceMinutesLimit, setVoiceMinutesLimit] = useState(0)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
 
   const initials = useMemo(() => {
     if (!fullName.trim()) {
@@ -540,15 +542,61 @@ export default function ProfessionalSettingsPage() {
         console.warn("catalog query error:", catalogError)
       }
 
-      const { data: myLimits, error: myLimitsError } = await supabase.rpc("get_my_effective_limits")
-      if (myLimitsError) {
-        console.warn("get_my_effective_limits query error:", myLimitsError.message)
-      } else {
-        const resolvedLimits = (myLimits || {}) as EffectiveLimitsRuntime
-        setEffectiveLimits(resolvedLimits)
-        setClientPlanCode(getEffectivePlanCode(resolvedLimits))
-        setClientPlanStatus(getEffectivePlanStatus(resolvedLimits))
-        setVoiceMinutesLimit(Number(resolvedLimits.max_audio_minutes ?? 0))
+      let dashboardRuntimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        if (runtime) {
+          const limits = runtime.limits || {}
+          const featureAccess = runtime.feature_access || limits || {}
+          const usage = runtime.usage || {}
+          const resolvedPlanCode = String(
+            runtime.plan?.effective_plan_code ||
+              runtime.effective_plan_code ||
+              limits?.effective_plan_code ||
+              client.plan_code ||
+              metadata.selected_plan ||
+              "trial"
+          )
+
+          setEffectiveLimits({
+            effective_plan_code: resolvedPlanCode,
+            max_audio_minutes: toNumber(limits?.max_audio_minutes),
+            max_messages_month: toNumber(limits?.max_messages_month),
+            max_storage_mb: toNumber(limits?.max_storage_mb),
+            voice_enabled: Boolean(featureAccess?.voice_enabled ?? false),
+            google_enabled: Boolean(featureAccess?.google_enabled ?? false),
+            custom_agent_enabled: Boolean(featureAccess?.custom_agent_enabled ?? false),
+          } as EffectiveLimitsRuntime)
+          setClientPlanCode(resolvedPlanCode)
+          setClientPlanStatus(String(runtime.plan?.effective_status || client.plan_status || "active"))
+          setVoiceMinutesLimit(toNumber(limits?.max_audio_minutes))
+          setVoiceMinutesUsed(
+            toNumber(
+              usage?.audio_minutes_used ??
+                usage?.audio?.used ??
+                usage?.voice_minutes?.used ??
+                usage?.audio
+            )
+          )
+          setRuntimeSource("auth_bound")
+          dashboardRuntimeLoaded = true
+        }
+      } catch (dashboardRuntimeError) {
+        console.warn("dashboard runtime query error:", dashboardRuntimeError)
+      }
+
+      if (!dashboardRuntimeLoaded) {
+        const { data: myLimits, error: myLimitsError } = await supabase.rpc("get_my_effective_limits")
+        if (myLimitsError) {
+          console.warn("get_my_effective_limits query error:", myLimitsError.message)
+        } else {
+          const resolvedLimits = (myLimits || {}) as EffectiveLimitsRuntime
+          setEffectiveLimits(resolvedLimits)
+          setClientPlanCode(getEffectivePlanCode(resolvedLimits))
+          setClientPlanStatus(getEffectivePlanStatus(resolvedLimits))
+          setVoiceMinutesLimit(Number(resolvedLimits.max_audio_minutes ?? 0))
+          setRuntimeSource("legacy")
+        }
       }
 
       // Load voice settings
@@ -564,19 +612,21 @@ export default function ProfessionalSettingsPage() {
         console.warn("professional runtime query error:", runtimeError)
       }
 
-      // Load voice minutes usage
-      try {
-        const periodMonth = getCurrentPeriodMonth()
-        const { data: usageData } = await supabase
-          .from("usage_monthly")
-          .select("audio_minutes_used")
-          .eq("client_id", resolvedClientId)
-          .eq("period_month", periodMonth)
-          .limit(1)
-        if (usageData?.[0]) {
-          setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
-        }
-      } catch (_) {}
+      // Load voice minutes usage only when runtime auth-bound did not already hydrate it.
+      if (!dashboardRuntimeLoaded) {
+        try {
+          const periodMonth = getCurrentPeriodMonth()
+          const { data: usageData } = await supabase
+            .from("usage_monthly")
+            .select("audio_minutes_used")
+            .eq("client_id", resolvedClientId)
+            .eq("period_month", periodMonth)
+            .limit(1)
+          if (usageData?.[0]) {
+            setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
+          }
+        } catch (_) {}
+      }
 
     } catch (error: any) {
       alert(error.message || "No se pudo cargar la configuración.")
@@ -738,6 +788,17 @@ export default function ProfessionalSettingsPage() {
         <h1 className="text-3xl font-bold text-[#0F1F63]">Configuración y facturación</h1>
         <p className="text-muted-foreground mt-1">
           Administra tu perfil, idioma base, timezone, seguridad y suscripción.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {runtimeSource === "auth_bound"
+            ? "Esta vista ya toma primero el runtime auth-bound para plan, límites y voz."
+            : runtimeSource === "legacy"
+              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
+              : "Esta vista todavía está preparando la lectura operativa de su cuenta."}
         </p>
       </div>
 

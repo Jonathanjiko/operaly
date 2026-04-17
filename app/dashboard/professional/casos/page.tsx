@@ -216,6 +216,13 @@ export default function CasosPage() {
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
 
+  async function getAuthHeaders() {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return { Authorization: `Bearer ${token}` }
+  }
+
   async function load() {
     setLoading(true)
     try {
@@ -242,7 +249,12 @@ export default function CasosPage() {
         withEmail: contactRows.filter((contact) => Boolean(contact.email)).length,
       })
       try {
-        const googleResponse = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+        const headers = await getAuthHeaders()
+        const googleResponse = await fetch("/api/google/status", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        })
         const googlePayload = (await googleResponse.json().catch(() => ({}))) as GoogleStatusPayload
         if (googleResponse.ok) {
           const authorizedProducts = googlePayload?.connection?.authorized_products || []

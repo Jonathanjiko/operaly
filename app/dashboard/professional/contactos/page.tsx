@@ -143,9 +143,21 @@ export default function ContactosPage() {
   const [googleContactsMessage, setGoogleContactsMessage] = useState("")
   const [googleContactsError, setGoogleContactsError] = useState("")
 
+  const getAuthHeaders = useCallback(async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return { Authorization: `Bearer ${token}` }
+  }, [])
+
   const loadGoogleContactsStatus = useCallback(async () => {
     try {
-      const response = await fetch("/api/google/status", { method: "GET", cache: "no-store" })
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/google/status", {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
       const payload = (await response.json().catch(() => ({}))) as GoogleContactsStatusPayload
       if (!response.ok) throw new Error(String((payload as any)?.error || "No se pudo consultar Google Contacts."))
       const productState = payload?.products?.contacts || payload?.contacts || null
@@ -157,7 +169,7 @@ export default function ContactosPage() {
     } catch (error) {
       console.error("No se pudo leer el estado de Google Contacts:", error)
     }
-  }, [])
+  }, [getAuthHeaders])
 
   const loadContacts = useCallback(async (nextClientId?: string) => {
     const resolvedClientId = nextClientId || clientId
