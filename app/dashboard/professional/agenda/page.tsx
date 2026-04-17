@@ -65,6 +65,27 @@ function asArray<T = Record<string, any>>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
 }
 
+const AGENDA_FETCH_TIMEOUT_MS = 8000
+
+async function fetchWithAgendaTimeout(input: string, init: RequestInit) {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), AGENDA_FETCH_TIMEOUT_MS)
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("La agenda auth-bound tardó demasiado. Supabase o el backend siguen degradados.")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 function getWeekDates(source: Date) {
   const date = new Date(source)
   const dayOfWeek = date.getDay()
@@ -151,6 +172,7 @@ export default function AgendaPage() {
     contactsSyncStatus: "",
   })
   const [agendaSource, setAgendaSource] = useState<"auth_bound" | "fallback" | "mixed" | "unknown">("unknown")
+  const [agendaWarning, setAgendaWarning] = useState("")
 
   const copy = COPY[language]
 
@@ -163,6 +185,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     const init = async () => {
+      setAgendaWarning("")
       try {
         const currentClientId = await getCurrentClientId()
         setClientId(currentClientId)
@@ -191,7 +214,7 @@ export default function AgendaPage() {
 
         if (headers) {
           try {
-            const dashboardAgendaResponse = await fetch("/api/dashboard/agenda", {
+            const dashboardAgendaResponse = await fetchWithAgendaTimeout("/api/dashboard/agenda", {
               method: "GET",
               headers,
               cache: "no-store",
@@ -253,6 +276,11 @@ export default function AgendaPage() {
             }
           } catch (dashboardAgendaError) {
             console.error("No se pudo leer la agenda auth-bound:", dashboardAgendaError)
+            setAgendaWarning(
+              dashboardAgendaError instanceof Error
+                ? dashboardAgendaError.message
+                : "La agenda auth-bound no respondió a tiempo. Se muestran datos degradados."
+            )
           }
         }
 
@@ -286,7 +314,11 @@ export default function AgendaPage() {
         })
         try {
           const googleHeaders = headers || (await getAuthHeaders().catch(() => null))
-          const googleResponse = await fetch("/api/google/status", { method: "GET", headers: googleHeaders || undefined, cache: "no-store" })
+          const googleResponse = await fetchWithAgendaTimeout("/api/google/status", {
+            method: "GET",
+            headers: googleHeaders || undefined,
+            cache: "no-store",
+          })
           const googlePayload = (await googleResponse.json().catch(() => ({}))) as GoogleStatusPayload
           if (googleResponse.ok) {
             const authorizedProducts = googlePayload?.connection?.authorized_products || []
@@ -301,6 +333,9 @@ export default function AgendaPage() {
           }
         } catch (googleError) {
           console.error("No se pudo leer el estado Google de agenda:", googleError)
+          setAgendaWarning((current) =>
+            current || "No se pudo confirmar Google en tiempo útil. La agenda sigue mostrando el mejor estado local disponible."
+          )
         }
       } finally {
         setLoading(false)
@@ -388,6 +423,12 @@ export default function AgendaPage() {
           </div>
         </div>
       </div>
+
+      {agendaWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {agendaWarning}
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-3 py-3">
         <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
