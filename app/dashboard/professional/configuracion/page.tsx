@@ -176,6 +176,11 @@ export default function ProfessionalSettingsPage() {
   const [voiceMinutesLimit, setVoiceMinutesLimit] = useState(0)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [operationalWarning, setOperationalWarning] = useState("")
+  const [saveFeedback, setSaveFeedback] = useState<{
+    tone: "success" | "error"
+    message: string
+  } | null>(null)
 
   const initials = useMemo(() => {
     if (!fullName.trim()) {
@@ -349,6 +354,7 @@ export default function ProfessionalSettingsPage() {
 
   const loadData = async () => {
     setLoading(true)
+    setOperationalWarning("")
 
     try {
       const { data: authResponse, error: authError } = await supabase.auth.getUser()
@@ -583,6 +589,9 @@ export default function ProfessionalSettingsPage() {
         }
       } catch (dashboardRuntimeError) {
         console.warn("dashboard runtime query error:", dashboardRuntimeError)
+        setOperationalWarning(
+          "El runtime operativo no respondió a tiempo. Esta pantalla cayó a lecturas de respaldo y algunos datos pueden tardar en reflejarse."
+        )
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -610,6 +619,10 @@ export default function ProfessionalSettingsPage() {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
         console.warn("professional runtime query error:", runtimeError)
+        setOperationalWarning((current) =>
+          current ||
+          "La lectura auth-bound de esta cuenta sigue degradada. Puede revisar y guardar, pero algunos bloques podrían verse desactualizados."
+        )
       }
 
       // Load voice minutes usage only when runtime auth-bound did not already hydrate it.
@@ -629,7 +642,7 @@ export default function ProfessionalSettingsPage() {
       }
 
     } catch (error: any) {
-      alert(error.message || "No se pudo cargar la configuración.")
+      setOperationalWarning(error.message || "No se pudo cargar la configuración operativa de esta cuenta.")
     } finally {
       setLoading(false)
     }
@@ -660,18 +673,22 @@ export default function ProfessionalSettingsPage() {
 
   const handleSave = async () => {
     if (!clientId) {
-      alert("No encontramos el cliente de esta cuenta.")
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
       return
     }
 
     const normalizedPhone = normalizePhoneForStorage(phone)
 
     if (!validateNormalizedPhone(normalizedPhone)) {
-      alert("El teléfono debe estar en formato internacional. Ejemplo: +51987654321")
+      setSaveFeedback({
+        tone: "error",
+        message: "El teléfono debe estar en formato internacional. Ejemplo: +51987654321.",
+      })
       return
     }
 
     setSaving(true)
+    setSaveFeedback(null)
 
     try {
       const normalizedName = fullName.trim()
@@ -728,10 +745,16 @@ export default function ProfessionalSettingsPage() {
         upsertPreference("timezone", normalizedTimezone),
       ])
 
-      alert("Configuración guardada correctamente.")
+      setSaveFeedback({
+        tone: "success",
+        message: "La configuración base se guardó correctamente.",
+      })
       await loadData()
     } catch (error: any) {
-      alert(error.message || "No se pudo guardar la configuración.")
+      setSaveFeedback({
+        tone: "error",
+        message: error.message || "No se pudo guardar la configuración.",
+      })
     } finally {
       setSaving(false)
     }
@@ -739,7 +762,7 @@ export default function ProfessionalSettingsPage() {
 
   const handleChangePlan = (planCode: string) => {
     if (!clientId) {
-      alert("No encontramos el cliente de esta cuenta.")
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
       return
     }
 
@@ -748,11 +771,12 @@ export default function ProfessionalSettingsPage() {
 
   const handleAddonCheckout = async (addonCode: string) => {
     if (!clientId) {
-      alert("No encontramos el cliente de esta cuenta.")
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
       return
     }
 
     try {
+      setSaveFeedback(null)
       const response = await fetch("/api/payments/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -770,7 +794,10 @@ export default function ProfessionalSettingsPage() {
 
       window.location.href = checkoutUrl
     } catch (error: any) {
-      alert(error.message || "No se pudo iniciar el pago del add-on.")
+      setSaveFeedback({
+        tone: "error",
+        message: error.message || "No se pudo iniciar el pago del add-on.",
+      })
     }
   }
 
@@ -798,9 +825,27 @@ export default function ProfessionalSettingsPage() {
             ? "Esta vista ya toma primero el runtime auth-bound para plan, límites y voz."
             : runtimeSource === "legacy"
               ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
-              : "Esta vista todavía está preparando la lectura operativa de su cuenta."}
+            : "Esta vista todavía está preparando la lectura operativa de su cuenta."}
         </p>
       </div>
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
+
+      {saveFeedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            saveFeedback.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {saveFeedback.message}
+        </div>
+      ) : null}
 
       <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-8">

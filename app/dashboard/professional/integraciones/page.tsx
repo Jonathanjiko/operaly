@@ -230,6 +230,7 @@ export default function IntegracionesPage() {
   const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
   const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
   const [statusError, setStatusError] = useState("")
+  const [operationalWarning, setOperationalWarning] = useState("")
   const [contactsSyncState, setContactsSyncState] = useState<{
     status: "not_connected" | "scope_required" | "syncing" | "ok" | "partial" | "error" | ""
     message: string
@@ -247,7 +248,9 @@ export default function IntegracionesPage() {
     bridgeStatus: "base_only",
   })
 
-  const googleServerConfigured = !statusError.toLowerCase().includes("google oauth todavia no esta listo en el servidor")
+  const googleServerConfigured = !`${statusError} ${operationalWarning}`
+    .toLowerCase()
+    .includes("google oauth todavia no esta listo en el servidor")
 
   const loadContactsSnapshot = async (clientId: string) => {
     const extendedResponse = await supabase
@@ -368,6 +371,7 @@ export default function IntegracionesPage() {
   const loadData = async () => {
     setLoading(true)
     setStatusError("")
+    setOperationalWarning("")
     try {
       const cid = await getCurrentClientId()
       let runtimeLoaded = false
@@ -389,6 +393,9 @@ export default function IntegracionesPage() {
         }
       } catch (dashboardRuntimeError) {
         console.error("No se pudo cargar dashboard runtime de integraciones:", dashboardRuntimeError)
+        setOperationalWarning(
+          "El runtime operativo de integraciones no respondió a tiempo. Esta vista cayó a lecturas de respaldo y algunas señales pueden verse atrasadas."
+        )
       }
 
       if (!runtimeLoaded) {
@@ -407,7 +414,7 @@ export default function IntegracionesPage() {
       await loadContactsStatus()
     } catch (err) {
       console.error(err)
-      setStatusError(err instanceof Error ? err.message : "No se pudo cargar el estado de Google.")
+      setOperationalWarning(err instanceof Error ? err.message : "No se pudo cargar el estado operativo de Google.")
     } finally {
       setLoading(false)
     }
@@ -636,6 +643,12 @@ export default function IntegracionesPage() {
           {statusError === "google_addon_required" ? "Activa el add-on Google Suite para conectar tu cuenta." : statusError}
         </div>
       )}
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
         <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
