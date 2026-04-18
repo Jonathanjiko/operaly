@@ -6,7 +6,23 @@ import { getCurrentClientId } from "@/lib/dashboard-client"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
 
-type EventItem = { id: string; title: string; dateKey: string; timeLabel: string; hour: number; minute: number; type: "task" | "automation"; sourceAt: string }
+type EventPriority = "high" | "medium" | "low" | "unspecified"
+type EventKind = "task" | "automation" | "event" | "reminder"
+type EventItem = {
+  id: string
+  title: string
+  dateKey: string
+  timeLabel: string
+  hour: number
+  minute: number
+  type: EventKind
+  sourceAt: string
+  priority: EventPriority
+  priorityLabel: string
+  kindLabel: string
+  hasExplicitTime: boolean
+  sourceLabel: string
+}
 type ViewMode = "month" | "week" | "day" | "agenda"
 type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
 type GoogleProductState = {
@@ -111,10 +127,160 @@ function getMonthGrid(date: Date) {
   return cells
 }
 
+function normalizePriority(value: unknown): EventPriority {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (["high", "alta", "urgent", "urgente", "critical", "critica", "crítica", "p1"].includes(normalized)) return "high"
+  if (["low", "baja", "minor", "p3"].includes(normalized)) return "low"
+  if (["medium", "media", "normal", "default", "p2"].includes(normalized)) return "medium"
+  return "unspecified"
+}
+
+function priorityCopy(priority: EventPriority, language: SupportedLanguage) {
+  if (language === "en") {
+    if (priority === "high") return "High priority"
+    if (priority === "medium") return "Medium priority"
+    if (priority === "low") return "Low priority"
+    return "Priority pending"
+  }
+
+  if (priority === "high") return "Prioridad alta"
+  if (priority === "medium") return "Prioridad media"
+  if (priority === "low") return "Prioridad baja"
+  return "Prioridad por definir"
+}
+
+function kindCopy(type: EventKind, copy: Record<string, string>) {
+  if (type === "automation") return copy.automation
+  if (type === "event") return copy.event || (languageLikeSpanish(copy) ? "Evento" : "Event")
+  if (type === "reminder") return copy.reminderItem || (languageLikeSpanish(copy) ? "Recordatorio" : "Reminder")
+  return copy.task
+}
+
+function sourceCopy(source: unknown, type: EventKind, copy: Record<string, string>) {
+  const normalized = String(source || "").trim().toLowerCase()
+  if (normalized.includes("google")) return copy.googleSource || "Google"
+  if (normalized.includes("calendar")) return copy.calendarSource || "Google Calendar"
+  if (normalized.includes("reminder")) return copy.reminderSource || (languageLikeSpanish(copy) ? "Recordatorio" : "Reminder")
+  if (type === "automation") return copy.automationSource || (languageLikeSpanish(copy) ? "Automatizacion activa" : "Active automation")
+  if (type === "event") return copy.calendarSource || "Google Calendar"
+  if (type === "reminder") return copy.reminderSource || (languageLikeSpanish(copy) ? "Recordatorio" : "Reminder")
+  return copy.taskSource || (languageLikeSpanish(copy) ? "Agenda interna" : "Internal agenda")
+}
+
+function normalizeEventKind(value: unknown): EventKind {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (normalized.includes("automation")) return "automation"
+  if (normalized.includes("event") || normalized.includes("calendar")) return "event"
+  if (normalized.includes("reminder")) return "reminder"
+  return "task"
+}
+
+function inferHasExplicitTime(rawEvent: Record<string, any>, sourceAt: string) {
+  const directTime = rawEvent.time || rawEvent.time_label || rawEvent.start_time || rawEvent.scheduled_time
+  if (directTime) return true
+  return /t\d{2}:\d{2}/i.test(sourceAt)
+}
+
+function languageLikeSpanish(copy: Record<string, string>) {
+  return copy.today === "Hoy"
+}
+
+function eventVisuals(event: EventItem) {
+  if (event.type === "automation") {
+    return {
+      card: "bg-[#F5F3FF] border-[#DDD6FE]",
+      text: "text-[#5B21B6]",
+      soft: "bg-[#EDE9FE] text-[#6D28D9]",
+      icon: <Zap className="w-4 h-4 flex-shrink-0 text-[#5B21B6]" />,
+    }
+  }
+
+  if (event.type === "event") {
+    return {
+      card: "bg-[#ECFEFF] border-[#A5F3FC]",
+      text: "text-[#0F766E]",
+      soft: "bg-[#CCFBF1] text-[#0F766E]",
+      icon: <CalendarDays className="w-4 h-4 flex-shrink-0 text-[#0F766E]" />,
+    }
+  }
+
+  if (event.type === "reminder") {
+    return {
+      card: "bg-[#FFF7ED] border-[#FED7AA]",
+      text: "text-[#C2410C]",
+      soft: "bg-[#FFEDD5] text-[#C2410C]",
+      icon: <AlarmClock className="w-4 h-4 flex-shrink-0 text-[#C2410C]" />,
+    }
+  }
+
+  return {
+    card: "bg-[#EFF6FF] border-[#BFDBFE]",
+    text: "text-[#1D4ED8]",
+    soft: "bg-[#DBEAFE] text-[#1D4ED8]",
+    icon: <CheckSquare className="w-4 h-4 flex-shrink-0 text-[#1D4ED8]" />,
+  }
+}
+
+function priorityBadge(priority: EventPriority) {
+  if (priority === "high") return "border-red-200 bg-red-50 text-red-700"
+  if (priority === "medium") return "border-amber-200 bg-amber-50 text-amber-700"
+  if (priority === "low") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  return "border-slate-200 bg-slate-100 text-slate-600"
+}
+
+function buildEventItem(
+  rawEvent: Record<string, any>,
+  timezone: string,
+  locale: string,
+  language: SupportedLanguage,
+  copy: Record<string, string>
+) {
+  const sourceAt = String(
+    rawEvent.scheduled_at ||
+      rawEvent.start_at ||
+      rawEvent.starts_at ||
+      rawEvent.start_time ||
+      rawEvent.due_at ||
+      rawEvent.when ||
+      ""
+  )
+  const date = safeDate(sourceAt)
+  if (!date) return null
+  const type = normalizeEventKind(rawEvent.type || rawEvent.kind || rawEvent.source)
+  const priority = normalizePriority(rawEvent.priority || rawEvent.priority_level || rawEvent.importance)
+  return {
+    id: String(rawEvent.id || rawEvent.external_id || rawEvent.google_event_id || Math.random()),
+    title: String(rawEvent.title || rawEvent.summary || rawEvent.name || kindCopy(type, copy)),
+    dateKey: dateKey(date, timezone),
+    timeLabel: timeLabel(date, locale, timezone),
+    hour:
+      Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: timezone,
+          hour: "numeric",
+          hour12: false,
+        }).format(date)
+      ) % 24,
+    minute: Number(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        minute: "2-digit",
+      }).format(date)
+    ),
+    type,
+    sourceAt,
+    priority,
+    priorityLabel: priorityCopy(priority, language),
+    kindLabel: kindCopy(type, copy),
+    hasExplicitTime: inferHasExplicitTime(rawEvent, sourceAt),
+    sourceLabel: sourceCopy(rawEvent.source || rawEvent.kind || rawEvent.type, type, copy),
+  } satisfies EventItem
+}
+
 function EventDetail({ event, locale, language, onClose }: { event: EventItem; locale: string; language: SupportedLanguage; onClose: () => void }) {
   const copy = COPY[language]
-  const isTask = event.type === "task"
-  const color = isTask ? "#3B82F6" : "#7C3AED"
+  const visuals = eventVisuals(event)
+  const color = event.type === "task" ? "#3B82F6" : event.type === "automation" ? "#7C3AED" : event.type === "event" ? "#0F766E" : "#C2410C"
   const sourceDate = new Date(event.sourceAt)
   const fullLabel = Number.isNaN(sourceDate.getTime()) ? event.timeLabel : sourceDate.toLocaleString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
   return (
@@ -125,8 +291,8 @@ function EventDetail({ event, locale, language, onClose }: { event: EventItem; l
         <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}15` }}>{isTask ? <CheckSquare className="w-4 h-4" style={{ color }} /> : <Zap className="w-4 h-4" style={{ color }} />}</div>
-              <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>{isTask ? copy.task : copy.automation}</span>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}15` }}>{visuals.icon}</div>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>{event.kindLabel}</span>
             </div>
             <h2 className="text-lg font-bold text-[#0F1F63] leading-snug">{event.title}</h2>
           </div>
@@ -137,7 +303,19 @@ function EventDetail({ event, locale, language, onClose }: { event: EventItem; l
             <AlarmClock className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color }} />
             <div>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">{copy.dateTime}</p>
-              <p className="text-sm font-semibold capitalize text-[#0F1F63]">{fullLabel}</p>
+              <p className="text-sm font-semibold capitalize text-[#0F1F63]">{event.hasExplicitTime ? fullLabel : `${fullLabel} · ${copy.pendingHour || (copy.today === "Hoy" ? "hora por definir" : "time pending")}`}</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border bg-background px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{copy.priority || (copy.today === "Hoy" ? "Prioridad" : "Priority")}</p>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${priorityBadge(event.priority)}`}>
+                {event.priorityLabel}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border bg-background px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{copy.source || (copy.today === "Hoy" ? "Origen" : "Source")}</p>
+              <p className="text-sm font-semibold text-[#0F1F63]">{event.sourceLabel}</p>
             </div>
           </div>
           <button onClick={onClose} className="w-full h-10 rounded-xl bg-[#0F1F63] text-white text-sm font-bold hover:bg-[#1a2f7a]">{copy.close}</button>
@@ -222,42 +400,7 @@ export default function AgendaPage() {
             const dashboardAgendaPayload = (await dashboardAgendaResponse.json().catch(() => ({}))) as DashboardAgendaPayload
             if (dashboardAgendaResponse.ok) {
               const liveEvents = asArray<Record<string, any>>(dashboardAgendaPayload?.events)
-                .map((event) => {
-                  const sourceAt = String(
-                    event.scheduled_at ||
-                      event.start_at ||
-                      event.starts_at ||
-                      event.start_time ||
-                      event.due_at ||
-                      ""
-                  )
-                  const date = safeDate(sourceAt)
-                  if (!date) return null
-                  return {
-                    id: String(event.id || event.external_id || event.google_event_id || Math.random()),
-                    title: String(event.title || event.summary || event.name || copy.task),
-                    dateKey: dateKey(date, resolvedTimezone),
-                    timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone),
-                    hour:
-                      Number(
-                        new Intl.DateTimeFormat("en-US", {
-                          timeZone: resolvedTimezone,
-                          hour: "numeric",
-                          hour12: false,
-                        }).format(date)
-                      ) % 24,
-                    minute: Number(
-                      new Intl.DateTimeFormat("en-US", {
-                        timeZone: resolvedTimezone,
-                        minute: "2-digit",
-                      }).format(date)
-                    ),
-                    type: String(event.type || event.kind || event.source || "").toLowerCase().includes("automation")
-                      ? ("automation" as const)
-                      : ("task" as const),
-                    sourceAt,
-                  }
-                })
+                .map((event) => buildEventItem(event, resolvedTimezone, resolvedLocale, resolvedLanguage, COPY[resolvedLanguage]))
                 .filter(Boolean) as EventItem[]
 
               if (liveEvents.length > 0) {
@@ -286,16 +429,24 @@ export default function AgendaPage() {
 
         if (!usedDashboardAgenda) {
           const mapped = [
-            ...(tasks || []).map((task) => {
-              const date = safeDate(task.due_at)
-              if (!date) return null
-              return { id: task.id, title: task.title || copy.task, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "task" as const, sourceAt: task.due_at }
-            }),
-            ...(recurring || []).map((automation) => {
-              const date = safeDate(automation.next_run)
-              if (!date) return null
-              return { id: automation.id, title: automation.title || copy.automation, dateKey: dateKey(date, resolvedTimezone), timeLabel: timeLabel(date, resolvedLocale, resolvedTimezone), hour: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, hour: "numeric", hour12: false }).format(date)) % 24, minute: Number(new Intl.DateTimeFormat("en-US", { timeZone: resolvedTimezone, minute: "2-digit" }).format(date)), type: "automation" as const, sourceAt: automation.next_run }
-            }),
+            ...(tasks || []).map((task) =>
+              buildEventItem(
+                { ...task, type: "task", source: "task", priority: task.priority || task.priority_level || null },
+                resolvedTimezone,
+                resolvedLocale,
+                resolvedLanguage,
+                COPY[resolvedLanguage]
+              )
+            ),
+            ...(recurring || []).map((automation) =>
+              buildEventItem(
+                { ...automation, start_at: automation.next_run, type: "automation", source: "automation" },
+                resolvedTimezone,
+                resolvedLocale,
+                resolvedLanguage,
+                COPY[resolvedLanguage]
+              )
+            ),
           ].filter(Boolean) as EventItem[]
 
           setEvents(mapped)
@@ -394,6 +545,14 @@ export default function AgendaPage() {
   }, [events, todayKey])
 
   const hours = Array.from({ length: 24 }, (_, index) => index)
+  const prioritySummary = useMemo(
+    () => ({
+      high: events.filter((event) => event.priority === "high").length,
+      medium: events.filter((event) => event.priority === "medium").length,
+      low: events.filter((event) => event.priority === "low").length,
+    }),
+    [events]
+  )
 
   return (
     <div className="flex flex-col gap-0 h-full">
@@ -412,6 +571,7 @@ export default function AgendaPage() {
                   ? "Mostrando tareas y automatizaciones locales mientras la lectura auth-bound no respondió."
                   : "Preparando lectura operativa de la agenda."}
           </p>
+          {googleSignals.contactsSyncStatus ? <p className="mt-2 text-[11px] font-medium text-slate-500">Estado de sync: {googleSignals.contactsSyncStatus}</p> : null}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setReloadKey((prev) => prev + 1)} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary" title="Actualizar agenda">
@@ -460,6 +620,24 @@ export default function AgendaPage() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-red-600">prioridad alta</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{prioritySummary.high}</p>
+          <p className="mt-1 text-xs text-slate-600">Lo mas sensible que deberia destacar primero en el resumen.</p>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">prioridad media</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{prioritySummary.medium}</p>
+          <p className="mt-1 text-xs text-slate-600">Compromisos importantes que no deberian perderse en el acompanamiento.</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600">prioridad baja</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{prioritySummary.low}</p>
+          <p className="mt-1 text-xs text-slate-600">Items complementarios o sin urgencia alta segun la lectura disponible.</p>
+        </div>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-2">
         <div className={`rounded-2xl border p-4 ${googleSignals.calendarConnected ? "border-emerald-200 bg-emerald-50" : "border-sky-200 bg-sky-50"}`}>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">google calendar</p>
@@ -469,6 +647,7 @@ export default function AgendaPage() {
               ? "Su calendario ya puede ayudar a completar lo que ve aqui y lo que pregunta por WhatsApp."
               : "Su agenda ya funciona aqui. Cuando conecte Google Calendar, tambien podra ver lo que agregue desde fuera."}
           </p>
+          {googleSignals.calendarSyncStatus ? <p className="mt-2 text-[11px] font-medium text-slate-500">Estado de sync: {googleSignals.calendarSyncStatus}</p> : null}
         </div>
         <div className={`rounded-2xl border p-4 ${googleSignals.contactsConnected ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">personas para agenda</p>
@@ -505,7 +684,10 @@ export default function AgendaPage() {
                   {cell && <>
                     <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold mb-1 ${isToday ? "bg-[#3B82F6] text-white" : "text-[#0F1F63]"}`}>{cell.getDate()}</div>
                     <div className="space-y-0.5">
-                      {dayEvents.slice(0, 3).map((event) => <button key={event.id} onClick={(evt) => { evt.stopPropagation(); setSelectedEvent(event) }} className={`w-full text-left rounded-lg px-2 py-1 text-xs font-semibold border ${event.type === "task" ? "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]" : "bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]"}`}>{event.title}</button>)}
+                      {dayEvents.slice(0, 3).map((event) => {
+                        const visuals = eventVisuals(event)
+                        return <button key={event.id} onClick={(evt) => { evt.stopPropagation(); setSelectedEvent(event) }} className={`w-full text-left rounded-lg px-2 py-1 text-xs font-semibold border ${visuals.card} ${visuals.text}`}>{event.title}</button>
+                      })}
                       {dayEvents.length > 3 && <div className="text-[10px] text-muted-foreground pl-1">+{dayEvents.length - 3} {copy.more}</div>}
                     </div>
                   </>}
@@ -543,7 +725,10 @@ export default function AgendaPage() {
                   return (
                     <div key={`${key}-${hour}`} className={`border-r border-b border-border px-1 py-0.5 min-h-[40px] ${key === selectedKey ? "bg-[#EFF6FF]/50" : ""}`}>
                       <div className="space-y-0.5">
-                        {hourEvents.map((event) => <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left rounded-lg px-2 py-1 text-xs font-semibold border ${event.type === "task" ? "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]" : "bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]"}`}>{event.title} · {event.timeLabel}</button>)}
+                        {hourEvents.map((event) => {
+                          const visuals = eventVisuals(event)
+                          return <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full text-left rounded-lg px-2 py-1 text-xs font-semibold border ${visuals.card} ${visuals.text}`}>{event.title} · {event.hasExplicitTime ? event.timeLabel : (copy.pendingHour || "hora por definir")}</button>
+                        })}
                       </div>
                     </div>
                   )
@@ -564,15 +749,22 @@ export default function AgendaPage() {
                   <div className="border-r border-b border-border px-2 py-2 text-right"><span className="text-xs text-muted-foreground">{String(hour).padStart(2, "0")}:00</span></div>
                   <div className="border-b border-border p-1.5 min-h-[56px]">
                     <div className="space-y-1">
-                      {hourEvents.map((event) => (
-                        <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full rounded-xl p-3 border text-left ${event.type === "task" ? "bg-[#EFF6FF] border-[#BFDBFE] text-[#1D4ED8]" : "bg-[#F5F3FF] border-[#DDD6FE] text-[#5B21B6]"}`}>
-                          <div className="flex items-center gap-2">
-                            {event.type === "task" ? <CheckSquare className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
-                            <p className="text-sm font-semibold">{event.title}</p>
-                            <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />{event.timeLabel}</span>
-                          </div>
-                        </button>
-                      ))}
+                      {hourEvents.map((event) => {
+                        const visuals = eventVisuals(event)
+                        return (
+                          <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full rounded-xl p-3 border text-left ${visuals.card} ${visuals.text}`}>
+                            <div className="flex items-center gap-2">
+                              {visuals.icon}
+                              <p className="text-sm font-semibold">{event.title}</p>
+                              <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" />{event.hasExplicitTime ? event.timeLabel : (copy.pendingHour || "hora por definir")}</span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${priorityBadge(event.priority)}`}>{event.priorityLabel}</span>
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${visuals.soft}`}>{event.kindLabel}</span>
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -601,15 +793,21 @@ export default function AgendaPage() {
                   {isToday && <div className="text-[10px] font-medium text-[#3B82F6] mt-0.5">{copy.today}</div>}
                 </div>
                 <div className="flex-1 space-y-1.5">
-                  {items.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)).map((event) => (
-                    <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full rounded-xl px-4 py-3 border flex items-center gap-3 text-left ${event.type === "task" ? "bg-[#EFF6FF] border-[#BFDBFE]" : "bg-[#F5F3FF] border-[#DDD6FE]"}`}>
-                      {event.type === "task" ? <CheckSquare className="w-4 h-4 flex-shrink-0 text-[#1D4ED8]" /> : <Zap className="w-4 h-4 flex-shrink-0 text-[#5B21B6]" />}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold truncate ${event.type === "task" ? "text-[#1D4ED8]" : "text-[#5B21B6]"}`}>{event.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{event.type === "task" ? copy.task : copy.automation} · {event.timeLabel}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {items.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)).map((event) => {
+                    const visuals = eventVisuals(event)
+                    return (
+                      <button key={event.id} onClick={() => setSelectedEvent(event)} className={`w-full rounded-xl px-4 py-3 border flex items-start gap-3 text-left ${visuals.card}`}>
+                        {visuals.icon}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className={`text-sm font-semibold truncate ${visuals.text}`}>{event.title}</p>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${priorityBadge(event.priority)}`}>{event.priorityLabel}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{event.kindLabel} · {event.hasExplicitTime ? event.timeLabel : (copy.pendingHour || "hora por definir")} · {event.sourceLabel}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )
