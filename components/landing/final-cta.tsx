@@ -39,7 +39,7 @@ export function FinalCTA() {
             href="/register"
             className="group inline-flex items-center gap-2 rounded-full bg-white px-10 py-5 text-base font-bold text-[#0F1F63] shadow-[0_20px_60px_-15px_rgba(255,255,255,0.5)] transition-all hover:scale-[1.03] hover:shadow-[0_25px_70px_-12px_rgba(255,255,255,0.6)]"
           >
-            Probar Operaly ahora
+            Prueba gratis
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
           </a>
           <a

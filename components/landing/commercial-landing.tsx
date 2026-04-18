@@ -103,7 +103,7 @@ const copy: Record<
     headlineB: "Mas accion clara en su dia.",
     subtitle:
       "Operaly agenda, recuerda, busca correos, revisa documentos, organiza listas y le ayuda a cerrar pendientes con contexto real.",
-    primary: "Probar 7 dias gratis",
+    primary: "Prueba gratis",
     secondary: "Ver planes",
     dashboard: "Entrar al dashboard",
     proofTitle: "No es solo un chat bonito. Es un sistema operativo personal.",
@@ -116,7 +116,7 @@ const copy: Record<
     headlineB: "More clear action in your day.",
     subtitle:
       "Operaly schedules, reminds, searches email, reviews files, organizes lists and helps you close loops with real context.",
-    primary: "Start 7 days free",
+    primary: "Start free trial",
     secondary: "See plans",
     dashboard: "Open dashboard",
     proofTitle: "It is not just a pretty chat. It is your personal operating system.",
@@ -129,7 +129,7 @@ const copy: Record<
     headlineB: "Mehr klare Aktionen im Tag.",
     subtitle:
       "Operaly plant, erinnert, durchsucht E-Mails, prueft Dateien, organisiert Listen und hilft Ihnen mit echtem Kontext.",
-    primary: "7 Tage kostenlos testen",
+    primary: "Gratis testen",
     secondary: "Preise ansehen",
     dashboard: "Dashboard oeffnen",
     proofTitle: "Nicht nur ein Chat. Ihr persoenliches Betriebssystem.",
@@ -142,7 +142,7 @@ const copy: Record<
     headlineB: "Mais acao clara no seu dia.",
     subtitle:
       "Operaly agenda, lembra, busca emails, revisa arquivos, organiza listas e ajuda voce a concluir pendencias com contexto real.",
-    primary: "Testar 7 dias gratis",
+    primary: "Teste gratis",
     secondary: "Ver planos",
     dashboard: "Entrar no dashboard",
     proofTitle: "Nao e so um chat bonito. E seu sistema operacional pessoal.",
@@ -155,7 +155,7 @@ const copy: Record<
     headlineB: "Plus d'action claire dans la journee.",
     subtitle:
       "Operaly planifie, rappelle, cherche les emails, relit les fichiers, organise les listes et aide a conclure avec du contexte.",
-    primary: "Essai gratuit 7 jours",
+    primary: "Essai gratuit",
     secondary: "Voir les offres",
     dashboard: "Entrer dans le dashboard",
     proofTitle: "Ce n'est pas juste un joli chat. C'est votre systeme operatif personnel.",
@@ -358,7 +358,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               href="/register"
               className="inline-flex h-11 flex-1 items-center justify-center rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-sm font-bold text-white"
             >
-              Probar Operaly
+              Prueba gratis
             </a>
             <a
               href="/dashboard"

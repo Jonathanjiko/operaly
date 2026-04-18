@@ -56,7 +56,7 @@ export function Header() {
               className="rounded-full border border-white/20 bg-gradient-to-r from-[#3B82F6] via-[#4F46E5] to-[#06B6D4] px-6 text-white shadow-[0_12px_30px_-10px_rgba(59,130,246,0.55)] hover:opacity-95"
               asChild
             >
-              <a href="/register">Probar 7 dias gratis</a>
+              <a href="/register">Prueba gratis</a>
             </Button>
           </div>
 
@@ -116,7 +116,7 @@ export function Header() {
                   className="rounded-full bg-gradient-to-r from-[#3B82F6] via-[#4F46E5] to-[#06B6D4] text-white"
                   asChild
                 >
-                  <a href="/register">Probar 7 dias gratis</a>
+                  <a href="/register">Prueba gratis</a>
                 </Button>
               </div>
             </div>
