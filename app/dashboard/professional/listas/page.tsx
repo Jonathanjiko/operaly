@@ -414,6 +414,31 @@ export default function ListasPage() {
 
       {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm ${feedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{feedback.message}</div> : null}
 
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {syncSource === "auth_bound"
+                ? "La vista ya intenta reflejar primero lo que backend guarda y devuelve para listas y checklists."
+                : "La vista sigue dependiendo de lectura directa por cuenta, asi que cualquier hueco puede venir de sesion, RLS o backend."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si crea algo por WhatsApp, aqui deberia aparecer con mejor claridad: fecha visible, avance y contenido pendiente.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no baja</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cuando una lista no aparece aqui, el problema ya no es solo la UI: toca revisar escritura real, JWT, RLS o trazas del runtime.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">

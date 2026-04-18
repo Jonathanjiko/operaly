@@ -590,6 +590,35 @@ export default function AgendaPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {agendaSource === "auth_bound"
+                ? "La agenda ya viene del snapshot vivo y deberia reflejar mejor lo que backend entiende y resume."
+                : agendaSource === "mixed"
+                  ? "La lectura auth-bound ya existe, pero todavia se complementa con senal local para no perder contexto."
+                  : agendaSource === "fallback"
+                    ? "La pantalla sigue util, pero depende de lectura local mientras el canal auth-bound se recupera."
+                    : "La agenda todavia esta preparando su lectura operativa."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Prioridad, tipo de item, hora visible o pendiente, y una lectura mas util de lo que tiene hoy o manana.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no cuadra</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si WhatsApp resume distinto o Google no refleja un cambio, el hueco ya no es solo visual: hay que releer trazas del runtime vivo.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-center gap-3 py-3">
         <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary"><ChevronLeft className="w-4 h-4" /></button>
         <button onClick={() => navigate(1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-secondary"><ChevronRight className="w-4 h-4" /></button>
