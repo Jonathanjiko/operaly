@@ -5,6 +5,7 @@ import {
   FileText,
   FolderKanban,
   LockKeyhole,
+  Mail,
   MessageCircle,
   Mic,
   PhoneCall,
@@ -15,12 +16,12 @@ import {
 } from "lucide-react"
 
 const outcomes = [
-  "Agenda y recordatorios claros",
-  "Audios entendidos y confirmados",
-  "Contactos, correos y documentos",
-  "Casos y seguimientos trazables",
+  "Audios, tareas y pendientes",
+  "Correos, contactos y documentos",
+  "Agenda clara para todo el dia",
+  "Listas, casos y seguimiento",
   "Llamadas y mensajes a terceros",
-  "Dashboard privado para control real",
+  "Control simple desde su panel",
 ]
 
 const proofCards = [
@@ -31,13 +32,13 @@ const proofCards = [
   },
   {
     icon: ShieldCheck,
-    title: "Se controla desde dashboard",
-    text: "Usted ve agenda, documentos, listas, integraciones, uso y plan sin perder el foco comercial.",
+    title: "Se maneja fácil desde su panel",
+    text: "Agenda, contactos, documentos, uso y plan en un solo lugar, sin enredarse.",
   },
   {
     icon: LockKeyhole,
     title: "Todo deja huella",
-    text: "Mensajes, agenda, contexto, documentos y acciones quedan trazados para no perder el hilo.",
+    text: "Usted siempre puede volver a lo importante y seguir desde donde lo dejó.",
   },
 ]
 
@@ -50,23 +51,23 @@ const useCases = [
   {
     icon: FileText,
     title: "Recupera contexto rapido",
-    text: "Revise documentos, casos, correos y notas desde una sola conversacion sin dar vueltas.",
+    text: "Revise correos, documentos, casos y notas desde una sola conversación.",
   },
   {
     icon: PhoneCall,
     title: "Ejecuta y acompana",
-    text: "Puede preparar envios, buscar informacion, seguir pendientes y ayudarle a cerrar acciones reales.",
+    text: "Busca, organiza, recuerda y le ayuda a cerrar lo pendiente sin frenarlo.",
   },
 ]
 
 const fixtures = [
   {
     label: "WhatsApp operativo",
-    value: "Audio, texto, listas, agenda y follow-ups",
+    value: "Audio, texto, listas y agenda",
   },
   {
     label: "Dashboard profesional",
-    value: "Agenda, voz, asistente, integraciones y plan",
+    value: "Agenda, contactos, documentos y plan",
   },
   {
     label: "Marca viva",
@@ -78,7 +79,25 @@ const trust = [
   "7 dias gratis",
   "Sin tarjeta para empezar",
   "Mercado Pago",
-  "Entre o pruebe en segundos",
+  "Empieza en minutos",
+]
+
+const integrations = [
+  { label: "WhatsApp", icon: MessageCircle, tone: "from-[#25D366] to-[#16A34A]" },
+  { label: "Gmail", icon: Mail, tone: "from-[#EA4335] to-[#FB7185]" },
+  { label: "Calendar", icon: CalendarDays, tone: "from-[#2563EB] to-[#38BDF8]" },
+  { label: "Drive", icon: FolderKanban, tone: "from-[#22C55E] to-[#3B82F6]" },
+]
+
+const testimonials = [
+  {
+    name: "Profesional independiente",
+    quote: "Le mando un audio y me deja claro qué sigue, qué falta y qué ya quedó resuelto.",
+  },
+  {
+    name: "Dueño de negocio",
+    quote: "Me ayuda con agenda, correos y listas sin hacerme perder tiempo entre pantallas.",
+  },
 ]
 
 type LandingLocale = "es" | "en" | "de" | "pt" | "fr"
@@ -102,13 +121,13 @@ const copy: Record<
     headlineA: "Menos carga mental.",
     headlineB: "Mas accion clara en su dia.",
     subtitle:
-      "Operaly agenda, recuerda, busca correos, revisa documentos, organiza listas y le ayuda a cerrar pendientes con contexto real.",
+      "Operaly le ayuda a recordar, buscar, ordenar y resolver lo importante sin sacarlo de WhatsApp.",
     primary: "Prueba gratis",
     secondary: "Ver planes",
     dashboard: "Entrar al dashboard",
-    proofTitle: "No es solo un chat bonito. Es un sistema operativo personal.",
+    proofTitle: "Un asistente que sí le mueve el día.",
     proofText:
-      "WhatsApp resuelve y el dashboard da control. Asi Operaly le acompana sin hacerlo perderse entre modulos.",
+      "Usted manda un mensaje o un audio. Operaly organiza, recuerda, busca y le ayuda a cerrar pendientes con más orden.",
   },
   en: {
     badge: "Operaly makes daily work lighter from WhatsApp",
@@ -233,6 +252,20 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                 </div>
               ))}
             </div>
+
+            <div className="mt-5 rounded-[28px] border border-[#DCE7F5] bg-white/90 p-4 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Trabaja con</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {integrations.map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-center shadow-sm">
+                    <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${item.tone}`}>
+                      <item.icon className="h-6 w-6 text-white" />
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-[#0F1F63]">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="relative">
@@ -256,16 +289,16 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
 
                 <div className="space-y-3">
                   <div className="mr-10 rounded-3xl rounded-bl-md bg-white/10 p-4 text-sm leading-relaxed text-white/90">
-                    Operaly, revisa mis correos de MAFRE, resume lo importante y luego recordame llamar manana.
+                    Operaly, revisa mis correos de MAFRE, deja lo importante claro y luego recuérdame llamar mañana.
                   </div>
                   <div className="ml-10 rounded-3xl rounded-br-md bg-[#25D366] p-4 text-sm font-medium text-white">
-                    Ya entendI el audio. Le muestro primero los correos relevantes y luego le dejo listo el recordatorio.
+                    Ya entendí. Primero le muestro lo importante y luego le dejo listo el recordatorio.
                   </div>
                   <div className="mr-10 rounded-3xl rounded-bl-md bg-white/10 p-4 text-sm leading-relaxed text-white/90">
-                    Y si encuentro el contrato, enviaselo a Carlos.
+                    Y si encuentra el contrato, envíeselo a Carlos.
                   </div>
                   <div className="ml-10 rounded-3xl rounded-br-md bg-white p-4 text-sm font-semibold text-[#0F1F63]">
-                    Perfecto. Si el contrato correcto es el de MAFRE, sigo con ese envio.
+                    Perfecto. Si es el correcto, sigo con el envío.
                   </div>
                 </div>
 
@@ -288,45 +321,45 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Dashboard Operaly</p>
-                      <p className="mt-1 text-lg font-bold text-[#0F1F63]">Control sin perder el foco</p>
+                      <p className="mt-1 text-lg font-bold text-[#0F1F63]">Control simple para todo lo suyo</p>
                     </div>
                     <div className="rounded-2xl bg-[#EEF6FF] px-3 py-2 text-xs font-semibold text-[#2563EB]">
-                      tiempo real
+                      claro y rápido
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-[#F8FBFF] p-4">
                       <div className="flex items-center gap-2 text-[#0F1F63]">
                         <CalendarDays className="h-4 w-4 text-[#3B82F6]" />
-                        <p className="text-sm font-semibold">Agenda viva</p>
+                        <p className="text-sm font-semibold">Agenda ordenada</p>
                       </div>
-                      <p className="mt-2 text-sm text-slate-600">Prioridades, pendientes y Google Calendar en una sola vista.</p>
+                      <p className="mt-2 text-sm text-slate-600">Prioridades, pendientes y calendario en una sola vista.</p>
                     </div>
                     <div className="rounded-2xl bg-[#F8FBFF] p-4">
                       <div className="flex items-center gap-2 text-[#0F1F63]">
                         <FolderKanban className="h-4 w-4 text-[#7C3AED]" />
-                        <p className="text-sm font-semibold">Casos y documentos</p>
+                        <p className="text-sm font-semibold">Documentos y casos</p>
                       </div>
-                      <p className="mt-2 text-sm text-slate-600">Todo el hilo con contexto, contactos y acciones siguientes.</p>
+                      <p className="mt-2 text-sm text-slate-600">Todo junto para seguir cada tema sin perder el hilo.</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-[28px] border border-[#DCE7F5] bg-[linear-gradient(180deg,#0F1F63_0%,#162875_100%)] p-4 text-white shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Use Operaly hoy</p>
-                  <p className="mt-2 text-2xl font-black tracking-tight">Delegue desde el primer mensaje.</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Pruebe lo mejor de Operaly</p>
+                  <p className="mt-2 text-2xl font-black tracking-tight">Empiece a delegar desde el primer audio.</p>
                   <div className="mt-4 space-y-3 text-sm text-white/80">
                     <div className="flex items-start gap-2">
                       <Users className="mt-0.5 h-4 w-4 text-[#86EFAC]" />
-                      Contactos, correos y nombres parciales
+                      Contactos, correos y búsquedas rápidas
                     </div>
                     <div className="flex items-start gap-2">
                       <FileText className="mt-0.5 h-4 w-4 text-[#86EFAC]" />
-                      Documentos, contratos, listas y casos
+                      Documentos, contratos, listas y tareas
                     </div>
                     <div className="flex items-start gap-2">
                       <Mic className="mt-0.5 h-4 w-4 text-[#86EFAC]" />
-                      Audio, follow-up y confirmacion guiada
+                      Audios, recordatorios y seguimiento
                     </div>
                   </div>
                   <a
@@ -338,6 +371,17 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="relative mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+          <div className="grid gap-4 md:grid-cols-2">
+            {testimonials.map((item) => (
+              <div key={item.name} className="rounded-[28px] border border-[#DCE7F5] bg-white/90 p-5 shadow-sm">
+                <p className="text-sm leading-7 text-slate-700">“{item.quote}”</p>
+                <p className="mt-3 text-sm font-semibold text-[#0F1F63]">{item.name}</p>
+              </div>
+            ))}
           </div>
         </div>
 

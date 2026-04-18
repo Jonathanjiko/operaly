@@ -190,7 +190,7 @@ function UserMenu({
           <DropdownMenuItem asChild>
             <Link href="/precios" className="rounded-xl px-3 py-2">
               <CreditCard className="h-4 w-4" />
-              Planes y add-ons
+              Planes y extras
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -441,14 +441,14 @@ export default function ProfessionalDashboardLayout({
             <div className="rounded-3xl border border-[#DCE7F5] bg-white/90 p-4 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Use Operaly hoy</p>
               <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                Mande un audio, una tarea o un documento y siga el hilo desde aqui.
+                Si necesita más capacidad, súbala desde aquí en segundos.
               </p>
               <div className="mt-3 grid gap-2">
                 <Link
-                  href="/dashboard/professional/asistente"
+                  href="/dashboard/professional/configuracion"
                   className="inline-flex h-11 items-center justify-center rounded-2xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-sm font-semibold text-white"
                 >
-                  Probar Operaly ahora
+                  Subir de plan
                 </Link>
                 <Link
                   href="/dashboard/professional/configuracion"
@@ -542,10 +542,10 @@ export default function ProfessionalDashboardLayout({
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-2 xl:flex">
                 <Link
-                  href="/dashboard/professional/asistente"
+                  href="/dashboard/professional/configuracion"
                   className="rounded-2xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
                 >
-                  Probar Operaly
+                  Subir de plan
                 </Link>
                 <Link
                   href="/dashboard/professional/contactos"
@@ -572,18 +572,18 @@ export default function ProfessionalDashboardLayout({
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Operaly activo</p>
                 <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
-                  Su panel esta hecho para volver a Operaly rapido, no para esconderlo.
+                  Su panel está hecho para moverse rápido y ver lo importante sin vueltas.
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
-                  Use audio, agenda, listas, documentos e integraciones como una sola experiencia.
+                  Revise uso, suba de plan si hace falta y entre rápido a lo que más usa.
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Link
-                  href="/dashboard/professional/asistente"
+                  href="/dashboard/professional/configuracion"
                   className="inline-flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-5 text-sm font-semibold text-white"
                 >
-                  Probar Operaly
+                  Subir de plan
                 </Link>
                 <Link
                   href="/dashboard/professional/integraciones"

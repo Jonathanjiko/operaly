@@ -139,7 +139,7 @@ function getUsageLevel(used: number, limit: number) {
       level: "critical",
       percent,
       title: "Muy cerca del límite ⚠️",
-      message: "Conviene revisar un add-on o un cambio de plan antes de frenarse.",
+      message: "Conviene sumar minutos, mensajes o subir de plan antes de frenarse.",
       toneClass: "border-[#FCD34D] bg-[#FFFBEB]",
       badgeClass: "bg-[#FEF3C7] text-[#D97706]",
     }
@@ -173,7 +173,7 @@ function normalizeOfferLabel(value: Record<string, any>) {
       value.name ||
       value.addon_code ||
       value.offer_code ||
-      "Add-on disponible"
+      "Extra disponible"
   )
     .replace(/_/g, " ")
     .trim()
@@ -200,7 +200,7 @@ function describeThreshold(value: string) {
   if (normalized.includes("warning") || normalized.includes("75")) {
     return "El uso ya pide mirarlo con calma para no apretarse despues."
   }
-  return "Su plan y sus recursos se estan leyendo desde la cuenta real."
+  return "Aquí ve lo que hoy tiene disponible en su cuenta."
 }
 
 function normalizeRuntimeStatus(value: string | null | undefined) {
@@ -1034,11 +1034,11 @@ export default function ProfessionalDashboardPage() {
             <div>
               <p className="text-sm font-semibold text-[#0F1F63]">Ideas para seguir creciendo 💡</p>
               <p className="mt-1 text-sm text-slate-600">
-                Operaly ya detecto opciones utiles para que no se le corte el ritmo.
+                Aquí verá opciones útiles para seguir sin frenarse.
               </p>
             </div>
             <Link href="/precios" className="text-sm font-semibold text-[#2563EB] hover:underline">
-              Ver planes y add-ons
+              Ver planes y extras
             </Link>
           </div>
 
@@ -1107,7 +1107,7 @@ export default function ProfessionalDashboardPage() {
                 <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/70 px-3 py-2">
                   <p className="text-xs text-slate-600">
                     {item.state.level === "critical" || item.state.level === "blocked"
-                      ? "Puede revisar add-ons o subir de plan para no frenarse."
+                      ? "Puede sumar minutos, mensajes o subir de plan para no frenarse."
                       : "Todavía hay margen, pero ya conviene mirar cómo viene el mes."}
                   </p>
                   <Link href="/precios" className="shrink-0 text-xs font-semibold text-[#2563EB] hover:underline">
@@ -1362,7 +1362,7 @@ export default function ProfessionalDashboardPage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Plan aplicado</p>
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(profile?.planCode)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Este es el plan que hoy se está usando para calcular funciones y consumo.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Este es el plan que hoy define sus límites y beneficios.</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avisos</p>
@@ -1378,7 +1378,7 @@ export default function ProfessionalDashboardPage() {
             <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
               {featureAccess.googleEnabled || featureAccess.voiceEnabled || featureAccess.customAgentEnabled ? "Con extras ✨" : "Base"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Si llega al límite, aquí debería notarse cuándo conviene sumar un add-on.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Si llega al límite, aquí verá cuándo conviene sumar capacidad o subir de plan.</p>
           </div>
         </div>
       </div>
