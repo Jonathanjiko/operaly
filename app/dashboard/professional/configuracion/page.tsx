@@ -294,6 +294,16 @@ export default function ProfessionalSettingsPage() {
     if (!plan) return pricing.formatPen(0)
     return pricing.formatCatalogMoney(plan.price, plan.currency)
   }
+  const getCommercialPriceHint = (billingPeriodLabel: string | null | undefined) => {
+    const normalized = String(billingPeriodLabel || "").toLowerCase()
+    if (normalized.includes("mensual")) {
+      return "Se suma a su plan cada mes"
+    }
+    if (normalized.includes("vigencia") || normalized.includes("mes")) {
+      return "Pago único con uso por 30 días"
+    }
+    return "Pago único"
+  }
 
   const getPlanStatusBadgeClass = (status: string | null | undefined) => {
     const normalized = String(status || "").toLowerCase()
@@ -1570,10 +1580,13 @@ export default function ProfessionalSettingsPage() {
                             {addon.extra_messages > 0 ? <span>+{addon.extra_messages} mensajes</span> : null}
                             {addon.extra_automations > 0 ? <span>+{addon.extra_automations} automatizaciones</span> : null}
                             {addon.enables_voice ? <span>voz</span> : null}
-                            <span>{addon.billingPeriodLabel}</span>
+                            <span>{getCommercialPriceHint(addon.billingPeriodLabel)}</span>
                           </div>
                           <p className="text-sm font-medium text-[#0F1F63]">
                             {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                          </p>
+                          <p className="text-xs font-semibold text-[#0F1F63]">
+                            Pago único
                           </p>
                           {!isPeru && (
                             <p className="text-xs text-[#0369A1]">
@@ -1610,10 +1623,13 @@ export default function ProfessionalSettingsPage() {
                             <p className="text-sm text-muted-foreground">{addon.description}</p>
                             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                               {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB mensuales</span> : null}
-                              <span>{addon.billingPeriodLabel}</span>
+                              <span>{getCommercialPriceHint(addon.billingPeriodLabel)}</span>
                             </div>
                             <p className="text-sm font-medium text-[#0F1F63]">
                               {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                            </p>
+                            <p className="text-xs font-semibold text-[#0F1F63]">
+                              Cargo mensual adicional
                             </p>
                             {!isPeru && (
                               <p className="text-xs text-[#0369A1]">
