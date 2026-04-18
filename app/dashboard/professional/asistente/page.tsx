@@ -75,6 +75,19 @@ const TREATMENTS = [
   { code: "Arq.", label: "Arq." },
 ]
 
+function formatRuntimeDate(value: unknown) {
+  if (!value) return "Sin marca visible"
+  const parsed = new Date(String(value))
+  if (Number.isNaN(parsed.getTime())) return "Sin marca visible"
+  return parsed.toLocaleString("es-PE")
+}
+
+function confidenceLabel(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return "Sin confianza visible"
+  return `${Math.round(numeric * 100)}%`
+}
+
 export default function AsistentePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -328,6 +341,19 @@ export default function AsistentePage() {
     )
   }
 
+  const runtimePreferences = runtimeSnapshot?.preferences || {}
+  const recentUnderstanding = runtimeSnapshot?.recentUnderstandingRuns?.[0] || null
+  const recentEvent = runtimeSnapshot?.recentEvents?.[0] || null
+  const visibleTone = String(runtimePreferences.assistant_tone || tone)
+  const visibleStyle = String(runtimePreferences.assistant_style || style)
+  const visibleProfession = String(runtimePreferences.assistant_profession || professionCode)
+  const visibleName = String(runtimePreferences.preferred_name || preferredName || "")
+  const runtimeAligned =
+    visibleTone === tone &&
+    visibleStyle === style &&
+    visibleProfession === professionCode
+  const selectedProfession = PROFESSIONS.find((item) => item.code === professionCode)
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
@@ -370,6 +396,13 @@ export default function AsistentePage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#3B82F6]/20 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Acompanamiento en vivo</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Esta vista ya no solo guarda tono y contexto. Tambien deja ver si el runtime esta aplicando esa personalidad y si la comprension reciente mantiene una senal util.
+        </p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">asistente visible</p>
@@ -408,6 +441,40 @@ export default function AsistentePage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">sincronia del agente</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeAligned ? "Alineada" : "Pendiente de reflejar"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.preferences
+              ? "El runtime ya devuelve una personalidad visible para contrastarla con esta configuracion."
+              : "Todavia no hay una personalidad visible confirmada por backend."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">comprension reciente</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{confidenceLabel(recentUnderstanding?.confidence)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {recentUnderstanding
+              ? `Decision visible: ${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
+              : "Todavia no hay una corrida reciente visible del entendimiento."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">trato esperado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {treatment || "Sin tratamiento"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {visibleName
+              ? `Debe dirigirse a ${visibleName} con tono ${visibleTone}.`
+              : "Debe sostener el tono elegido aunque no haya un nombre visible."}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">plan actual</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
         </div>
@@ -418,6 +485,50 @@ export default function AsistentePage() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo activo</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{style}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#0F1F63]">Senal viva del asistente</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Lo ultimo visible del runtime sobre tono, contexto y comprension.
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+            {formatRuntimeDate(
+              recentUnderstanding?.created_at ||
+                recentUnderstanding?.inserted_at ||
+                recentEvent?.created_at ||
+                recentEvent?.inserted_at
+            )}
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">profesion visible</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+              {PROFESSIONS.find((item) => item.code === visibleProfession)?.label || visibleProfession || "Pendiente"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {selectedProfession?.sublabel || "Configuracion profesional actual"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">tono visible</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">{visibleTone}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Estilo: {visibleStyle}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">ultimo evento</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+              {normalizeRuntimeStatus(String(recentEvent?.event_type || recentEvent?.action || recentEvent?.type || ""))}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Sirve para contrastar si la conversacion viva ya se siente como su configuracion.
+            </p>
+          </div>
         </div>
       </div>
 

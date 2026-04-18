@@ -51,6 +51,19 @@ const CALL_STYLES = [
   { value: "formal", label: "Formal", desc: "Estructurado" },
 ]
 
+function formatRuntimeDate(value: unknown) {
+  if (!value) return "Sin marca visible"
+  const parsed = new Date(String(value))
+  if (Number.isNaN(parsed.getTime())) return "Sin marca visible"
+  return parsed.toLocaleString("es-PE")
+}
+
+function confidenceLabel(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return "Sin confianza visible"
+  return `${Math.round(numeric * 100)}%`
+}
+
 export default function VozPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -217,7 +230,7 @@ export default function VozPage() {
   const handleSave = async () => {
     if (!clientId) return
     if (useCustomVoice && !customVoiceId.trim()) {
-      alert("Pega el Voice ID de ElevenLabs para usar una voz clonada.")
+      setSaveError("Pegue el Voice ID de ElevenLabs para usar una voz clonada.")
       return
     }
     setSaving(true)
@@ -312,6 +325,17 @@ export default function VozPage() {
   const resolvedVoiceLabel = useCustomVoice
     ? customVoiceId.trim() || "Pendiente"
     : selectedVoice?.name || "Sin voz seleccionada"
+  const recentVoiceSignal =
+    runtimeSnapshot?.recentEvents?.find((event) => {
+      const haystack = JSON.stringify(event).toLowerCase()
+      return haystack.includes("voice") || haystack.includes("audio") || haystack.includes("call")
+    }) || runtimeSnapshot?.recentEvents?.[0] || null
+  const recentUnderstanding = runtimeSnapshot?.recentUnderstandingRuns?.[0] || null
+  const runtimeVoiceId = String(runtimeSnapshot?.voice?.voice_id || "")
+  const runtimeVoiceName = String(runtimeSnapshot?.voice?.voice_name || "")
+  const runtimeMatchesSelection = Boolean(runtimeVoiceId) && runtimeVoiceId === (useCustomVoice ? customVoiceId.trim() : voiceId)
+  const selectedToneCopy = TONE_STYLES.find((item) => item.value === toneStyle)?.label || toneStyle
+  const selectedCallStyleCopy = CALL_STYLES.find((item) => item.value === callStyle)?.label || callStyle
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -355,6 +379,13 @@ export default function VozPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#06B6D4]/20 bg-gradient-to-r from-[#06B6D4]/5 via-white to-[#7C3AED]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Canal de audio en vivo</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Esta vista deja ver si la configuracion guardada ya se esta reflejando en el runtime y si el canal de audio reciente muestra movimiento real.
+        </p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz visible</p>
@@ -381,11 +412,78 @@ export default function VozPage() {
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">llamadas</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicacion real</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Debe oírse como aquí</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Si en llamada o audio suena distinto, la integración de fondo todavía no está cerrada del todo.
           </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">sincronia runtime</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeMatchesSelection ? "Alineada" : runtimeVoiceId ? "Pendiente de aplicar" : "Sin reflejo aun"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeVoiceName
+              ? `Runtime visible: ${runtimeVoiceName}`
+              : "Todavia no hay una voz visible confirmada por backend."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">canal prioritario</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {preferAudio ? "Audio antes de llamada" : "Llamada cuando haga falta"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {preferAudio
+              ? "El sistema intentara resolver primero con audio cuando alcance."
+              : "El sistema puede escalar mas rapido a llamada o contacto directo."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">comprension reciente</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {confidenceLabel(recentUnderstanding?.confidence)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {recentUnderstanding
+              ? `Ultima decision visible: ${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
+              : "Todavia no hay una corrida reciente visible para este canal."}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#0F1F63]">Senal viva del canal</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ultimo movimiento visible del runtime relacionado con voz, audio o llamada.
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+            {formatRuntimeDate(recentVoiceSignal?.created_at || recentVoiceSignal?.inserted_at || recentVoiceSignal?.occurred_at)}
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">evento</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+              {normalizeRuntimeStatus(String(recentVoiceSignal?.event_type || recentVoiceSignal?.action || recentVoiceSignal?.type || ""))}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">tono esperado</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">{selectedToneCopy}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Llamada: {selectedCallStyleCopy}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">voz seleccionada</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63] break-all">{resolvedVoiceLabel}</p>
+          </div>
         </div>
       </div>
 
