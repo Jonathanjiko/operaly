@@ -14,15 +14,15 @@ const PLAN_FEATURES: Record<string, string[]> = {
     "Sin personalizar voz ni asistente",
   ],
   core: [
-    "1200 mensajes IA y 20 min de voz",
-    "3 GB, 1000 contactos y 10 automatizaciones",
+    "1200 mensajes IA y 10 min de voz",
+    "3 GB, 500 contactos y 10 automatizaciones",
     "Todos los modulos base activos",
     "Google Suite se desbloquea desde Pro",
     "Refuerzos contextuales cuando haga falta",
   ],
   pro: [
     "3000 mensajes IA y 30 min de voz",
-    "5 GB, 1200 contactos y 15 automatizaciones",
+    "5 GB, 1000 contactos y 15 automatizaciones",
     "Seguimiento mas intenso para uso profesional",
     "Google Suite incluido",
     "Mas capacidad para audio, agenda y operaciones",
@@ -157,7 +157,7 @@ export function Pricing() {
               <p className="text-sm font-semibold text-[#0F1F63]">Crecimiento sin abrumar</p>
             </div>
             <p className="mt-4 text-sm leading-6 text-slate-600">
-              El landing no necesita mostrar cada refuerzo operativo. Operaly primero debe sentirse usable, valioso y claro. Los paquetes extra y descuentos contextuales aparecen despues, en el momento correcto del uso.
+              El landing no necesita mostrar cada refuerzo operativo. Operaly primero debe sentirse usable, valioso y claro. Los refuerzos de audio o mensajes aparecen despues, en el momento correcto del uso, y la capacidad extra de almacenamiento vive como ampliacion mensual.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
@@ -170,7 +170,7 @@ export function Pricing() {
                 Pro y Pro Plus con Google incluido
               </div>
               <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
-                Refuerzos solo al 90% de uso con oferta limitada
+                Ofertas solo para audio o mensajes al 90% de uso
               </div>
             </div>
           </div>
@@ -181,7 +181,7 @@ export function Pricing() {
               Prueba gratis primero. Luego escale solo donde ya sienta friccion real.
             </p>
             <p className="mt-3 text-sm leading-6 text-white/75">
-              Trial muestra el valor completo del uso diario. Core, Pro y Pro Plus abren mas capacidad; y al 90% de uso aparecen refuerzos con contador para no cortar la experiencia.
+              Trial muestra el valor completo del uso diario. Core, Pro y Pro Plus abren mas capacidad; y al 90% de uso aparecen refuerzos con contador solo para audio o mensajes, sin meter ruido extra en la decision inicial.
             </p>
             <Link
               href="/register?plan=trial"

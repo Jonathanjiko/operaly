@@ -224,6 +224,30 @@ export default function ProfessionalSettingsPage() {
     () => catalog.addons.filter((addon) => addon.active !== false),
     [catalog]
   )
+  const availableUsageBoosters = useMemo(
+    () => availableAddons.filter((addon) => addon.category !== "storage"),
+    [availableAddons]
+  )
+  const availableStorageSubscriptions = useMemo(
+    () => availableAddons.filter((addon) => addon.category === "storage"),
+    [availableAddons]
+  )
+  const activeUsageAddons = useMemo(
+    () =>
+      activeAddons.filter((addon) => {
+        const addonCode = addon.code || addon.item_code || ""
+        return catalogAddonsMap.get(addonCode)?.category !== "storage"
+      }),
+    [activeAddons, catalogAddonsMap]
+  )
+  const activeStorageSubscriptions = useMemo(
+    () =>
+      activeAddons.filter((addon) => {
+        const addonCode = addon.code || addon.item_code || ""
+        return catalogAddonsMap.get(addonCode)?.category === "storage"
+      }),
+    [activeAddons, catalogAddonsMap]
+  )
   const paymentSummary = useMemo(() => {
     return payments.reduce(
       (acc, payment) => {
@@ -1376,7 +1400,11 @@ export default function ProfessionalSettingsPage() {
               </div>
               <div className="rounded-2xl border border-border bg-secondary/20 p-4">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">add-ons activos</p>
-                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeAddons.length}</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeUsageAddons.length}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">storage mensual</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeStorageSubscriptions.length}</p>
               </div>
             </div>
 
@@ -1389,7 +1417,7 @@ export default function ProfessionalSettingsPage() {
             <div className="flex items-center gap-2 mb-6">
               <Layers3 className="w-5 h-5 text-[#8B5CF6]" />
               <h2 className="text-xl font-semibold text-[#0F1F63]">
-                Add-ons y compras
+                Capacidad y refuerzos
               </h2>
             </div>
 
@@ -1397,23 +1425,23 @@ export default function ProfessionalSettingsPage() {
               <div>
                 <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium text-[#0F1F63]">Add-ons activos</p>
+                    <p className="text-sm font-medium text-[#0F1F63]">Refuerzos consumibles activos</p>
                     <p className="text-sm text-muted-foreground">
-                      Lo que ya está habilitado en tu cuenta y debe reflejarse también en WhatsApp.
+                      Minutos o mensajes extra que siguen vivos por consumo y vencen al mes si no se usan.
                     </p>
                   </div>
                   <span className="inline-flex items-center rounded-full border border-border bg-secondary/30 px-3 py-1 text-xs font-medium text-muted-foreground">
-                    {activeAddons.length} activo{activeAddons.length === 1 ? "" : "s"}
+                    {activeUsageAddons.length} activo{activeUsageAddons.length === 1 ? "" : "s"}
                   </span>
                 </div>
 
-                {activeAddons.length === 0 ? (
+                {activeUsageAddons.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
-                    Aún no tienes add-ons activos en esta cuenta.
+                    Aún no tienes refuerzos consumibles activos en esta cuenta.
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {activeAddons.map((addon) => {
+                    {activeUsageAddons.map((addon) => {
                       const addonCode = addon.code || addon.item_code || ""
                       const catalogAddon = catalogAddonsMap.get(addonCode)
                       return (
@@ -1440,9 +1468,8 @@ export default function ProfessionalSettingsPage() {
                               </p>
                               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                                 {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
-                                {addon.storage_gb_extra ? <span>+{addon.storage_gb_extra} GB</span> : null}
                                 {addon.enables_voice ? <span>voz habilitada</span> : null}
-                                {addon.enables_google ? <span>Google habilitado</span> : null}
+                                <span>vence al mes si no se consume</span>
                               </div>
                             </div>
 
@@ -1459,15 +1486,77 @@ export default function ProfessionalSettingsPage() {
               </div>
 
               <div>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#0F1F63]">Capacidad mensual adicional</p>
+                    <p className="text-sm text-muted-foreground">
+                      Almacenamiento extra que se suma a su plan mensual y sigue mientras la suscripción esté activa.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-border bg-secondary/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                    {activeStorageSubscriptions.length} activa{activeStorageSubscriptions.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {activeStorageSubscriptions.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    Aún no tiene almacenamiento mensual adicional activo.
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {activeStorageSubscriptions.map((addon) => {
+                      const addonCode = addon.code || addon.item_code || ""
+                      const catalogAddon = catalogAddonsMap.get(addonCode)
+                      return (
+                        <div key={addon.id} className="rounded-2xl border border-border p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-[#0F1F63]">
+                                  {catalogAddon?.name || addonCode || "Storage adicional"}
+                                </p>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${getAddonStatusBadgeClass(
+                                    addon.status
+                                  )}`}
+                                >
+                                  {addon.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {catalogAddon?.description || "Capacidad mensual adicional sobre su plan base."}
+                              </p>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                {addon.storage_gb_extra ? <span>+{addon.storage_gb_extra} GB mensuales</span> : null}
+                                <span>se suma a su cobro mensual</span>
+                              </div>
+                            </div>
+
+                            <div className="text-right text-xs text-muted-foreground">
+                              <p>Activado {formatDateTime(addon.created_at)}</p>
+                              <p>Revisión {formatDateTime(addon.expires_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#06B6D4]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Ampliar capacidades</p>
+                  <p className="text-sm font-medium text-[#0F1F63]">Comprar refuerzos o ampliar plan</p>
                 </div>
                 <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
                   Google Suite ya no se compra por separado. En Trial va incluido, y desde Pro en adelante viene dentro del plan.
                 </div>
+                <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Los paquetes de audio y mensajes vencen al mes si no se usan. El almacenamiento se cobra como capacidad mensual adicional.
+                </div>
                 <div className="grid gap-4">
-                  {availableAddons.map((addon) => (
+                  {availableUsageBoosters.map((addon) => (
                     <div
                       key={addon.code}
                       className="rounded-2xl border border-border bg-background p-4"
@@ -1478,11 +1567,10 @@ export default function ProfessionalSettingsPage() {
                           <p className="text-sm text-muted-foreground">{addon.description}</p>
                           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                             {addon.extra_minutes > 0 ? <span>+{addon.extra_minutes} min</span> : null}
-                            {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB</span> : null}
                             {addon.extra_messages > 0 ? <span>+{addon.extra_messages} mensajes</span> : null}
                             {addon.extra_automations > 0 ? <span>+{addon.extra_automations} automatizaciones</span> : null}
-                            {addon.enables_google ? <span>Google Suite</span> : null}
                             {addon.enables_voice ? <span>voz</span> : null}
+                            <span>{addon.billingPeriodLabel}</span>
                           </div>
                           <p className="text-sm font-medium text-[#0F1F63]">
                             {pricing.formatCatalogMoney(addon.price, addon.currency)}
@@ -1504,6 +1592,47 @@ export default function ProfessionalSettingsPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="mt-6">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#8B5CF6]" />
+                    <p className="text-sm font-medium text-[#0F1F63]">Ampliaciones mensuales de almacenamiento</p>
+                  </div>
+                  <div className="grid gap-4">
+                    {availableStorageSubscriptions.map((addon) => (
+                      <div
+                        key={addon.code}
+                        className="rounded-2xl border border-border bg-background p-4"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2">
+                            <p className="font-semibold text-[#0F1F63]">{addon.name}</p>
+                            <p className="text-sm text-muted-foreground">{addon.description}</p>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB mensuales</span> : null}
+                              <span>{addon.billingPeriodLabel}</span>
+                            </div>
+                            <p className="text-sm font-medium text-[#0F1F63]">
+                              {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                            </p>
+                            {!isPeru && (
+                              <p className="text-xs text-[#0369A1]">
+                                Cobro real {pricing.formatPen(pricing.toPenAmount(addon.price, addon.currency))}
+                              </p>
+                            )}
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={() => handleAddonCheckout(addon.code)}
+                          >
+                            Activar mensual
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
