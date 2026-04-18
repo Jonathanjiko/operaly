@@ -1463,6 +1463,9 @@ export default function ProfessionalSettingsPage() {
                   <Sparkles className="w-4 h-4 text-[#06B6D4]" />
                   <p className="text-sm font-medium text-[#0F1F63]">Ampliar capacidades</p>
                 </div>
+                <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                  Google Suite ya no se compra por separado. En Trial va incluido, y desde Pro en adelante viene dentro del plan.
+                </div>
                 <div className="grid gap-4">
                   {availableAddons.map((addon) => (
                     <div
@@ -1592,6 +1595,16 @@ export default function ProfessionalSettingsPage() {
                         <p className="text-sm text-muted-foreground mt-1">
                           {formatPlanDisplayPrice(plan)} · Cobro {getDisplayPlanPeriodicity(plan.code)}
                         </p>
+                        {plan.code === "core" ? (
+                          <p className="text-xs text-[#0F1F63] mt-2">
+                            Google Suite se habilita al subir a Pro.
+                          </p>
+                        ) : null}
+                        {plan.code === "pro" || plan.code === "pro_plus" ? (
+                          <p className="text-xs text-emerald-700 mt-2">
+                            Incluye Google Suite dentro del plan.
+                          </p>
+                        ) : null}
                         {!isPeru && (
                           <p className="text-xs text-[#0369A1] mt-1">
                             Mercado Pago debita {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}

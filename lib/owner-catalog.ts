@@ -173,23 +173,6 @@ const DEFAULT_ADDONS: OwnerCatalogAddon[] = [
     enables_google: false,
     active: true,
   },
-  {
-    code: "addon_google",
-    name: "Google Suite",
-    description: "Habilita Gmail, Drive y Calendar fuera del trial.",
-    price: 25,
-    currency: "PEN",
-    billingPeriodLabel: "mensual",
-    category: "integracion",
-    features: ["Drive", "Gmail", "Calendar", "Suscripcion mensual"],
-    extra_messages: 0,
-    extra_minutes: 0,
-    extra_storage_gb: 0,
-    extra_automations: 0,
-    enables_voice: false,
-    enables_google: true,
-    active: true,
-  },
 ]
 
 const DEFAULT_TARGETS: OwnerTargets = {
@@ -280,7 +263,9 @@ export function sanitizeOwnerCatalog(input: unknown): OwnerCatalog {
         },
       }
     }),
-    addons: (Array.isArray(raw.addons) ? raw.addons : fallback.addons).map((addon, index) => {
+    addons: (Array.isArray(raw.addons) ? raw.addons : fallback.addons)
+      .filter((addon) => String(addon?.code || "") !== "addon_google")
+      .map((addon, index) => {
       const fallbackAddon = fallback.addons[index]
       const source = addonMap.get(String(addon?.code || "")) || addon || fallbackAddon
       return {

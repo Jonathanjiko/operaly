@@ -17,33 +17,24 @@ const PLAN_FEATURES: Record<string, string[]> = {
     "1200 mensajes IA y 20 min de voz",
     "3 GB, 1000 contactos y 10 automatizaciones",
     "Todos los modulos base activos",
-    "Google Suite como add-on mensual desde aqui",
-    "Ofertas contextuales y compra mas simple",
+    "Google Suite se desbloquea desde Pro",
+    "Refuerzos contextuales cuando haga falta",
   ],
   pro: [
     "3000 mensajes IA y 30 min de voz",
     "5 GB, 1200 contactos y 15 automatizaciones",
     "Seguimiento mas intenso para uso profesional",
-    "Google Suite como add-on mensual",
+    "Google Suite incluido",
     "Mas capacidad para audio, agenda y operaciones",
   ],
   pro_plus: [
     "5000 mensajes IA y 60 min de voz",
     "10 GB, 2000 contactos y 30 automatizaciones",
     "Capacidad mas amplia para vivir dentro de Operaly",
-    "Google Suite como add-on mensual",
+    "Google Suite incluido",
     "Mayor margen para automatizar y acompañar",
   ],
 }
-
-const ADDON_HIGHLIGHTS = [
-  "Audio +5 min: S/10",
-  "Audio +10 min: S/18",
-  "Storage +1 GB: S/7.5",
-  "Storage +3 GB: S/20",
-  "Mensajeria IA +500: S/15",
-  "Google Suite mensual: S/25",
-]
 
 export function Pricing() {
   const { pricing, loading, isPeru } = usePricingCurrency()
@@ -57,7 +48,7 @@ export function Pricing() {
             Entre con prueba gratis y escale solo cuando ya sienta el valor de Operaly.
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            El trial expone lo mejor del producto. Desde Core en adelante, Google Suite pasa a suscripcion aparte y los add-ons refuerzan consumo real.
+            El trial expone lo mejor del producto. Desde Pro en adelante, Google Suite queda incluido y los refuerzos de consumo aparecen solo cuando de verdad hagan falta.
           </p>
         </div>
 
@@ -68,7 +59,7 @@ export function Pricing() {
                 En Trial, Google Suite va incluido gratis durante 7 dias.
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                Desde Core en adelante se activa como suscripcion mensual, con ofertas comerciales contextuales para onboarding o consumo alto.
+                Desde Pro en adelante queda incluido dentro del plan. En Core, si lo necesita, la ruta comercial correcta es subir de plan.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0F1F63] shadow-sm">
@@ -163,14 +154,24 @@ export function Pricing() {
           <div className="rounded-[30px] border border-[#DCE7F5] bg-white p-6 shadow-sm">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-[#7C3AED]" />
-              <p className="text-sm font-semibold text-[#0F1F63]">Add-ons y crecimiento contextual</p>
+              <p className="text-sm font-semibold text-[#0F1F63]">Crecimiento sin abrumar</p>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {ADDON_HIGHLIGHTS.map((item) => (
-                <div key={item} className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
-                  {item}
-                </div>
-              ))}
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              El landing no necesita mostrar cada refuerzo operativo. Operaly primero debe sentirse usable, valioso y claro. Los paquetes extra y descuentos contextuales aparecen despues, en el momento correcto del uso.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
+                Trial con hook completo y Google incluido
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
+                Core como base estable para operar diario
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
+                Pro y Pro Plus con Google incluido
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 px-4 py-3 text-sm font-medium text-slate-700">
+                Refuerzos solo al 90% de uso con oferta limitada
+              </div>
             </div>
           </div>
 
@@ -180,7 +181,7 @@ export function Pricing() {
               Prueba gratis primero. Luego escale solo donde ya sienta friccion real.
             </p>
             <p className="mt-3 text-sm leading-6 text-white/75">
-              Trial muestra el valor completo del uso diario. Core, Pro y Pro Plus abren mas capacidad; Google Suite y add-ons se activan como capa comercial natural sin romper el uso.
+              Trial muestra el valor completo del uso diario. Core, Pro y Pro Plus abren mas capacidad; y al 90% de uso aparecen refuerzos con contador para no cortar la experiencia.
             </p>
             <Link
               href="/register?plan=trial"

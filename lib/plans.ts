@@ -34,7 +34,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     name: "Core",
     price: 49,
     currency: "PEN",
-    description: "Plan base para usar Operaly todos los dias con mas capacidad y Google como add-on.",
+    description: "Plan base para usar Operaly todos los dias con mas capacidad y una operacion ya estable.",
     cta: "Elegir Core",
     billingPeriodLabel: "mensual",
     features: [
@@ -42,7 +42,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
       "20 min de voz y llamadas",
       "3 GB de almacenamiento",
       "1000 contactos y 10 automatizaciones",
-      "Google Suite como suscripcion aparte",
+      "Google Suite desde Pro en adelante",
     ],
   },
   {
@@ -59,7 +59,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
       "30 min de voz y llamadas",
       "5 GB de almacenamiento",
       "1200 contactos y 15 automatizaciones",
-      "Google Suite como add-on mensual",
+      "Google Suite incluido",
     ],
   },
   {
@@ -75,7 +75,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
       "60 min de voz y llamadas",
       "10 GB de almacenamiento",
       "2000 contactos y 30 automatizaciones",
-      "Google Suite como add-on mensual",
+      "Google Suite incluido",
     ],
   },
 ]
