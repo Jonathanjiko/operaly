@@ -951,7 +951,7 @@ export default function ProfessionalSettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
@@ -959,21 +959,21 @@ export default function ProfessionalSettingsPage() {
               <h2 className="text-xl font-semibold text-[#0F1F63]">Perfil</h2>
             </div>
 
-            <div className="flex items-center gap-6 mb-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] flex items-center justify-center text-white font-bold text-3xl">
+            <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-border bg-secondary/20 p-4 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-2xl font-bold text-white sm:h-20 sm:w-20 sm:text-3xl">
                 {initials}
               </div>
 
-              <div>
-                <p className="text-sm text-muted-foreground">Cuenta conectada</p>
-                <p className="font-medium text-[#0F1F63]">{email}</p>
-                <p className="text-sm text-muted-foreground mt-1">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cuenta conectada</p>
+                <p className="mt-2 break-all text-base font-semibold text-[#0F1F63] sm:text-lg">{email}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Cliente: {clientId}
                 </p>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-[#0F1F63] mb-2">
                   Nombre completo
@@ -1123,7 +1123,7 @@ export default function ProfessionalSettingsPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4 mt-4">
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-border p-4 bg-secondary/20">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
                   Fuente de timezone
@@ -1167,7 +1167,7 @@ export default function ProfessionalSettingsPage() {
                 <p className="text-sm font-semibold text-[#0F1F63]">Estado aplicado vs guardado</p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-border bg-secondary/20 p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Idioma operativo</p>
                   <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
@@ -1290,7 +1290,7 @@ export default function ProfessionalSettingsPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-secondary/20 p-5">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Plan actual</p>
                   <p className="text-2xl font-semibold text-[#0F1F63]">
@@ -1310,7 +1310,7 @@ export default function ProfessionalSettingsPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
                     Importe
@@ -1395,7 +1395,7 @@ export default function ProfessionalSettingsPage() {
 
             <div className="space-y-6">
               <div>
-                <div className="mb-4 flex items-center justify-between gap-4">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-medium text-[#0F1F63]">Add-ons activos</p>
                     <p className="text-sm text-muted-foreground">
@@ -1525,7 +1525,7 @@ export default function ProfessionalSettingsPage() {
                     key={payment.id}
                     className="rounded-2xl border border-border p-4"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
                           {formatMoney(
@@ -1615,7 +1615,9 @@ export default function ProfessionalSettingsPage() {
           </div>
         </div>
 
-        {/* Voice Settings Section */}
+      </div>
+
+      <div className="mt-6">
         <VoiceSettingsSection
           clientId={clientId}
           planCode={effectivePlanCode}
@@ -1625,7 +1627,6 @@ export default function ProfessionalSettingsPage() {
           minutesLimit={voiceMinutesLimit}
           onSaved={loadData}
         />
-
       </div>
     </div>
   )

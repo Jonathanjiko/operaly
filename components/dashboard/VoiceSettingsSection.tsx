@@ -157,8 +157,8 @@ export function VoiceSettingsSection({
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Mic className="h-5 w-5 text-[#7C3AED]" />
           <h2 className="text-xl font-semibold text-[#0F1F63]">Voz y llamadas</h2>
@@ -213,7 +213,7 @@ export function VoiceSettingsSection({
 
       {hasVoice && (
         <div className="space-y-6">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setVoiceMode("preset")}
@@ -325,7 +325,7 @@ export function VoiceSettingsSection({
 
           <div>
             <label className="mb-3 block text-sm font-medium text-[#0F1F63]">Estilo de llamada</label>
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-3">
               {CALL_STYLES.map((style) => (
                 <button
                   key={style.value}
@@ -344,7 +344,7 @@ export function VoiceSettingsSection({
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 p-4">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-[#0F1F63]">Preferir audio antes que llamada</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -364,7 +364,7 @@ export function VoiceSettingsSection({
             </button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
               <p className="text-sm font-semibold text-[#0F1F63]">Cómo está quedando hoy</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-600">
