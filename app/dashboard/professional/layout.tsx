@@ -34,6 +34,7 @@ import {
   Plug,
   Settings,
   Sparkles,
+  MessageCircleMore,
   UserRound,
   Users,
   Zap,
@@ -339,6 +340,27 @@ export default function ProfessionalDashboardLayout({
             <UserMenu profile={profile} onLogout={handleLogout} />
           </div>
         </div>
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+          <Link
+            href="/dashboard/professional/asistente"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-xs font-semibold text-white shadow-sm"
+          >
+            <MessageCircleMore className="h-4 w-4" />
+            Probar Operaly
+          </Link>
+          <Link
+            href="/dashboard/professional/voz"
+            className="inline-flex h-10 shrink-0 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-[#0F1F63]"
+          >
+            Ajustar voz
+          </Link>
+          <Link
+            href="/dashboard/professional/integraciones"
+            className="inline-flex h-10 shrink-0 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-[#0F1F63]"
+          >
+            Integraciones
+          </Link>
+        </div>
       </div>
 
       {mobileOpen ? (
@@ -413,6 +435,31 @@ export default function ProfessionalDashboardLayout({
             </div>
           </div>
         </div>
+
+        {!collapsed ? (
+          <div className="px-4 pb-2">
+            <div className="rounded-3xl border border-[#DCE7F5] bg-white/90 p-4 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Use Operaly hoy</p>
+              <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
+                Mande un audio, una tarea o un documento y siga el hilo desde aqui.
+              </p>
+              <div className="mt-3 grid gap-2">
+                <Link
+                  href="/dashboard/professional/asistente"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-sm font-semibold text-white"
+                >
+                  Probar Operaly ahora
+                </Link>
+                <Link
+                  href="/dashboard/professional/configuracion"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-[#0F1F63]"
+                >
+                  Revisar perfil y plan
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <nav className="px-4 py-2">
           <div className="space-y-1.5">
@@ -495,6 +542,12 @@ export default function ProfessionalDashboardLayout({
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-2 xl:flex">
                 <Link
+                  href="/dashboard/professional/asistente"
+                  className="rounded-2xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+                >
+                  Probar Operaly
+                </Link>
+                <Link
                   href="/dashboard/professional/contactos"
                   className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
                 >
@@ -513,7 +566,34 @@ export default function ProfessionalDashboardLayout({
           </div>
         </header>
 
-        <main className="px-4 pb-8 pt-24 sm:px-6 lg:px-8 lg:pt-8">
+        <main className="px-4 pb-8 pt-28 sm:px-6 lg:px-8 lg:pt-8">
+          <div className="mx-auto mb-5 max-w-[1500px]">
+            <div className="flex flex-col gap-3 rounded-[28px] border border-[#DCE7F5] bg-white/85 p-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Operaly activo</p>
+                <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+                  Su panel esta hecho para volver a Operaly rapido, no para esconderlo.
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Use audio, agenda, listas, documentos e integraciones como una sola experiencia.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Link
+                  href="/dashboard/professional/asistente"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-5 text-sm font-semibold text-white"
+                >
+                  Probar Operaly
+                </Link>
+                <Link
+                  href="/dashboard/professional/integraciones"
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-[#0F1F63]"
+                >
+                  Conectar herramientas
+                </Link>
+              </div>
+            </div>
+          </div>
           <div className="mx-auto w-full max-w-[1500px]">{children}</div>
         </main>
       </div>
