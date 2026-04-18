@@ -195,6 +195,13 @@ export default function ProfessionalSettingsPage() {
       .join("")
   }, [fullName])
 
+  const recentRuntimeEvent = runtimeSnapshot?.recentEvents?.[0] || null
+  const recentUnderstanding = runtimeSnapshot?.recentUnderstandingRuns?.[0] || null
+  const runtimeVoiceVisible = String(runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "")
+  const runtimeAssistantTone = String(runtimeSnapshot?.preferences?.assistant_tone || "")
+  const runtimeAssistantStyle = String(runtimeSnapshot?.preferences?.assistant_style || "")
+  const runtimeLanguageVisible = String(runtimeSnapshot?.preferences?.preferred_language || "")
+
   const effectivePlanCode =
     getEffectivePlanCode(effectiveLimits) || subscription?.plan_code || clientPlanCode || "trial"
   const effectivePlanStatus =
@@ -835,6 +842,33 @@ export default function ProfessionalSettingsPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {runtimeSource === "auth_bound"
+                ? "La cuenta ya toma primero plan, limites, voz y senales vivas desde el runtime auth-bound."
+                : runtimeSource === "legacy"
+                  ? "La pantalla sigue util, pero cayo a lecturas de respaldo mientras el runtime nuevo no respondio."
+                  : "La cuenta todavia esta preparando su lectura operativa."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Lo que ajuste aqui deberia reflejarse luego en voz, asistente, agenda, WhatsApp y llamadas sin tener que repetirlo.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no cuadra</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si aqui queda guardado pero Operaly no lo aplica, el hueco ya no es solo visual: toca revisar runtime, trazas o integracion viva.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {saveFeedback ? (
         <div
           className={`rounded-2xl border px-4 py-3 text-sm ${
@@ -846,6 +880,76 @@ export default function ProfessionalSettingsPage() {
           {saveFeedback.message}
         </div>
       ) : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">senal viva</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {normalizeRuntimeStatus(String(recentRuntimeEvent?.event_type || recentRuntimeEvent?.action || recentRuntimeEvent?.type || ""))}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {recentRuntimeEvent
+              ? "Ultimo movimiento visible del runtime para esta cuenta."
+              : "Todavia no hay una senal viva visible del runtime."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeVoiceVisible || "Pendiente"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeVoiceVisible
+              ? "Esto es lo que backend ya alcanza a reflejar como voz visible."
+              : "Todavia no hay una voz visible confirmada por runtime."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">asistente visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeAssistantTone || "Pendiente"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeAssistantTone || runtimeAssistantStyle
+              ? `Runtime: ${runtimeAssistantTone || "sin tono"} · ${runtimeAssistantStyle || "sin estilo"}`
+              : "Todavia no hay una personalidad visible confirmada por runtime."}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">idioma visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeLanguageVisible || preferredLanguage || language || "es"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Debe reflejar lo que Operaly use al responder y no solo lo que esta guardado en perfil.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">comprension reciente</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {recentUnderstanding?.confidence != null
+              ? `${Math.round(Number(recentUnderstanding.confidence) * 100)}%`
+              : "Sin senal"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {recentUnderstanding
+              ? `Decision: ${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
+              : "Todavia no hay una corrida reciente visible del entendimiento."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicacion real</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeSource === "auth_bound" ? "Contrastable" : "Parcial"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Si WhatsApp o llamadas siguen distintos, la diferencia ya no nace en esta pantalla sino en el runtime vivo.
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-8">

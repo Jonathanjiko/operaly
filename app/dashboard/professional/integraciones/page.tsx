@@ -650,6 +650,33 @@ export default function IntegracionesPage() {
         </div>
       ) : null}
 
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {runtimeSource === "auth_bound"
+                ? "La pantalla ya toma primero la capacidad real desde el runtime auth-bound."
+                : runtimeSource === "legacy"
+                  ? "La pantalla sigue util, pero cayo al contrato anterior mientras el runtime nuevo no respondio."
+                  : "La pantalla todavia esta preparando la lectura operativa de integraciones."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cuando conecte Google, agenda, Drive, Gmail y personas deberian sentirse disponibles tambien desde WhatsApp y el runtime vivo.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no aplica</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si aqui se ve conectado pero Operaly no lo usa bien, el hueco ya no es solo visual: toca revisar trazas, permisos o routing real.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
         <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
         <p className="mt-1 text-sm text-muted-foreground">
