@@ -16,6 +16,7 @@ export type DashboardRuntimePayload = {
   feature_access?: Record<string, any> | null
   offers?: Array<Record<string, any>>
   addon_offers?: Array<Record<string, any>>
+  user_facing?: Record<string, any> | null
 }
 
 export function toNumber(value: unknown) {

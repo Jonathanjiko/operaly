@@ -91,6 +91,7 @@ type DashboardRuntimePayload = {
   feature_access?: Record<string, any> | null
   offers?: Array<Record<string, any>>
   addon_offers?: Array<Record<string, any>>
+  user_facing?: Record<string, any> | null
 }
 
 type DashboardAgendaPayload = {
@@ -518,7 +519,11 @@ export default function ProfessionalDashboardPage() {
                       dashboardRuntimePayload?.plan?.highest_threshold_crossed ||
                       ""
                   ),
-                  offers: asArray(dashboardRuntimePayload?.offers || dashboardRuntimePayload?.addon_offers),
+                  offers: asArray(
+                    dashboardRuntimePayload?.user_facing?.offers ||
+                      dashboardRuntimePayload?.offers ||
+                      dashboardRuntimePayload?.addon_offers
+                  ),
                   googleCalendarCount: toNumber(
                     dashboardAgendaPayload?.google_calendar_count || usage?.google_calendar_count
                   ),

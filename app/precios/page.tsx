@@ -21,13 +21,17 @@ export default function PricingPage() {
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const response = await fetch("/api/catalog", {
+        const response = await fetch("/api/product/catalog", {
           method: "GET",
           cache: "no-store",
         })
         const payload = await response.json().catch(() => ({}))
-        if (response.ok && payload?.catalog?.plans) {
-          setPlans(payload.catalog.plans as OwnerCatalogPlan[])
+        const commercialCatalog =
+          payload?.user_facing?.catalog ||
+          payload?.user_facing ||
+          payload?.catalog
+        if (response.ok && commercialCatalog?.plans) {
+          setPlans(commercialCatalog.plans as OwnerCatalogPlan[])
         }
       } catch {}
     }

@@ -72,13 +72,17 @@ export default function IniciarPagoClient() {
   useEffect(() => {
     const load = async () => {
       try {
-        const catalogResponse = await fetch("/api/catalog", {
+        const catalogResponse = await fetch("/api/product/catalog", {
           method: "GET",
           cache: "no-store",
         })
         const catalogPayload = await catalogResponse.json().catch(() => ({}))
-        if (catalogResponse.ok && catalogPayload?.catalog?.plans) {
-          setCatalogPlans(catalogPayload.catalog.plans as OwnerCatalogPlan[])
+        const commercialCatalog =
+          catalogPayload?.user_facing?.catalog ||
+          catalogPayload?.user_facing ||
+          catalogPayload?.catalog
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          setCatalogPlans(commercialCatalog.plans as OwnerCatalogPlan[])
         }
       } catch {}
 

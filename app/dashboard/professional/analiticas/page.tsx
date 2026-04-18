@@ -109,6 +109,21 @@ function StatCard({ label, value, helper, icon: Icon, color }: {
   )
 }
 
+function getCommercialPriceHint(billingPeriodLabel: string | null | undefined) {
+  const normalized = String(billingPeriodLabel || "").toLowerCase()
+  if (normalized.includes("mensual")) {
+    return "Se suma a su plan cada mes"
+  }
+  if (normalized.includes("vigencia") || normalized.includes("mes")) {
+    return "Pago único con uso por 30 días"
+  }
+  return "Pago único"
+}
+
+function getCommercialPriceBadge(addon: OwnerCatalogAddon) {
+  return addon.category === "storage" ? "Cargo mensual adicional" : "Pago único"
+}
+
 export default function ProfessionalAnalyticsPage() {
   const { pricing, isPeru } = usePricingCurrency()
   const [loading, setLoading]         = useState(true)
@@ -220,14 +235,18 @@ export default function ProfessionalAnalyticsPage() {
       setAddons((addonsData || []) as AddOnRow[])
 
       try {
-        const catalogResponse = await fetch("/api/catalog", {
+        const catalogResponse = await fetch("/api/product/catalog", {
           method: "GET",
           cache: "no-store",
         })
         const catalogPayload = await catalogResponse.json().catch(() => ({}))
-        if (catalogResponse.ok && catalogPayload?.ok) {
+        const commercialCatalog =
+          catalogPayload?.user_facing?.catalog ||
+          catalogPayload?.user_facing ||
+          catalogPayload?.catalog
+        if (catalogResponse.ok && commercialCatalog?.addons) {
           setCatalogAddons(
-            ((catalogPayload.catalog?.addons || []) as OwnerCatalogAddon[]).filter(
+            ((commercialCatalog.addons || []) as OwnerCatalogAddon[]).filter(
               (addon) => addon.active !== false
             )
           )
@@ -383,13 +402,13 @@ export default function ProfessionalAnalyticsPage() {
         </div>
       </div>
 
-      {/* Add-ons activos + disponibles */}
+      {/* Extras activos + disponibles */}
       <div className="bg-card rounded-2xl border border-border p-6 space-y-6">
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-[#F59E0B]" />
-              <h2 className="text-lg font-semibold text-[#0F1F63]">Add-ons activos</h2>
+              <h2 className="text-lg font-semibold text-[#0F1F63]">Extras activos</h2>
             </div>
             <span className="text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full border border-border">
               {addons.length} activo{addons.length !== 1 ? "s" : ""}
@@ -475,6 +494,9 @@ export default function ProfessionalAnalyticsPage() {
                   <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                     {addon.description}
                   </p>
+                  <div className="mt-2 inline-flex rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {getCommercialPriceBadge(addon)}
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                     {addon.extra_minutes > 0 ? <span>+{addon.extra_minutes} min</span> : null}
                     {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB</span> : null}
@@ -483,7 +505,10 @@ export default function ProfessionalAnalyticsPage() {
                   </div>
                   <div className="mt-3 flex items-center justify-between">
                     <div className="text-right">
-                      <span className="text-base font-bold text-[#0F1F63]">{displayLabel}<span className="text-xs text-muted-foreground font-normal">/mes</span></span>
+                      <span className="text-base font-bold text-[#0F1F63]">{displayLabel}</span>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {getCommercialPriceHint(addon.billingPeriodLabel)}
+                      </p>
                       {!isPeru ? (
                         <p className="text-[10px] text-muted-foreground mt-1">
                           Cobro real {pricing.formatPen(addon.price)}
@@ -518,7 +543,7 @@ export default function ProfessionalAnalyticsPage() {
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-3 text-center">
-            El pago se procesa con Mercado Pago en soles. Fuera de Peru mostramos el equivalente en USD solo como vitrina.
+            Los extras de audio y mensajes se pagan una sola vez. El espacio adicional se suma a su plan mensual.
           </p>
         </div>
       </div>
@@ -529,12 +554,12 @@ export default function ProfessionalAnalyticsPage() {
           <h2 className="text-lg font-semibold text-[#0F1F63] mb-4">Uso técnico detallado</h2>
           <div className="space-y-3">
             {[
-              ["Tokens usados",         usage.tokens_used        ?? 0, "tokens"],
-              ["Storage usado",         `${usage.storage_used_mb ?? 0} MB`, ""],
+              ["Procesos IA",          usage.tokens_used        ?? 0, "tokens"],
+              ["Espacio usado",        `${usage.storage_used_mb ?? 0} MB`, ""],
               ["Investigaciones",       usage.research_used      ?? 0, "búsquedas"],
               ["Páginas procesadas",    usage.file_pages_used    ?? 0, "páginas"],
-              ["Chunks IA",             usage.chunks_used        ?? 0, "chunks"],
-              ["Workflows activos",     usage.workflows_active   ?? 0, "activos"],
+              ["Bloques analizados",   usage.chunks_used        ?? 0, "bloques"],
+              ["Flujos activos",       usage.workflows_active   ?? 0, "activos"],
             ].map(([label, value, unit]) => (
               <div key={String(label)} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border border-border">
                 <p className="text-sm text-muted-foreground">{label}</p>

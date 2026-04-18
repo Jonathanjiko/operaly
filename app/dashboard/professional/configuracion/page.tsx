@@ -577,13 +577,17 @@ export default function ProfessionalSettingsPage() {
       )
 
       try {
-        const catalogResponse = await fetch("/api/catalog", {
+        const catalogResponse = await fetch("/api/product/catalog", {
           method: "GET",
           cache: "no-store",
         })
         const catalogPayload = await catalogResponse.json().catch(() => ({}))
-        if (catalogResponse.ok && catalogPayload?.catalog) {
-          setCatalog(catalogPayload.catalog as OwnerCatalog)
+        const commercialCatalog =
+          catalogPayload?.user_facing?.catalog ||
+          catalogPayload?.user_facing ||
+          catalogPayload?.catalog
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          setCatalog(commercialCatalog as OwnerCatalog)
         }
       } catch (catalogError) {
         console.warn("catalog query error:", catalogError)
