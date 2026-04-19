@@ -393,7 +393,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="flex flex-col gap-12">
           <div className="pt-8 text-white">
             <div className="relative mb-14 min-h-[400px] overflow-visible">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
@@ -416,11 +416,6 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               <h2 className="mt-8 max-w-[980px] text-[5.8rem] font-black leading-[0.84] tracking-[-0.09em] text-white/14 sm:text-[7.2rem] lg:text-[10.5rem]">
                 {t.overloadTitle}
               </h2>
-            </div>
-
-            <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
-              <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={24} height={24} className="h-6 w-6" />
-              {t.badge}
             </div>
 
             <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
@@ -490,7 +485,18 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
             </div>
           </div>
 
-          <div className="relative pb-8 lg:pb-0">
+          <div className="relative mx-auto w-full max-w-5xl pb-8">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
+                  <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={24} height={24} className="h-6 w-6" />
+                  {t.badge}
+                </div>
+              </div>
+              <div className="hidden rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-medium text-white/88 shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur md:inline-flex">
+                {t.positioning}
+              </div>
+            </div>
             <div className="absolute inset-x-10 top-10 h-[560px] rounded-[44px] bg-[radial-gradient(circle,rgba(255,255,255,0.18),transparent_62%)] blur-3xl" />
             <div
               className="relative overflow-hidden rounded-[42px] border border-white/18 bg-white/88 p-4 shadow-[0_44px_120px_-40px_rgba(9,17,43,0.65)] backdrop-blur-xl sm:p-5"
