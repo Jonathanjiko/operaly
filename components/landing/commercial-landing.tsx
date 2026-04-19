@@ -112,6 +112,7 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
       "Forgetting things",
       "Not knowing what is next",
     ],
+    overloadTitle: "OVERLOAD",
     badge: "Operaly makes daily work lighter from WhatsApp",
     title: "Disorder, pressure and mental load",
     titleAccent: "do have a way out with Operaly.",
@@ -148,6 +149,7 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
   de: {
     overload: "Das ist Überlastung.",
     overloadWords: ["Zu spät", "Zu viele Nachrichten", "Faden verloren", "Überall suchen", "Zu viel im Kopf", "Nächster Schritt unklar"],
+    overloadTitle: "ÜBERLASTUNG",
     badge: "Operaly entlastet Ihren Alltag direkt aus WhatsApp",
     title: "Unordnung, Druck und mentale Last",
     titleAccent: "haben mit Operaly einen Ausweg.",
@@ -184,6 +186,7 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
   pt: {
     overload: "Isso é sobrecarga.",
     overloadWords: ["Chega atrasado", "Mensagens demais", "Perde o fio", "Procura em todo lugar", "Esquece tudo", "Não sabe o próximo passo"],
+    overloadTitle: "SOBRECARGA",
     badge: "Operaly facilita seu dia a dia pelo WhatsApp",
     title: "Desordem, pressão e carga mental",
     titleAccent: "têm saída com Operaly.",
@@ -220,6 +223,7 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
   fr: {
     overload: "C'est de la surcharge.",
     overloadWords: ["Toujours en retard", "Trop de messages", "Le fil se perd", "Vous cherchez partout", "Vous oubliez", "La suite n'est pas claire"],
+    overloadTitle: "SURCHARGE",
     badge: "Operaly vous simplifie la vie depuis WhatsApp",
     title: "Le désordre, la pression et la charge mentale",
     titleAccent: "ont une vraie sortie avec Operaly.",
@@ -256,6 +260,7 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
   it: {
     overload: "Questa è sovraccarico.",
     overloadWords: ["Arriva tardi", "Troppi messaggi", "Perde il filo", "Cerca ovunque", "Si dimentica", "Non sa cosa viene dopo"],
+    overloadTitle: "DISORDINE",
     badge: "Operaly le semplifica la vita da WhatsApp",
     title: "Disordine, pressione e carico mentale",
     titleAccent: "hanno una vera uscita con Operaly.",
@@ -382,18 +387,18 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
           <div className="pt-8 text-white">
-            <div className="relative mb-12 min-h-[280px] overflow-visible">
+            <div className="relative mb-14 min-h-[320px] overflow-visible">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
                 {t.overload}
               </p>
-              <div className="relative mt-4 h-[130px]">
+              <div className="relative mt-6 h-[150px]">
                 {t.overloadWords.map((pill, index) => (
                   <span
                     key={pill}
-                    className="absolute inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-base font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
+                    className="absolute inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
                     style={{
-                      left: `${(index % 4) * 18}%`,
-                      top: `${8 + (index % 2) * 42 + Math.floor(index / 4) * 24}px`,
+                      left: `${(index % 4) * 17}%`,
+                      top: `${12 + (index % 2) * 46 + Math.floor(index / 4) * 28}px`,
                       animation: `rain-pill 6s ease-in-out ${index * 0.22}s infinite`,
                     }}
                   >
@@ -401,7 +406,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   </span>
                 ))}
               </div>
-              <h2 className="mt-1 text-[4.8rem] font-black leading-none tracking-[-0.08em] text-white/14 sm:text-[6rem] lg:text-[8.4rem]">
+              <h2 className="mt-3 max-w-[720px] text-[5.2rem] font-black leading-[0.88] tracking-[-0.08em] text-white/14 sm:text-[6.4rem] lg:text-[8.8rem]">
                 {t.overloadTitle}
               </h2>
             </div>
@@ -411,17 +416,17 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               {t.badge}
             </div>
 
-            <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.9] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
+            <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
               {t.title}
               <span className="mt-3 block bg-gradient-to-r from-[#25D366] via-[#7DD3FC] to-[#F472B6] bg-clip-text text-transparent">
                 {t.titleAccent}
               </span>
             </h1>
 
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/80">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/82">
               {t.subtitle}
             </p>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-[#C9D7FF] sm:text-base">
+            <p className="mt-4 max-w-[44rem] text-sm leading-7 text-[#C9D7FF] sm:text-base">
               {t.positioning}
             </p>
 
@@ -464,14 +469,14 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               ))}
             </div>
 
-            <div className="mt-8 grid max-w-2xl gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid max-w-[54rem] gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {t.modules.map((module, index) => (
                 <div
                   key={module.title}
-                  className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(232,240,255,0.92))] p-5 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
+                  className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(232,240,255,0.95))] p-6 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
                   style={{ animation: `float-card 6.4s ease-in-out ${index * 0.18}s infinite` }}
                 >
-                  <p className="text-base font-bold text-[#0F1F63]">{module.title}</p>
+                  <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
                   <p className="mt-3 text-sm leading-6 text-slate-700">{module.description}</p>
                 </div>
               ))}
@@ -486,7 +491,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
             >
               <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
                 <div
-                  className="rounded-[32px] bg-[linear-gradient(180deg,#101B63_0%,#172873_100%)] p-5 text-white"
+                  className="rounded-[32px] bg-[linear-gradient(180deg,#101B63_0%,#172873_100%)] p-6 text-white"
                   style={{ animation: "float-soft 7.5s ease-in-out infinite" }}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -517,7 +522,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                           <message.icon className="h-3.5 w-3.5" />
                           {message.label}
                         </div>
-                        <p className="text-base leading-8">{message.text}</p>
+                        <p className="max-w-[22rem] text-[15px] leading-8">{message.text}</p>
                       </div>
                     ))}
                   </div>
@@ -541,7 +546,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
 
                 <div className="flex flex-col gap-4">
                   <div
-                    className="rounded-[30px] border border-[#D9E7FF] bg-white p-5 shadow-sm"
+                    className="rounded-[30px] border border-[#D9E7FF] bg-white p-6 shadow-sm"
                     style={{ animation: "float-soft 8s ease-in-out .2s infinite" }}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -549,7 +554,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3B82F6]">
                           {t.panelLabel}
                         </p>
-                        <p className="mt-2 text-[2rem] font-black leading-tight text-[#0F1F63]">
+                        <p className="mt-2 max-w-[15rem] text-[2rem] font-black leading-[1.02] text-[#0F1F63]">
                           {t.panelTitle}
                         </p>
                       </div>
@@ -562,10 +567,10 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                       {t.modules.map((module, index) => (
                         <div
                           key={module.title}
-                          className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-4 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
+                          className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
                           style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
                         >
-                          <p className="text-base font-bold text-[#0F1F63]">{module.title}</p>
+                          <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
                           <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
                         </div>
                       ))}
@@ -573,7 +578,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   </div>
 
                   <div
-                    className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-5 text-white shadow-sm"
+                    className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-6 text-white shadow-sm"
                     style={{ animation: "float-soft 7.2s ease-in-out .4s infinite" }}
                   >
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
@@ -700,8 +705,3 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
     </section>
   )
 }
-    overloadTitle: "OVERLOAD",
-    overloadTitle: "ÜBERLASTUNG",
-    overloadTitle: "SOBRECARGA",
-    overloadTitle: "SURCHARGE",
-    overloadTitle: "DISORDINE",
