@@ -691,6 +691,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
           </div>
         </div>
       </div>
+      </div>
 
       <style jsx>{`
         @keyframes rain-pill {
