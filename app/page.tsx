@@ -55,8 +55,8 @@ export default async function Home({
     <main className="min-h-screen bg-background">
       <Header locale={locale} />
       <CommercialLanding locale={locale} />
-      <Pricing />
-      <FinalCTA />
+      <Pricing locale={locale} />
+      <FinalCTA locale={locale} />
       <Footer locale={locale} />
     </main>
   )

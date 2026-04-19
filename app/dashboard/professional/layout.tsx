@@ -308,7 +308,7 @@ export default function ProfessionalDashboardLayout({
     return (
       <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),linear-gradient(180deg,#F8FAFC_0%,#EEF2FF_100%)]">
         <div className="rounded-3xl border border-white/70 bg-white/80 px-6 py-5 shadow-lg backdrop-blur">
-          <p className="text-sm font-medium text-[#0F1F63]">Validando tu acceso...</p>
+          <p className="text-sm font-medium text-[#0F1F63]">Validando su acceso...</p>
         </div>
       </div>
     )
@@ -346,7 +346,7 @@ export default function ProfessionalDashboardLayout({
             className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-xs font-semibold text-white shadow-sm"
           >
             <MessageCircleMore className="h-4 w-4" />
-            Probar Operaly
+            Subir de plan
           </Link>
           <Link
             href="/dashboard/professional/voz"

@@ -9,22 +9,47 @@ const languages = [
   { code: "it", label: "Italiano" },
 ]
 
+const footerCopy = {
+  es: {
+    description:
+      "Operaly le ayuda a ordenar agenda, correos, contactos, documentos, recordatorios y seguimiento desde WhatsApp y desde su panel privado.",
+    product: "Producto",
+    productLinks: ["Qué hace Operaly", "Planes", "Preguntas frecuentes", "Entrar"],
+    resources: "Recursos",
+    resourcesLinks: ["Contáctese con nosotros", "support@operaly.app", "Libro de reclamaciones", "Cookies"],
+    company: "Empresa",
+    companyLinks: ["Términos y condiciones", "Política de privacidad", "Preferencias de cookies", "Formulario de contacto"],
+    rights: "© 2026 Operaly. Todos los derechos reservados.",
+  },
+  en: {
+    description:
+      "Operaly helps you keep agenda, email, contacts, files, reminders and follow-up in order from WhatsApp and from your private panel.",
+    product: "Product",
+    productLinks: ["What Operaly does", "Plans", "Frequently asked questions", "Sign in"],
+    resources: "Resources",
+    resourcesLinks: ["Contact us", "support@operaly.app", "Claims book", "Cookies"],
+    company: "Company",
+    companyLinks: ["Terms and conditions", "Privacy policy", "Cookie settings", "Contact form"],
+    rights: "© 2026 Operaly. All rights reserved.",
+  },
+} as const
+
 export function Footer({ locale = "es" }: { locale?: string }) {
+  const t = locale === "es" ? footerCopy.es : footerCopy.en
+
   return (
-    <footer id="contacto" className="bg-[#0F1F63] text-white">
+    <footer id="contacto" className="bg-[linear-gradient(180deg,#09112B_0%,#0F1F63_100%)] text-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-10 py-16 md:grid-cols-[1.1fr_0.9fr_0.8fr_0.8fr_0.8fr]">
+        <div className="grid gap-10 py-16 lg:grid-cols-[1.15fr_0.85fr_0.85fr_0.95fr]">
           <div>
             <Image
               src="/images/operaly-logo.png"
               alt="Operaly"
-              width={160}
-              height={160}
+              width={180}
+              height={180}
               className="h-12 w-auto brightness-0 invert"
             />
-            <p className="mt-5 max-w-sm text-sm leading-7 text-white/70">
-              El asistente de IA para WhatsApp que le ayuda a ordenar agenda, correos, contactos, documentos y pendientes en serio.
-            </p>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-white/72">{t.description}</p>
 
             <div className="mt-6 flex flex-wrap gap-2">
               {languages.map((language) => (
@@ -34,7 +59,7 @@ export function Footer({ locale = "es" }: { locale?: string }) {
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     locale === language.code
                       ? "bg-white text-[#0F1F63]"
-                      : "bg-white/10 text-white/75 hover:bg-white/15"
+                      : "bg-white/10 text-white/76 hover:bg-white/14"
                   }`}
                 >
                   {language.label}
@@ -43,65 +68,57 @@ export function Footer({ locale = "es" }: { locale?: string }) {
             </div>
 
             <div className="mt-6 flex items-center gap-3">
-              {["instagram", "facebook", "tiktok", "linkedin", "x"].map((social) => (
+              {[
+                { label: "Instagram", short: "ig" },
+                { label: "Facebook", short: "f" },
+                { label: "TikTok", short: "tt" },
+                { label: "LinkedIn", short: "in" },
+                { label: "X", short: "x" },
+              ].map((social) => (
                 <span
-                  key={social}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs font-bold uppercase text-white/80"
+                  key={social.label}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs font-bold uppercase text-white/84"
+                  aria-label={social.label}
                 >
-                  {social === "facebook" ? "f" : social === "linkedin" ? "in" : social === "instagram" ? "ig" : social === "tiktok" ? "tt" : "x"}
+                  {social.short}
                 </span>
               ))}
             </div>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">Producto</h4>
-            <ul className="mt-5 space-y-3 text-sm text-white/70">
-              <li><a href="#producto" className="hover:text-white">Qué hace Operaly</a></li>
-              <li><a href="#como-funciona" className="hover:text-white">Cómo funciona</a></li>
-              <li><a href="#precios" className="hover:text-white">Planes</a></li>
-              <li><a href="/dashboard" className="hover:text-white">Entrar al panel</a></li>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.product}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="#producto" className="hover:text-white">{t.productLinks[0]}</a></li>
+              <li><a href="#planes" className="hover:text-white">{t.productLinks[1]}</a></li>
+              <li><a href="#preguntas" className="hover:text-white">{t.productLinks[2]}</a></li>
+              <li><a href="/dashboard" className="hover:text-white">{t.productLinks[3]}</a></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">Recursos</h4>
-            <ul className="mt-5 space-y-3 text-sm text-white/70">
-              <li><a href="/contacto" className="hover:text-white">Contáctese con nosotros</a></li>
-              <li><a href="mailto:support@operaly.app" className="hover:text-white">support@operaly.app</a></li>
-              <li><a href="/libro-de-reclamaciones" className="hover:text-white">Libro de reclamaciones</a></li>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.resources}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="/contacto" className="hover:text-white">{t.resourcesLinks[0]}</a></li>
+              <li><a href="mailto:support@operaly.app" className="hover:text-white">{t.resourcesLinks[1]}</a></li>
+              <li><a href="/libro-de-reclamaciones" className="hover:text-white">{t.resourcesLinks[2]}</a></li>
+              <li><a href="/cookies" className="hover:text-white">{t.resourcesLinks[3]}</a></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">Empresa</h4>
-            <ul className="mt-5 space-y-3 text-sm text-white/70">
-              <li><a href="/aviso-legal" className="hover:text-white">Aviso legal</a></li>
-              <li><a href="/terminos-y-condiciones" className="hover:text-white">Términos y condiciones</a></li>
-              <li><a href="/politica-de-privacidad" className="hover:text-white">Política de privacidad</a></li>
-              <li><a href="/cookies" className="hover:text-white">Cookies</a></li>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.company}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="/terminos-y-condiciones" className="hover:text-white">{t.companyLinks[0]}</a></li>
+              <li><a href="/politica-de-privacidad" className="hover:text-white">{t.companyLinks[1]}</a></li>
+              <li><a href="/cookies" className="hover:text-white">{t.companyLinks[2]}</a></li>
+              <li><a href="/contacto" className="hover:text-white">{t.companyLinks[3]}</a></li>
             </ul>
-          </div>
-
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Contacto directo</p>
-            <p className="mt-3 text-2xl font-black leading-tight">Si necesita hablar con nosotros, aquí lo tiene fácil.</p>
-            <p className="mt-3 text-sm leading-6 text-white/70">
-              Escríbanos o use el formulario. Queremos que Operaly le resuelva el día, no que le complique el soporte.
-            </p>
-            <div className="mt-5 grid gap-2">
-              <a href="/contacto" className="inline-flex h-11 items-center justify-center rounded-full bg-white text-sm font-bold text-[#0F1F63]">
-                Abrir formulario
-              </a>
-              <a href="mailto:support@operaly.app" className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 text-sm font-semibold text-white">
-                support@operaly.app
-              </a>
-            </div>
           </div>
         </div>
 
-        <div className="border-t border-white/10 py-6 text-sm text-white/50">
-          © 2026 Operaly. Todos los derechos reservados.
+        <div className="border-t border-white/10 py-6 text-sm text-white/55">
+          {t.rights}
         </div>
       </div>
     </footer>
