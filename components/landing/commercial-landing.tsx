@@ -395,25 +395,25 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-12">
           <div className="pt-8 text-white">
-            <div className="relative mb-14 min-h-[400px] overflow-visible">
+            <div className="relative mb-16 min-h-[520px] overflow-visible text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
                 {t.overload}
               </p>
-              <div className="relative mt-6 flex max-w-[56rem] flex-wrap gap-3 pr-6">
+              <div className="relative mx-auto mt-10 flex max-w-[74rem] flex-wrap justify-center gap-x-4 gap-y-5 px-2">
                 {t.overloadWords.map((pill, index) => (
                   <span
                     key={pill}
                     className="inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
                     style={{
-                      transform: `translateY(${(index % 3) * 6}px)`,
-                      animation: `rain-pill 6s ease-in-out ${index * 0.22}s infinite`,
+                      transform: `translate(${[-22, 18, -34, 24, -16, 26, -28, 20, -12, 30, -24, 14, -30, 18][index % 14]}px, ${[8, -6, 16, 0, 14, -4, 10, 22, -2, 15, 4, 18, 10, 2][index % 14]}px) rotate(${[-11, 7, -8, 10, -5, 8, -9, 6, -7, 9, -4, 7, -10, 5][index % 14]}deg)`,
+                      animation: `rain-pill 6.6s ease-in-out ${index * 0.2}s infinite`,
                     }}
                   >
                     {pill}
                   </span>
                 ))}
               </div>
-              <h2 className="mt-8 max-w-[980px] text-[5.8rem] font-black leading-[0.84] tracking-[-0.09em] text-white/14 sm:text-[7.2rem] lg:text-[10.5rem]">
+              <h2 className="mx-auto mt-12 w-full text-center text-[6rem] font-black leading-[0.82] tracking-[-0.09em] text-white/14 sm:text-[8rem] lg:text-[12.5rem]">
                 {t.overloadTitle}
               </h2>
             </div>
@@ -455,7 +455,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
             </div>
           </div>
 
-          <div className="grid items-start gap-8 lg:grid-cols-[0.78fr_1.22fr]">
+          <div className="grid items-center gap-8 lg:grid-cols-[0.78fr_1.22fr]">
             <div className="pt-4 text-white">
               <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
                 <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={24} height={24} className="h-6 w-6" />
@@ -511,17 +511,16 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                 ))}
               </div>
             </div>
-            <div className="relative mx-auto w-full max-w-5xl pb-8">
+            <div className="relative mx-auto w-full max-w-3xl pb-8">
             <div className="absolute inset-x-10 top-10 h-[560px] rounded-[44px] bg-[radial-gradient(circle,rgba(255,255,255,0.18),transparent_62%)] blur-3xl" />
             <div
               className="relative overflow-hidden rounded-[42px] border border-white/18 bg-white/88 p-4 shadow-[0_44px_120px_-40px_rgba(9,17,43,0.65)] backdrop-blur-xl sm:p-5"
               style={{ animation: "breathe 7s ease-in-out infinite" }}
             >
-              <div className="flex flex-col gap-4">
-                <div
-                  className="rounded-[32px] bg-[linear-gradient(180deg,#101B63_0%,#172873_100%)] p-6 text-white"
-                  style={{ animation: "float-soft 7.5s ease-in-out infinite" }}
-                >
+              <div
+                className="rounded-[32px] bg-[linear-gradient(180deg,#101B63_0%,#172873_100%)] p-6 text-white"
+                style={{ animation: "float-soft 7.5s ease-in-out infinite" }}
+              >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={52} height={52} className="h-12 w-12" />
@@ -570,81 +569,70 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div
-                  className="rounded-[30px] border border-[#D9E7FF] bg-white p-6 shadow-sm"
-                  style={{ animation: "float-soft 8s ease-in-out .2s infinite" }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3B82F6]">
-                        {t.panelLabel}
-                      </p>
-                      <p className="mt-2 max-w-[22rem] text-[2.35rem] font-black leading-[1.02] text-[#0F1F63]">
-                        {t.panelTitle}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-[#ECF5FF] px-3 py-2 text-xs font-semibold text-[#2563EB]">
-                      {t.panelBadge}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    {t.modules.map((module, index) => (
-                      <div
-                        key={module.title}
-                        className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
-                        style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
-                      >
-                        <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-6 text-white shadow-sm"
-                  style={{ animation: "float-soft 7.2s ease-in-out .4s infinite" }}
-                >
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
-                    {t.proofTitle}
-                  </p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    {t.proofItems.map((item) => (
-                      <div key={item} className="rounded-[22px] border border-white/10 bg-white/6 p-4 text-sm leading-7 text-white/84">
-                        <div className="flex items-start gap-2">
-                          <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#A7F3D0]" />
-                          <span>{item}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <a
-                    href="/register"
-                    className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-white px-5 text-sm font-bold text-[#0F1F63] transition duration-300 hover:scale-[1.02]"
-                  >
-                    {t.primary}
-                  </a>
-                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {t.modules.map((module, index) => (
-              <div
-                key={module.title}
-                className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(232,240,255,0.95))] p-6 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
-                style={{ animation: `float-card 6.4s ease-in-out ${index * 0.18}s infinite` }}
-              >
-                <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
-                <p className="mt-3 text-sm leading-6 text-slate-700">{module.description}</p>
-              </div>
-            ))}
           </div>
-        </div>
+
+          <div className="grid gap-6">
+            <div
+              className="rounded-[30px] border border-[#D9E7FF] bg-white p-6 shadow-[0_24px_60px_-28px_rgba(9,17,43,0.38)]"
+              style={{ animation: "float-soft 8s ease-in-out .2s infinite" }}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3B82F6]">
+                    {t.panelLabel}
+                  </p>
+                  <p className="mt-2 max-w-[28rem] text-[2.35rem] font-black leading-[1.02] text-[#0F1F63]">
+                    {t.panelTitle}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[#ECF5FF] px-3 py-2 text-xs font-semibold text-[#2563EB]">
+                  {t.panelBadge}
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {t.modules.map((module, index) => (
+                  <div
+                    key={module.title}
+                    className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-6 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
+                    style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
+                  >
+                    <p className="text-xl font-bold leading-7 text-[#0F1F63]">{module.title}</p>
+                    <p className="mt-3 max-w-[30rem] text-sm leading-7 text-slate-600">{module.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-6 text-white shadow-[0_24px_60px_-28px_rgba(9,17,43,0.42)]"
+              style={{ animation: "float-soft 7.2s ease-in-out .4s infinite" }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
+                {t.proofTitle}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                {t.proofItems.map((item) => (
+                  <div key={item} className="rounded-[22px] border border-white/10 bg-white/6 p-4 text-sm leading-7 text-white/84">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#A7F3D0]" />
+                      <span>{item}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <a
+                href="/register"
+                className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-white px-5 text-sm font-bold text-[#0F1F63] transition duration-300 hover:scale-[1.02]"
+              >
+                {t.primary}
+              </a>
+            </div>
+          </div>
 
         <div className="mt-12 rounded-[34px] border border-white/12 bg-white/88 p-5 shadow-[0_28px_70px_-40px_rgba(9,17,43,0.7)] backdrop-blur xl:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
