@@ -9,7 +9,16 @@ const languages = [
   { code: "it", label: "Italiano" },
 ]
 
-const footerCopy = {
+const footerCopy: Record<string, {
+  description: string
+  product: string
+  productLinks: string[]
+  resources: string
+  resourcesLinks: string[]
+  company: string
+  companyLinks: string[]
+  rights: string
+}> = {
   es: {
     description:
       "Operaly es un producto desarrollado por Alderete Yangali Group Holding SAC, empresa con base en Perú y visión para Latinoamérica y el mundo.",
@@ -32,10 +41,54 @@ const footerCopy = {
     companyLinks: ["Terms and conditions", "Privacy policy", "Cookie settings"],
     rights: "© 2026 Operaly. All rights reserved.",
   },
-} as const
+  pt: {
+    description:
+      "Operaly é um produto desenvolvido pela Alderete Yangali Group Holding SAC, empresa com base no Peru e visão para a América Latina e o mundo.",
+    product: "Produto",
+    productLinks: ["O que a Operaly faz", "Planos", "Perguntas frequentes", "Entrar"],
+    resources: "Recursos",
+    resourcesLinks: ["Fale conosco", "support@operaly.app"],
+    company: "Empresa",
+    companyLinks: ["Termos e condições", "Política de privacidade", "Preferências de cookies"],
+    rights: "© 2026 Operaly. Todos os direitos reservados.",
+  },
+  fr: {
+    description:
+      "Operaly est un produit développé par Alderete Yangali Group Holding SAC, une entreprise basée au Pérou avec une vision pour l’Amérique latine et le monde.",
+    product: "Produit",
+    productLinks: ["Ce que fait Operaly", "Offres", "Questions fréquentes", "Entrer"],
+    resources: "Ressources",
+    resourcesLinks: ["Contactez-nous", "support@operaly.app"],
+    company: "Entreprise",
+    companyLinks: ["Conditions générales", "Politique de confidentialité", "Préférences de cookies"],
+    rights: "© 2026 Operaly. Tous droits réservés.",
+  },
+  de: {
+    description:
+      "Operaly ist ein Produkt der Alderete Yangali Group Holding SAC, einem Unternehmen mit Sitz in Peru und Blick auf Lateinamerika und die Welt.",
+    product: "Produkt",
+    productLinks: ["Was Operaly macht", "Pläne", "Häufige Fragen", "Anmelden"],
+    resources: "Ressourcen",
+    resourcesLinks: ["Kontaktieren Sie uns", "support@operaly.app"],
+    company: "Unternehmen",
+    companyLinks: ["Allgemeine Geschäftsbedingungen", "Datenschutz", "Cookie-Einstellungen"],
+    rights: "© 2026 Operaly. Alle Rechte vorbehalten.",
+  },
+  it: {
+    description:
+      "Operaly è un prodotto sviluppato da Alderete Yangali Group Holding SAC, azienda con sede in Perù e visione per l’America Latina e il mondo.",
+    product: "Prodotto",
+    productLinks: ["Cosa fa Operaly", "Piani", "Domande frequenti", "Accedi"],
+    resources: "Risorse",
+    resourcesLinks: ["Contattaci", "support@operaly.app"],
+    company: "Azienda",
+    companyLinks: ["Termini e condizioni", "Informativa sulla privacy", "Preferenze cookie"],
+    rights: "© 2026 Operaly. Tutti i diritti riservati.",
+  },
+}
 
 export function Footer({ locale = "es" }: { locale?: string }) {
-  const t = locale === "es" ? footerCopy.es : footerCopy.en
+  const t = footerCopy[locale] || footerCopy.es
 
   return (
     <footer id="contacto" className="bg-[linear-gradient(180deg,#09112B_0%,#0F1F63_100%)] text-white">

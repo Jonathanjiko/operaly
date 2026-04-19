@@ -14,7 +14,16 @@ const languages = [
   { code: "it", label: "IT" },
 ]
 
-const headerCopy = {
+const headerCopy: Record<string, {
+  product: string
+  plans: string
+  faq: string
+  contact: string
+  enter: string
+  trial: string
+  openMenu: string
+  closeMenu: string
+}> = {
   es: {
     product: "Producto",
     plans: "Planes",
@@ -35,7 +44,47 @@ const headerCopy = {
     openMenu: "Open menu",
     closeMenu: "Close menu",
   },
-} as const
+  pt: {
+    product: "Produto",
+    plans: "Planos",
+    faq: "Perguntas",
+    contact: "Contato",
+    enter: "Entrar",
+    trial: "Teste grátis",
+    openMenu: "Abrir menu",
+    closeMenu: "Fechar menu",
+  },
+  fr: {
+    product: "Produit",
+    plans: "Offres",
+    faq: "Questions",
+    contact: "Contact",
+    enter: "Entrer",
+    trial: "Essai gratuit",
+    openMenu: "Ouvrir le menu",
+    closeMenu: "Fermer le menu",
+  },
+  de: {
+    product: "Produkt",
+    plans: "Pläne",
+    faq: "Fragen",
+    contact: "Kontakt",
+    enter: "Anmelden",
+    trial: "Gratis testen",
+    openMenu: "Menü öffnen",
+    closeMenu: "Menü schließen",
+  },
+  it: {
+    product: "Prodotto",
+    plans: "Piani",
+    faq: "Domande",
+    contact: "Contatto",
+    enter: "Accedi",
+    trial: "Prova gratis",
+    openMenu: "Apri menu",
+    closeMenu: "Chiudi menu",
+  },
+}
 
 export function Header({ locale = "es" }: { locale?: string }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -64,7 +113,7 @@ export function Header({ locale = "es" }: { locale?: string }) {
     () => languages.find((item) => item.code === locale)?.code || "es",
     [locale]
   )
-  const t = currentLocale === "es" ? headerCopy.es : headerCopy.en
+  const t = headerCopy[currentLocale] || headerCopy.es
 
   return (
     <header

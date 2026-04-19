@@ -418,43 +418,13 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               </h2>
             </div>
 
-            <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
-              {t.title}
-              <span className="mt-3 block bg-gradient-to-r from-[#25D366] via-[#7DD3FC] to-[#F472B6] bg-clip-text text-transparent">
-                {t.titleAccent}
-              </span>
-            </h1>
+            
 
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/82">
-              {t.subtitle}
-            </p>
-            <p className="mt-4 max-w-[44rem] text-sm leading-7 text-[#C9D7FF] sm:text-base">
-              {t.positioning}
-            </p>
+            
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                href="/register"
-                className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#6EA7FF] via-[#8B7BFF] to-[#F35DB4] px-8 text-base font-bold text-white shadow-[0_26px_60px_-24px_rgba(139,123,255,0.88)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_30px_70px_-20px_rgba(139,123,255,0.95)]"
-              >
-                {t.primary}
-                <ArrowRight className="h-5 w-5" />
-              </a>
-              <a
-                href="#planes"
-                className="inline-flex h-14 items-center justify-center rounded-full border border-white/28 bg-white/10 px-8 text-base font-semibold text-white backdrop-blur transition duration-300 hover:border-white/50 hover:bg-white/14"
-              >
-                {t.secondary}
-              </a>
-              <a
-                href="/dashboard"
-                className="inline-flex h-14 items-center justify-center rounded-full border border-white/18 bg-[#09112B]/62 px-8 text-base font-semibold text-white transition duration-300 hover:bg-[#09112B]/82"
-              >
-                {t.dashboard}
-              </a>
-            </div>
+            
 
-            <div className="mt-8 flex flex-wrap gap-2">
+            <div className="hidden mt-8 flex flex-wrap gap-2">
               {[
                 locale === "es" ? "7 días gratis" : "7 days free",
                 locale === "es" ? "Sin tarjeta para empezar" : "No card to begin",
@@ -471,7 +441,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               ))}
             </div>
 
-            <div className="mt-8 grid max-w-[54rem] gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="hidden mt-8 grid max-w-[54rem] gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {t.modules.map((module, index) => (
                 <div
                   key={module.title}
@@ -485,18 +455,63 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
             </div>
           </div>
 
-          <div className="relative mx-auto w-full max-w-5xl pb-8">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
-                  <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={24} height={24} className="h-6 w-6" />
-                  {t.badge}
-                </div>
+          <div className="grid items-start gap-8 lg:grid-cols-[0.78fr_1.22fr]">
+            <div className="pt-4 text-white">
+              <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
+                <Image src="/brands/whatsapp.svg" alt="WhatsApp" width={24} height={24} className="h-6 w-6" />
+                {t.badge}
               </div>
-              <div className="hidden rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-medium text-white/88 shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur md:inline-flex">
+              <h1 className="mt-7 max-w-3xl text-5xl font-black leading-[0.92] tracking-[-0.06em] sm:text-6xl lg:text-[4.4rem]">
+                {t.title}
+                <span className="mt-3 block bg-gradient-to-r from-[#25D366] via-[#7DD3FC] to-[#F472B6] bg-clip-text text-transparent">
+                  {t.titleAccent}
+                </span>
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-white/82">
+                {t.subtitle}
+              </p>
+              <p className="mt-4 max-w-[40rem] text-sm leading-7 text-[#C9D7FF] sm:text-base">
                 {t.positioning}
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <a
+                  href="/register"
+                  className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#6EA7FF] via-[#8B7BFF] to-[#F35DB4] px-8 text-base font-bold text-white shadow-[0_26px_60px_-24px_rgba(139,123,255,0.88)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_30px_70px_-20px_rgba(139,123,255,0.95)]"
+                >
+                  {t.primary}
+                  <ArrowRight className="h-5 w-5" />
+                </a>
+                <a
+                  href="#planes"
+                  className="inline-flex h-14 items-center justify-center rounded-full border border-white/28 bg-white/10 px-8 text-base font-semibold text-white backdrop-blur transition duration-300 hover:border-white/50 hover:bg-white/14"
+                >
+                  {t.secondary}
+                </a>
+                <a
+                  href="/dashboard"
+                  className="inline-flex h-14 items-center justify-center rounded-full border border-white/18 bg-[#09112B]/62 px-8 text-base font-semibold text-white transition duration-300 hover:bg-[#09112B]/82"
+                >
+                  {t.dashboard}
+                </a>
+              </div>
+              <div className="mt-8 flex flex-wrap gap-2">
+                {[
+                  locale === "es" ? "7 dÃ­as gratis" : "7 days free",
+                  locale === "es" ? "Sin tarjeta para empezar" : "No card to begin",
+                  locale === "es" ? "WhatsApp + panel privado" : "WhatsApp + private panel",
+                  locale === "es" ? "MÃ¡s claridad desde el primer audio" : "More clarity from the first voice note",
+                ].map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur transition duration-300 hover:border-white/40 hover:bg-white/14"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-[#86EFAC]" />
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
+            <div className="relative mx-auto w-full max-w-5xl pb-8">
             <div className="absolute inset-x-10 top-10 h-[560px] rounded-[44px] bg-[radial-gradient(circle,rgba(255,255,255,0.18),transparent_62%)] blur-3xl" />
             <div
               className="relative overflow-hidden rounded-[42px] border border-white/18 bg-white/88 p-4 shadow-[0_44px_120px_-40px_rgba(9,17,43,0.65)] backdrop-blur-xl sm:p-5"
@@ -615,6 +630,19 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {t.modules.map((module, index) => (
+              <div
+                key={module.title}
+                className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(232,240,255,0.95))] p-6 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
+                style={{ animation: `float-card 6.4s ease-in-out ${index * 0.18}s infinite` }}
+              >
+                <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
+                <p className="mt-3 text-sm leading-6 text-slate-700">{module.description}</p>
+              </div>
+            ))}
           </div>
         </div>
 
