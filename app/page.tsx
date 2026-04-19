@@ -30,6 +30,8 @@ const COUNTRY_LOCALE: Record<string, string> = {
   US: "en",
 }
 
+const languages = ["es", "en", "pt", "fr", "de", "it"]
+
 async function getRequestLocale() {
   const requestHeaders = await headers()
   const country = String(
@@ -40,16 +42,22 @@ async function getRequestLocale() {
   return COUNTRY_LOCALE[country] || "en"
 }
 
-export default async function Home() {
-  const locale = await getRequestLocale()
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = (await searchParams) || {}
+  const requestedLanguage = String(params.lang || "").toLowerCase()
+  const locale = languages.includes(requestedLanguage) ? requestedLanguage : await getRequestLocale()
 
   return (
     <main className="min-h-screen bg-background">
-      <Header />
+      <Header locale={locale} />
       <CommercialLanding locale={locale} />
       <Pricing />
       <FinalCTA />
-      <Footer />
+      <Footer locale={locale} />
     </main>
   )
 }

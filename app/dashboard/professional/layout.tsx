@@ -53,7 +53,7 @@ const sidebarItems = [
   { href: "/dashboard/professional/documentos", label: "Documentos", icon: FileText },
   { href: "/dashboard/professional/baul-privado", label: "Baúl privado", icon: FolderLock },
   { href: "/dashboard/professional/automatizaciones", label: "Automatizaciones", icon: Zap },
-  { href: "/dashboard/professional/analiticas", label: "Analiticas", icon: BarChart3 },
+  { href: "/dashboard/professional/analiticas", label: "Analíticas", icon: BarChart3 },
 ]
 
 const settingsItems = [
@@ -108,7 +108,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Deje listos recordatorios y seguimientos que se repiten.",
   },
   "/dashboard/professional/analiticas": {
-    title: "Analiticas",
+    title: "Analíticas",
     subtitle: "Vea de forma simple cómo va el uso de su cuenta.",
   },
   "/dashboard/professional/configuracion": {
@@ -166,7 +166,7 @@ function UserMenu({
           <DropdownMenuItem asChild>
             <Link href="/dashboard/professional/configuracion" className="rounded-xl px-3 py-2">
               <Settings className="h-4 w-4" />
-              Configuracion
+              Configuración
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -203,7 +203,7 @@ function UserMenu({
           }}
         >
           <LogOut className="h-4 w-4" />
-          Cerrar sesion
+          Cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -496,7 +496,7 @@ export default function ProfessionalDashboardLayout({
         <div className="mt-4 border-t border-slate-100 px-4 pt-4">
           {!collapsed ? (
             <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Configuracion
+              Configuración
             </p>
           ) : null}
           <nav className="space-y-1.5">

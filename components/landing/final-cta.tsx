@@ -1,10 +1,10 @@
 import { ArrowRight, CheckCircle2, Clock, Shield, Sparkles, Zap } from "lucide-react"
 
 const urgencyPoints = [
-  { icon: CheckCircle2, text: "7 dias gratis y sin tarjeta" },
+  { icon: CheckCircle2, text: "7 días gratis y sin tarjeta" },
   { icon: Zap, text: "Empiece a usar Operaly en minutos" },
   { icon: Shield, text: "Puede entrar o salir cuando quiera" },
-  { icon: Clock, text: "Pensado para resolver su dia rapido" },
+  { icon: Clock, text: "Pensado para resolver su día rápido" },
 ]
 
 export function FinalCTA() {
@@ -19,19 +19,19 @@ export function FinalCTA() {
       <div className="relative mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
         <span className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-4 py-2 text-sm font-semibold text-white/90 backdrop-blur">
           <Sparkles className="h-4 w-4 text-[#06B6D4]" />
-          Operaly - su asistente operativo en WhatsApp
+          Operaly · su asistente operativo en WhatsApp
         </span>
 
         <h2 className="text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
           Menos desorden.
           <br />
           <span className="bg-gradient-to-r from-[#60A5FA] via-[#818CF8] to-[#34D399] bg-clip-text text-transparent">
-            Mas tiempo para lo importante.
+            Más tiempo para lo importante.
           </span>
         </h2>
 
         <p className="mx-auto mt-7 max-w-3xl text-lg leading-8 text-white/70">
-          Operaly esta hecho para ayudarle a resolver el dia: audios, agenda, correos, listas, documentos y seguimientos con una marca visible, una experiencia rapida y control real desde el dashboard.
+          Operaly está hecho para ayudarle a resolver el día: audios, agenda, correos, listas, documentos y seguimientos con una experiencia rápida y control real desde el panel.
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
