@@ -12,24 +12,24 @@ const languages = [
 const footerCopy = {
   es: {
     description:
-      "Operaly le ayuda a ordenar agenda, correos, contactos, documentos, recordatorios y seguimiento desde WhatsApp y desde su panel privado.",
+      "Operaly es un producto desarrollado por Alderete Yangali Group Holding SAC, empresa con base en Perú y visión para Latinoamérica y el mundo.",
     product: "Producto",
     productLinks: ["Qué hace Operaly", "Planes", "Preguntas frecuentes", "Entrar"],
     resources: "Recursos",
-    resourcesLinks: ["Contáctese con nosotros", "support@operaly.app", "Libro de reclamaciones", "Cookies"],
+    resourcesLinks: ["Contáctese con nosotros", "support@operaly.app"],
     company: "Empresa",
-    companyLinks: ["Términos y condiciones", "Política de privacidad", "Preferencias de cookies", "Formulario de contacto"],
+    companyLinks: ["Términos y condiciones", "Política de privacidad", "Preferencias de cookies"],
     rights: "© 2026 Operaly. Todos los derechos reservados.",
   },
   en: {
     description:
-      "Operaly helps you keep agenda, email, contacts, files, reminders and follow-up in order from WhatsApp and from your private panel.",
+      "Operaly is a product developed by Alderete Yangali Group Holding SAC, a company based in Peru with a view toward Latin America and the world.",
     product: "Product",
     productLinks: ["What Operaly does", "Plans", "Frequently asked questions", "Sign in"],
     resources: "Resources",
-    resourcesLinks: ["Contact us", "support@operaly.app", "Claims book", "Cookies"],
+    resourcesLinks: ["Contact us", "support@operaly.app"],
     company: "Company",
-    companyLinks: ["Terms and conditions", "Privacy policy", "Cookie settings", "Contact form"],
+    companyLinks: ["Terms and conditions", "Privacy policy", "Cookie settings"],
     rights: "© 2026 Operaly. All rights reserved.",
   },
 } as const
@@ -40,7 +40,7 @@ export function Footer({ locale = "es" }: { locale?: string }) {
   return (
     <footer id="contacto" className="bg-[linear-gradient(180deg,#09112B_0%,#0F1F63_100%)] text-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-10 py-16 lg:grid-cols-[1.15fr_0.85fr_0.85fr_0.95fr]">
+        <div className="grid gap-10 py-16 lg:grid-cols-[1.2fr_0.85fr_0.8fr_0.85fr]">
           <div>
             <Image
               src="/images/operaly-logo.png"
@@ -101,8 +101,6 @@ export function Footer({ locale = "es" }: { locale?: string }) {
             <ul className="mt-5 space-y-3 text-sm text-white/72">
               <li><a href="/contacto" className="hover:text-white">{t.resourcesLinks[0]}</a></li>
               <li><a href="mailto:support@operaly.app" className="hover:text-white">{t.resourcesLinks[1]}</a></li>
-              <li><a href="/libro-de-reclamaciones" className="hover:text-white">{t.resourcesLinks[2]}</a></li>
-              <li><a href="/cookies" className="hover:text-white">{t.resourcesLinks[3]}</a></li>
             </ul>
           </div>
 
@@ -112,7 +110,6 @@ export function Footer({ locale = "es" }: { locale?: string }) {
               <li><a href="/terminos-y-condiciones" className="hover:text-white">{t.companyLinks[0]}</a></li>
               <li><a href="/politica-de-privacidad" className="hover:text-white">{t.companyLinks[1]}</a></li>
               <li><a href="/cookies" className="hover:text-white">{t.companyLinks[2]}</a></li>
-              <li><a href="/contacto" className="hover:text-white">{t.companyLinks[3]}</a></li>
             </ul>
           </div>
         </div>
