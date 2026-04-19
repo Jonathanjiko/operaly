@@ -18,10 +18,12 @@ type LandingLocale = "es" | "en" | "de" | "pt" | "fr" | "it"
 type HeroCopy = {
   overload: string
   overloadWords: string[]
+  overloadTitle: string
   badge: string
   title: string
   titleAccent: string
   subtitle: string
+  positioning: string
   primary: string
   secondary: string
   dashboard: string
@@ -54,11 +56,14 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
       "Olvida cosas",
       "No sabe qué sigue",
     ],
+    overloadTitle: "DESORDEN",
     badge: "Operaly le facilita la vida desde WhatsApp",
     title: "El desorden, la presión y la carga mental",
     titleAccent: "sí tienen salida con Operaly.",
     subtitle:
       "Audios, agenda, correos, contactos, documentos, recordatorios y seguimiento en una sola experiencia clara, rápida y útil.",
+    positioning:
+      "Hecho para profesionales independientes, personas ocupadas y agendas donde un olvido cuesta tiempo, dinero o reputación.",
     primary: "Prueba gratis",
     secondary: "Ver planes",
     dashboard: "Entrar",
@@ -112,6 +117,8 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
     titleAccent: "do have a way out with Operaly.",
     subtitle:
       "Audio, agenda, email, contacts, files, reminders and follow-up in one clear, fast and useful experience.",
+    positioning:
+      "Built for busy professionals, independent operators and people whose day loses money or momentum when something slips.",
     primary: "Start free trial",
     secondary: "See plans",
     dashboard: "Sign in",
@@ -146,6 +153,8 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
     titleAccent: "haben mit Operaly einen Ausweg.",
     subtitle:
       "Audio, Agenda, E-Mails, Kontakte, Dateien, Erinnerungen und Nachverfolgung in einer klaren und schnellen Erfahrung.",
+    positioning:
+      "Gebaut für stark beschäftigte Profis und unabhängige Betreiber, bei denen ein Versäumnis Zeit, Geld oder Vertrauen kostet.",
     primary: "Gratis testen",
     secondary: "Pläne ansehen",
     dashboard: "Anmelden",
@@ -180,6 +189,8 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
     titleAccent: "têm saída com Operaly.",
     subtitle:
       "Áudios, agenda, e-mails, contatos, arquivos, lembretes e acompanhamento numa experiência clara, rápida e útil.",
+    positioning:
+      "Feito para profissionais independentes e pessoas ocupadas, quando um esquecimento custa tempo, dinheiro ou reputação.",
     primary: "Teste grátis",
     secondary: "Ver planos",
     dashboard: "Entrar",
@@ -214,6 +225,8 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
     titleAccent: "ont une vraie sortie avec Operaly.",
     subtitle:
       "Audio, agenda, e-mails, contacts, fichiers, rappels et suivi dans une expérience claire, rapide et utile.",
+    positioning:
+      "Pensé pour les indépendants et les professionnels très occupés, quand un oubli coûte du temps, de l'argent ou de la crédibilité.",
     primary: "Essai gratuit",
     secondary: "Voir les offres",
     dashboard: "Se connecter",
@@ -248,6 +261,8 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
     titleAccent: "hanno una vera uscita con Operaly.",
     subtitle:
       "Audio, agenda, email, contatti, file, promemoria e follow-up in un'esperienza chiara, rapida e utile.",
+    positioning:
+      "Pensato per professionisti indipendenti e persone molto occupate, quando una dimenticanza costa tempo, denaro o fiducia.",
     primary: "Prova gratis",
     secondary: "Vedi piani",
     dashboard: "Accedi",
@@ -367,21 +382,18 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
           <div className="pt-8 text-white">
-            <div className="relative mb-12 min-h-[220px] overflow-visible">
+            <div className="relative mb-12 min-h-[280px] overflow-visible">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
                 {t.overload}
               </p>
-              <h2 className="mt-6 text-5xl font-black tracking-[-0.05em] text-white/14 sm:text-6xl lg:text-7xl">
-                {locale === "es" ? "DESORDEN" : "OVERLOAD"}
-              </h2>
-              <div className="relative mt-2 h-[140px]">
+              <div className="relative mt-4 h-[130px]">
                 {t.overloadWords.map((pill, index) => (
                   <span
                     key={pill}
                     className="absolute inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-base font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
                     style={{
-                      left: `${(index % 3) * 25}%`,
-                      top: `${22 + (index % 2) * 42 + Math.floor(index / 3) * 18}px`,
+                      left: `${(index % 4) * 18}%`,
+                      top: `${8 + (index % 2) * 42 + Math.floor(index / 4) * 24}px`,
                       animation: `rain-pill 6s ease-in-out ${index * 0.22}s infinite`,
                     }}
                   >
@@ -389,6 +401,9 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   </span>
                 ))}
               </div>
+              <h2 className="mt-1 text-[4.8rem] font-black leading-none tracking-[-0.08em] text-white/14 sm:text-[6rem] lg:text-[8.4rem]">
+                {t.overloadTitle}
+              </h2>
             </div>
 
             <div className="inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/12 px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_48px_-26px_rgba(15,31,99,0.82)] backdrop-blur-xl">
@@ -405,6 +420,9 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-white/80">
               {t.subtitle}
+            </p>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-[#C9D7FF] sm:text-base">
+              {t.positioning}
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -450,7 +468,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               {t.modules.map((module, index) => (
                 <div
                   key={module.title}
-                  className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(10,18,50,0.16),rgba(255,255,255,0.72))] p-5 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
+                  className="rounded-[28px] border border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(232,240,255,0.92))] p-5 shadow-[0_24px_44px_-24px_rgba(15,31,99,0.7)] backdrop-blur-xl transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-white/32"
                   style={{ animation: `float-card 6.4s ease-in-out ${index * 0.18}s infinite` }}
                 >
                   <p className="text-base font-bold text-[#0F1F63]">{module.title}</p>
@@ -544,7 +562,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                       {t.modules.map((module, index) => (
                         <div
                           key={module.title}
-                          className="rounded-[24px] border border-slate-200 bg-[#F7FAFF] p-4 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
+                          className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-4 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
                           style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
                         >
                           <p className="text-base font-bold text-[#0F1F63]">{module.title}</p>
@@ -682,3 +700,8 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
     </section>
   )
 }
+    overloadTitle: "OVERLOAD",
+    overloadTitle: "ÜBERLASTUNG",
+    overloadTitle: "SOBRECARGA",
+    overloadTitle: "SURCHARGE",
+    overloadTitle: "DISORDINE",

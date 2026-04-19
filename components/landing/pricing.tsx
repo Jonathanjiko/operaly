@@ -6,6 +6,8 @@ import Link from "next/link"
 import {
   ArrowRight,
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   Check,
   FileText,
   Mail,
@@ -44,7 +46,6 @@ type PricingTexts = {
   startHere: string
   selectedEyebrow: string
   selectedHint: string
-  detailBadge: string
   proLabel: string
   trialLabel: string
   plusLabel: string
@@ -71,7 +72,6 @@ const pricingCopy: Record<"es" | "en", PricingTexts> = {
     selectedEyebrow: "Se activa con el plan elegido",
     selectedHint:
       "Pase el cursor por cada plan. Abajo se activan sus mejores atributos, con más señales visuales, módulos y profundidad para decidir mejor.",
-    detailBadge: "Lo mejor aquí",
     proLabel: "El más completo",
     trialLabel: "La entrada ideal",
     plusLabel: "Más capacidad",
@@ -99,7 +99,6 @@ const pricingCopy: Record<"es" | "en", PricingTexts> = {
     selectedEyebrow: "What unlocks with this plan",
     selectedHint:
       "Hover each plan. The strongest benefits below shift with more visual signals, modules and depth to help the decision feel easier.",
-    detailBadge: "Best here",
     proLabel: "Most complete",
     trialLabel: "Best entry point",
     plusLabel: "More capacity",
@@ -614,6 +613,7 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
   const { pricing, loading, isPeru } = usePricingCurrency()
   const [selectedPlan, setSelectedPlan] = useState("pro")
   const [selectedFeature, setSelectedFeature] = useState<FeatureCard | null>(null)
+  const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
   const isSpanish = locale === "es"
   const t = isSpanish ? pricingCopy.es : pricingCopy.en
   const localizedPlans = isSpanish ? localizedPlanCards.es : localizedPlanCards.en
@@ -626,6 +626,17 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
   )
 
   const activeDetails = detailGroups[activePlan.code] ?? []
+  const activeFeature = activeDetails[activeFeatureIndex] ?? activeDetails[0]
+
+  const cycleFeature = (direction: "prev" | "next") => {
+    if (!activeDetails.length) return
+    setActiveFeatureIndex((current) => {
+      if (direction === "prev") {
+        return current === 0 ? activeDetails.length - 1 : current - 1
+      }
+      return current === activeDetails.length - 1 ? 0 : current + 1
+    })
+  }
 
   return (
     <section id="planes" className="relative bg-[linear-gradient(180deg,#FFFFFF_0%,#F5F9FF_100%)] py-24 md:py-28">
@@ -661,7 +672,10 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
                 key={plan.code}
                 onMouseEnter={() => setSelectedPlan(plan.code)}
                 onFocus={() => setSelectedPlan(plan.code)}
-                onClick={() => setSelectedPlan(plan.code)}
+                onClick={() => {
+                  setSelectedPlan(plan.code)
+                  setActiveFeatureIndex(0)
+                }}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(event) => {
@@ -672,7 +686,11 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
                 }}
                 className={`group relative flex min-h-[450px] flex-col overflow-hidden rounded-[34px] border p-6 text-left transition-all duration-300 ${
                   isActive
-                    ? "scale-[1.02] border-transparent bg-[linear-gradient(180deg,#0C153A_0%,#101C5F_40%,#1A2570_100%)] text-white shadow-[0_34px_90px_-38px_rgba(15,31,99,0.9)]"
+                    ? isPopular
+                      ? "scale-[1.03] border-transparent bg-[linear-gradient(180deg,#0C153A_0%,#101C5F_35%,#301A66_100%)] text-white shadow-[0_34px_90px_-32px_rgba(81,63,175,0.95)]"
+                      : isTrial
+                        ? "scale-[1.02] border-transparent bg-[linear-gradient(180deg,#083227_0%,#11604B_45%,#167E7F_100%)] text-white shadow-[0_34px_90px_-32px_rgba(22,126,127,0.82)]"
+                        : "scale-[1.02] border-transparent bg-[linear-gradient(180deg,#0C153A_0%,#101C5F_40%,#1A2570_100%)] text-white shadow-[0_34px_90px_-38px_rgba(15,31,99,0.9)]"
                     : "border-[#DCE7F5] bg-white text-[#0F1F63] shadow-sm hover:-translate-y-1.5 hover:border-[#3B82F6]/30 hover:shadow-[0_24px_70px_-40px_rgba(15,31,99,0.45)]"
                 }`}
               >
@@ -783,22 +801,88 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
             </div>
           </div>
 
-          <div className="mt-8 overflow-x-auto">
-            <div className="flex min-w-max gap-4 pb-2">
-              {activeDetails.map((detail) => (
-                <button
-                  key={detail.title}
-                  type="button"
-                  onClick={() => setSelectedFeature(detail)}
-                  className="group w-[270px] shrink-0 rounded-[28px] border border-white/12 bg-white/8 p-5 text-left transition duration-300 hover:-translate-y-1 hover:bg-white/12"
-                >
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#A7F3D0]">
-                    <detail.icon className="h-4 w-4" />
-                    {t.detailBadge}
+          <div className="mt-8 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => cycleFeature("prev")}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/16 bg-white/10 text-white transition hover:scale-105 hover:bg-white/16"
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => activeFeature && setSelectedFeature(activeFeature)}
+              className="group flex flex-1 items-center gap-5 rounded-[30px] border border-white/12 bg-[linear-gradient(135deg,rgba(255,255,255,0.10),rgba(103,80,255,0.12),rgba(243,93,180,0.10))] p-6 text-left transition duration-300 hover:-translate-y-1 hover:border-white/26"
+            >
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/12">
+                {activeFeature ? <activeFeature.icon className="h-8 w-8 text-[#A7F3D0]" /> : null}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xl font-black text-white">{activeFeature?.title}</p>
+                <p className="mt-2 text-base font-semibold text-[#D8E4FF]">{activeFeature?.short}</p>
+                <p className="mt-2 text-sm leading-7 text-white/72 line-clamp-2">{activeFeature?.detail}</p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => cycleFeature("next")}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/16 bg-white/10 text-white transition hover:scale-105 hover:bg-white/16"
+              aria-label="Siguiente"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mt-5 flex items-center justify-center gap-2">
+            {activeDetails.map((detail, index) => (
+              <button
+                key={detail.title}
+                type="button"
+                onClick={() => setActiveFeatureIndex(index)}
+                className={`h-3.5 w-3.5 rounded-full transition ${
+                  index === activeFeatureIndex ? "bg-white shadow-[0_0_24px_rgba(255,255,255,0.5)]" : "bg-white/28 hover:bg-white/45"
+                }`}
+                aria-label={detail.title}
+              />
+            ))}
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-5">
+            {activeDetails.map((detail, index) => (
+              <button
+                key={detail.title}
+                type="button"
+                onClick={() => {
+                  setActiveFeatureIndex(index)
+                  setSelectedFeature(detail)
+                }}
+                className={`rounded-[22px] border p-4 text-left transition duration-300 ${
+                  index === activeFeatureIndex
+                    ? "border-white/24 bg-white/16"
+                    : "border-white/10 bg-white/6 hover:bg-white/10"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <detail.icon className="h-4 w-4 text-[#A7F3D0]" />
+                  <span className="text-sm font-bold text-white">{detail.title}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-[26px] border border-white/10 bg-white/6 p-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              {(activeDetails.slice(0, 3)).map((detail) => (
+                <div key={detail.title} className="rounded-[20px] bg-white/8 p-4">
+                  <div className="flex items-center gap-2">
+                    <detail.icon className="h-4 w-4 text-[#A7F3D0]" />
+                    <p className="text-sm font-bold text-white">{detail.title}</p>
                   </div>
-                  <p className="mt-4 text-lg font-bold text-white">{detail.title}</p>
-                  <p className="mt-3 text-sm leading-6 text-white/72">{detail.short}</p>
-                </button>
+                  <p className="mt-2 text-sm leading-6 text-white/72">{detail.short}</p>
+                </div>
               ))}
             </div>
           </div>
