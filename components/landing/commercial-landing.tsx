@@ -55,6 +55,14 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
       "Busca por todos lados",
       "Olvida cosas",
       "No sabe qué sigue",
+      "Olvidó pagar al banco",
+      "No pagó la luz",
+      "Perdió un cliente",
+      "Faltó a la cita médica",
+      "No entró a clases",
+      "Se olvidó de la lista de compras",
+      "Demasiados pendientes de casa",
+      "Perdió la reserva del hotel",
     ],
     overloadTitle: "DESORDEN",
     badge: "Operaly le facilita la vida desde WhatsApp",
@@ -387,18 +395,17 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr]">
           <div className="pt-8 text-white">
-            <div className="relative mb-14 min-h-[320px] overflow-visible">
+            <div className="relative mb-14 min-h-[400px] overflow-visible">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
                 {t.overload}
               </p>
-              <div className="relative mt-6 h-[150px]">
+              <div className="relative mt-6 flex max-w-[56rem] flex-wrap gap-3 pr-6">
                 {t.overloadWords.map((pill, index) => (
                   <span
                     key={pill}
-                    className="absolute inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
+                    className="inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
                     style={{
-                      left: `${(index % 4) * 17}%`,
-                      top: `${12 + (index % 2) * 46 + Math.floor(index / 4) * 28}px`,
+                      transform: `translateY(${(index % 3) * 6}px)`,
                       animation: `rain-pill 6s ease-in-out ${index * 0.22}s infinite`,
                     }}
                   >
@@ -406,7 +413,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   </span>
                 ))}
               </div>
-              <h2 className="mt-3 max-w-[720px] text-[5.2rem] font-black leading-[0.88] tracking-[-0.08em] text-white/14 sm:text-[6.4rem] lg:text-[8.8rem]">
+              <h2 className="mt-8 max-w-[980px] text-[5.8rem] font-black leading-[0.84] tracking-[-0.09em] text-white/14 sm:text-[7.2rem] lg:text-[10.5rem]">
                 {t.overloadTitle}
               </h2>
             </div>
@@ -489,7 +496,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
               className="relative overflow-hidden rounded-[42px] border border-white/18 bg-white/88 p-4 shadow-[0_44px_120px_-40px_rgba(9,17,43,0.65)] backdrop-blur-xl sm:p-5"
               style={{ animation: "breathe 7s ease-in-out infinite" }}
             >
-              <div className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
+              <div className="flex flex-col gap-4">
                 <div
                   className="rounded-[32px] bg-[linear-gradient(180deg,#101B63_0%,#172873_100%)] p-6 text-white"
                   style={{ animation: "float-soft 7.5s ease-in-out infinite" }}
@@ -513,8 +520,8 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                         key={`${message.label}-${index}`}
                         className={`rounded-[28px] p-4 shadow-sm ${
                           message.side === "left"
-                            ? "mr-8 rounded-bl-lg bg-white/12 text-white/94"
-                            : "ml-8 rounded-br-lg bg-[#25D366] text-white"
+                            ? "mr-10 max-w-[82%] rounded-bl-lg bg-white/12 text-white/94"
+                            : "ml-auto max-w-[82%] rounded-br-lg bg-[#25D366] text-white"
                         }`}
                         style={{ animation: `message-bob 5.2s ease-in-out ${index * 0.28}s infinite` }}
                       >
@@ -522,7 +529,7 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                           <message.icon className="h-3.5 w-3.5" />
                           {message.label}
                         </div>
-                        <p className="max-w-[22rem] text-[15px] leading-8">{message.text}</p>
+                        <p className="text-[15px] leading-8">{message.text}</p>
                       </div>
                     ))}
                   </div>
@@ -544,61 +551,61 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                  <div
-                    className="rounded-[30px] border border-[#D9E7FF] bg-white p-6 shadow-sm"
-                    style={{ animation: "float-soft 8s ease-in-out .2s infinite" }}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3B82F6]">
-                          {t.panelLabel}
-                        </p>
-                        <p className="mt-2 max-w-[15rem] text-[2rem] font-black leading-[1.02] text-[#0F1F63]">
-                          {t.panelTitle}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-[#ECF5FF] px-3 py-2 text-xs font-semibold text-[#2563EB]">
-                        {t.panelBadge}
-                      </div>
+                <div
+                  className="rounded-[30px] border border-[#D9E7FF] bg-white p-6 shadow-sm"
+                  style={{ animation: "float-soft 8s ease-in-out .2s infinite" }}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3B82F6]">
+                        {t.panelLabel}
+                      </p>
+                      <p className="mt-2 max-w-[22rem] text-[2.35rem] font-black leading-[1.02] text-[#0F1F63]">
+                        {t.panelTitle}
+                      </p>
                     </div>
-
-                    <div className="mt-5 space-y-3">
-                      {t.modules.map((module, index) => (
-                        <div
-                          key={module.title}
-                          className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
-                          style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
-                        >
-                          <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
-                        </div>
-                      ))}
+                    <div className="rounded-2xl bg-[#ECF5FF] px-3 py-2 text-xs font-semibold text-[#2563EB]">
+                      {t.panelBadge}
                     </div>
                   </div>
 
-                  <div
-                    className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-6 text-white shadow-sm"
-                    style={{ animation: "float-soft 7.2s ease-in-out .4s infinite" }}
-                  >
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
-                      {t.proofTitle}
-                    </p>
-                    <div className="mt-4 space-y-3 text-sm leading-7 text-white/82">
-                      {t.proofItems.map((item) => (
-                        <div key={item} className="flex items-start gap-2">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {t.modules.map((module, index) => (
+                      <div
+                        key={module.title}
+                        className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#FFFFFF_0%,#F4F8FF_100%)] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#3B82F6]/30 hover:shadow-sm"
+                        style={{ animation: `float-card 5.8s ease-in-out ${index * 0.2}s infinite` }}
+                      >
+                        <p className="text-base font-bold leading-6 text-[#0F1F63]">{module.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{module.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[30px] border border-[#D9E7FF] bg-[linear-gradient(180deg,#0F1F63_0%,#18266B_100%)] p-6 text-white shadow-sm"
+                  style={{ animation: "float-soft 7.2s ease-in-out .4s infinite" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
+                    {t.proofTitle}
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {t.proofItems.map((item) => (
+                      <div key={item} className="rounded-[22px] border border-white/10 bg-white/6 p-4 text-sm leading-7 text-white/84">
+                        <div className="flex items-start gap-2">
                           <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#A7F3D0]" />
                           <span>{item}</span>
                         </div>
-                      ))}
-                    </div>
-                    <a
-                      href="/register"
-                      className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-white px-5 text-sm font-bold text-[#0F1F63] transition duration-300 hover:scale-[1.02]"
-                    >
-                      {t.primary}
-                    </a>
+                      </div>
+                    ))}
                   </div>
+                  <a
+                    href="/register"
+                    className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-full bg-white px-5 text-sm font-bold text-[#0F1F63] transition duration-300 hover:scale-[1.02]"
+                  >
+                    {t.primary}
+                  </a>
                 </div>
               </div>
             </div>
