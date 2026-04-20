@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import {
-  AlertCircle,
   FolderLock,
   KeyRound,
   Link2,
@@ -11,16 +9,9 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldAlert,
-  ShieldCheck,
   Trash2,
 } from "lucide-react"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import {
-  fetchProfessionalRuntime,
-  normalizeRuntimeStatus,
-  type ProfessionalRuntimeSnapshot,
-} from "@/lib/professional-runtime"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
 
@@ -34,177 +25,69 @@ type VaultRow = Record<string, any> & {
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     title: "Baúl privado",
-    subtitle: "Guarde aquí lo delicado: accesos, referencias privadas y archivos sensibles.",
-    sync: "Lo que se guarde aquí debe mantenerse ligado a su cuenta",
+    subtitle: "Guarde aquí lo sensible y vuelva a encontrarlo rápido.",
+    sync: "Solo lo importante y sensible, siempre a mano",
     search: "Buscar por nombre, tipo o referencia...",
-    empty: "Aún no hay elementos visibles",
-    emptyHint: "Cuando usted u Operaly separen algo sensible, debería aparecer aquí.",
-    contract: "Todavía hay partes que backend debe terminar de cerrar para que todo quede completo.",
+    empty: "Aún no tiene elementos en su baúl",
+    emptyHint: "Cuando guarde algo sensible, aparecerá aquí para revisarlo, buscarlo o eliminarlo.",
     refresh: "Actualizar",
     delete: "Eliminar",
-    type: "Tipo",
-    created: "Creado",
-    updated: "Actualizado",
-    details: "Detalle",
-    runtime: "Estado actual",
-    runtimeHint: "Aquí puede ver si ya tiene contenido visible y qué parte sigue pendiente de completarse mejor.",
-    pending: "Todavía incompleto",
-    ready: "Ya visible",
     count: "registros",
-    protected: "Qué debería vivir aquí",
-    protectedHint: "Este espacio sirve para separar lo sensible del resto de su operación diaria.",
-    credentials: "Credenciales y accesos",
-    links: "Links y referencias privadas",
-    files: "Archivos sensibles",
-    recent: "Movimientos recientes",
-    recentHint: "Cuando Operaly use o clasifique algo delicado, debería reflejarse aquí.",
-    noRecent: "Aún no hay movimientos recientes del baúl privado.",
-    backendSource: "Origen",
   },
   en: {
     title: "Private vault",
-    subtitle: "Separate view for links, credentials, and sensitive records tied to your account.",
-    sync: "Synced with Supabase as source of truth",
+    subtitle: "Keep sensitive items here and find them fast.",
+    sync: "Only what matters, easy to reach",
     search: "Search by name, type, or reference...",
-    empty: "No visible items yet",
-    emptyHint: "When the backend classifies or stores sensitive information, it will show up here with traceability.",
-    contract: "This module already shows the real read state. Full create/edit still depends on the final backend contract.",
+    empty: "No private items yet",
+    emptyHint: "When you save something sensitive, it will appear here so you can review it, search it, or delete it.",
     refresh: "Refresh",
     delete: "Delete",
-    type: "Type",
-    created: "Created",
-    updated: "Updated",
-    details: "Details",
-    runtime: "Module status",
-    runtimeHint: "This panel separates what already exists in your vault from what still depends on backend work.",
-    pending: "Full management pending",
-    ready: "Read access available",
     count: "records",
-    protected: "Expected coverage",
-    protectedHint: "The vault should separate credentials, links, and sensitive files from the rest of the operation.",
-    credentials: "Credentials and access",
-    links: "Private links and references",
-    files: "Sensitive files",
-    recent: "Recent activity",
-    recentHint: "This area shows recent runtime signals when the backend classifies or uses sensitive content.",
-    noRecent: "No recent private vault events yet.",
-    backendSource: "Backend signal",
   },
   pt: {
     title: "Baú privado",
-    subtitle: "Visão separada para links, credenciais e registros sensíveis ligados à sua conta.",
-    sync: "Sincronizado com Supabase como fonte de verdade",
+    subtitle: "Guarde aqui o sensível e encontre depois sem perder tempo.",
+    sync: "Só o importante, sempre à mão",
     search: "Buscar por nome, tipo ou referência...",
-    empty: "Ainda não há itens visíveis",
-    emptyHint: "Quando o backend classificar ou salvar informação sensível, ela aparecerá aqui com rastreabilidade.",
-    contract: "Este módulo já mostra o estado real de leitura. Criação e edição completas ainda dependem do contrato final do backend.",
+    empty: "Ainda não há itens no baú",
+    emptyHint: "Quando você guardar algo sensível, ele aparecerá aqui para revisar, buscar ou excluir.",
     refresh: "Atualizar",
     delete: "Excluir",
-    type: "Tipo",
-    created: "Criado",
-    updated: "Atualizado",
-    details: "Detalhes",
-    runtime: "Estado do módulo",
-    runtimeHint: "Aqui separamos o que já existe de verdade no baú do que ainda depende do backend.",
-    pending: "Gestão completa pendente",
-    ready: "Leitura disponível",
     count: "registros",
-    protected: "Cobertura esperada",
-    protectedHint: "O baú deve separar credenciais, links e arquivos sensíveis do restante da operação.",
-    credentials: "Credenciais e acessos",
-    links: "Links e referências privadas",
-    files: "Arquivos sensíveis",
-    recent: "Atividade recente",
-    recentHint: "Aqui você verá sinais recentes do runtime quando o backend classificar ou usar conteúdo sensível.",
-    noRecent: "Ainda não há eventos recentes do baú privado para mostrar.",
-    backendSource: "Sinal do backend",
   },
   de: {
     title: "Privater Tresor",
-    subtitle: "Getrennte Ansicht für Links, Zugangsdaten und sensible Einträge deines Kontos.",
-    sync: "Mit Supabase als Quelle der Wahrheit synchronisiert",
+    subtitle: "Bewahren Sie hier das Sensible auf und finden Sie es schnell wieder.",
+    sync: "Nur das Wichtige, immer griffbereit",
     search: "Nach Name, Typ oder Referenz suchen...",
-    empty: "Noch keine sichtbaren Einträge",
-    emptyHint: "Sobald das Backend sensible Informationen klassifiziert oder speichert, erscheinen sie hier mit Nachvollziehbarkeit.",
-    contract: "Dieses Modul zeigt bereits den echten Lesezustand. Vollständiges Erstellen/Bearbeiten hängt noch vom finalen Backend-Vertrag ab.",
+    empty: "Noch keine Einträge im Tresor",
+    emptyHint: "Sobald Sie etwas Sensibles speichern, erscheint es hier zum Prüfen, Suchen oder Löschen.",
     refresh: "Aktualisieren",
     delete: "Löschen",
-    type: "Typ",
-    created: "Erstellt",
-    updated: "Aktualisiert",
-    details: "Details",
-    runtime: "Modulstatus",
-    runtimeHint: "Hier trennen wir, was bereits wirklich im Tresor liegt, von dem, was noch vom Backend abhängt.",
-    pending: "Vollständige Verwaltung ausstehend",
-    ready: "Lesen verfügbar",
     count: "Einträge",
-    protected: "Erwarteter Umfang",
-    protectedHint: "Der Tresor soll Zugangsdaten, Links und sensible Dateien vom restlichen Betrieb trennen.",
-    credentials: "Zugangsdaten und Zugriffe",
-    links: "Private Links und Referenzen",
-    files: "Sensible Dateien",
-    recent: "Letzte Aktivität",
-    recentHint: "Hier erscheinen aktuelle Runtime-Signale, wenn das Backend sensible Inhalte klassifiziert oder nutzt.",
-    noRecent: "Noch keine aktuellen Tresor-Ereignisse verfügbar.",
-    backendSource: "Backend-Signal",
   },
   fr: {
     title: "Coffre privé",
-    subtitle: "Vue séparée pour les liens, identifiants et éléments sensibles liés à ton compte.",
-    sync: "Synchronisé avec Supabase comme source de vérité",
+    subtitle: "Gardez ici le sensible et retrouvez-le vite.",
+    sync: "Seulement l’important, toujours accessible",
     search: "Rechercher par nom, type ou référence...",
-    empty: "Aucun élément visible pour l’instant",
-    emptyHint: "Quand le backend classera ou stockera des informations sensibles, elles apparaîtront ici avec traçabilité.",
-    contract: "Ce module montre déjà l’état réel en lecture. La création et l’édition complètes dépendent encore du contrat backend final.",
+    empty: "Aucun élément dans le coffre pour l’instant",
+    emptyHint: "Quand vous sauvegardez quelque chose de sensible, il apparaît ici pour le revoir, le chercher ou le supprimer.",
     refresh: "Actualiser",
     delete: "Supprimer",
-    type: "Type",
-    created: "Créé",
-    updated: "Mis à jour",
-    details: "Détails",
-    runtime: "État du module",
-    runtimeHint: "Ici, on sépare ce qui existe déjà réellement dans le coffre de ce qui dépend encore du backend.",
-    pending: "Gestion complète en attente",
-    ready: "Lecture disponible",
     count: "éléments",
-    protected: "Couverture attendue",
-    protectedHint: "Le coffre doit séparer identifiants, liens et fichiers sensibles du reste de l’opération.",
-    credentials: "Identifiants et accès",
-    links: "Liens et références privées",
-    files: "Fichiers sensibles",
-    recent: "Activité récente",
-    recentHint: "Tu verras ici les signaux récents du runtime quand le backend classe ou utilise du contenu sensible.",
-    noRecent: "Aucun événement récent du coffre privé pour l’instant.",
-    backendSource: "Signal backend",
   },
   it: {
     title: "Caveau privato",
-    subtitle: "Vista separata per link, credenziali e record sensibili associati al tuo account.",
-    sync: "Sincronizzato con Supabase come fonte di verità",
+    subtitle: "Conserva qui ciò che è sensibile e ritrovalo in fretta.",
+    sync: "Solo ciò che conta, sempre a portata",
     search: "Cerca per nome, tipo o riferimento...",
-    empty: "Nessun elemento visibile per ora",
-    emptyHint: "Quando il backend classificherà o salverà informazioni sensibili, compariranno qui con tracciabilità.",
-    contract: "Questo modulo mostra già lo stato reale in lettura. Creazione e modifica complete dipendono ancora dal contratto backend finale.",
+    empty: "Nessun elemento nel caveau",
+    emptyHint: "Quando salvi qualcosa di sensibile, apparirà qui per rivederlo, cercarlo o eliminarlo.",
     refresh: "Aggiorna",
     delete: "Elimina",
-    type: "Tipo",
-    created: "Creato",
-    updated: "Aggiornato",
-    details: "Dettagli",
-    runtime: "Stato del modulo",
-    runtimeHint: "Qui separiamo ciò che esiste davvero nel caveau da ciò che dipende ancora dal backend.",
-    pending: "Gestione completa in sospeso",
-    ready: "Lettura disponibile",
     count: "record",
-    protected: "Copertura prevista",
-    protectedHint: "Il caveau deve separare credenziali, link e file sensibili dal resto dell’operatività.",
-    credentials: "Credenziali e accessi",
-    links: "Link e riferimenti privati",
-    files: "File sensibili",
-    recent: "Attività recente",
-    recentHint: "Qui vedrai i segnali runtime recenti quando il backend classifica o usa contenuti sensibili.",
-    noRecent: "Nessun evento recente del caveau privato.",
-    backendSource: "Segnale backend",
   },
 }
 
@@ -244,20 +127,6 @@ function formatDate(value: string | null | undefined, locale: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(parsed)
 }
 
-function isVaultEvent(eventType: string | null | undefined) {
-  const normalized = String(eventType || "").toLowerCase()
-  return (
-    normalized.includes("vault") ||
-    normalized.includes("private") ||
-    normalized.includes("credential") ||
-    normalized.includes("sensitive")
-  )
-}
-
-function inferOriginLabel(item: VaultRow) {
-  return String(item.source || item.origin || item.created_from || item.channel || "vault")
-}
-
 function TypeIcon({ type }: { type: string }) {
   const normalized = type.toLowerCase()
   if (normalized.includes("password") || normalized.includes("credential") || normalized.includes("secret")) {
@@ -277,7 +146,6 @@ export default function BaulPrivadoPage() {
   const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [locale, setLocale] = useState("es-PE")
   const [errorMessage, setErrorMessage] = useState("")
-  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
@@ -302,12 +170,6 @@ export default function BaulPrivadoPage() {
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
 
-      try {
-        setRuntimeSnapshot(await fetchProfessionalRuntime())
-      } catch (runtimeError) {
-        console.error("No se pudo cargar runtime del baúl privado:", runtimeError)
-      }
-
       const { data, error } = await supabase
         .from("private_vault_items")
         .select("*")
@@ -326,23 +188,16 @@ export default function BaulPrivadoPage() {
   }
 
   useEffect(() => {
-    load()
+    void load()
   }, [])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return items
     return items.filter((item) =>
-      [inferVaultTitle(item), inferVaultType(item), inferVaultDetail(item)]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
+      [inferVaultTitle(item), inferVaultType(item), inferVaultDetail(item)].join(" ").toLowerCase().includes(q)
     )
   }, [items, search])
-
-  const recentVaultEvents = useMemo(() => {
-    return (runtimeSnapshot?.recentEvents || []).filter((event) => isVaultEvent(event?.event_type)).slice(0, 4)
-  }, [runtimeSnapshot])
 
   async function saveVaultItem() {
     if (!clientId || !draft.title.trim()) return
@@ -404,7 +259,7 @@ export default function BaulPrivadoPage() {
             Agregar
           </button>
           <button
-            onClick={() => load()}
+            onClick={() => void load()}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -437,179 +292,6 @@ export default function BaulPrivadoPage() {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#10B981]/5 p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Cómo debería llegar algo aquí 🔒</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-              Ya no debería depender solo de que usted lo cargue a mano. Si un documento, enlace o nota resulta sensible, Operaly debería proponer dejarlo aquí y explicarle también si lo moverá a agenda, casos o correo.
-            </p>
-          </div>
-          <Link
-            href="/dashboard/professional/listas"
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
-          >
-            <Link2 className="h-4 w-4" />
-            Ver listas
-          </Link>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Desde documentos</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Cuando un archivo trae datos delicados, debería terminar aquí sin perder la referencia al documento original.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Desde WhatsApp</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si usted escribe o manda algo sensible, Operaly debería proponérselo antes de dejarlo mezclado en otros módulos.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Con seguimiento</p>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si además hay fecha, contacto o envío, debería coordinarse con agenda, casos o correo.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-          <h2 className="text-lg font-semibold text-[#0F1F63]">{copy.runtime}</h2>
-        </div>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">{copy.runtimeHint}</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que ya está operativo</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-              {errorMessage ? copy.pending : recentVaultEvents.length > 0 || items.length > 0 ? copy.ready : copy.pending}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-                {errorMessage || "Ya puede revisar lo que está separado para su cuenta."}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Lo que sigue afinándose</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Coordinación multi-módulo</p>
-            <p className="mt-1 text-xs text-muted-foreground">{copy.contract}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-[#0F1F63]" />
-            <h2 className="text-lg font-semibold text-[#0F1F63]">{copy.protected}</h2>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.protectedHint}</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {[
-              { label: copy.credentials, icon: <KeyRound className="h-4 w-4 text-[#7C3AED]" /> },
-              { label: copy.links, icon: <Link2 className="h-4 w-4 text-[#2563EB]" /> },
-              { label: copy.files, icon: <FolderLock className="h-4 w-4 text-[#0F766E]" /> },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-border bg-secondary/20 p-4">
-                <div className="flex items-center gap-2">
-                  {item.icon}
-                  <p className="text-sm font-semibold text-[#0F1F63]">{item.label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-            <h2 className="text-lg font-semibold text-[#0F1F63]">{copy.recent}</h2>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{copy.recentHint}</p>
-          <div className="mt-4 space-y-3">
-            {recentVaultEvents.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
-                {copy.noRecent}
-              </div>
-            ) : (
-              recentVaultEvents.map((event) => (
-                <div key={String(event.id || event.created_at)} className="rounded-2xl border border-border bg-secondary/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{copy.backendSource}</p>
-                  <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
-                    {normalizeRuntimeStatus(String(event.event_type || "runtime_event"))}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatDate(event.created_at, locale)}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Relación con documentos</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              El baúl privado no reemplaza sus documentos. Sirve para apartar lo delicado cuando conviene que no quede mezclado con el resto.
-            </p>
-          </div>
-          <Link
-            href="/dashboard/professional/documentos"
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0F1F63]/15 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
-          >
-            <FolderLock className="h-4 w-4" />
-            Ver documentos
-          </Link>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Registros visibles</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{items.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Elementos ya apartados para usted en esta vista.</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Vienen de documentos</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-              {items.filter((item) => inferOriginLabel(item).toLowerCase().includes("document")).length}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Registros que parecen haber llegado desde archivos o clasificación previa.</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Movimiento reciente</p>
-            <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-              {recentVaultEvents.length > 0 ? "Con señal" : "Pendiente"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Le ayuda a ver si Operaly ya está separando mejor lo sensible.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-sm font-semibold text-[#0F1F63]">Para accesos y claves</p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-600">
-            Guarde aquí referencias, accesos o datos que no conviene mezclar con el trabajo diario.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-sm font-semibold text-[#0F1F63]">Para enlaces privados</p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-600">
-            Si necesita apartar links de bancos, plataformas o servicios delicados, este es su lugar.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-sm font-semibold text-[#0F1F63]">Para archivos reservados</p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-600">
-            Sirve para tener más a la mano lo sensible sin perderlo dentro del resto de documentos.
-          </p>
-        </div>
-      </div>
-
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
@@ -633,7 +315,7 @@ export default function BaulPrivadoPage() {
             <FolderLock className="h-7 w-7 text-[#0F1F63]" />
           </div>
           <p className="mt-4 font-medium text-[#0F1F63]">{copy.empty}</p>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">{copy.emptyHint}</p>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">{errorMessage || copy.emptyHint}</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -651,11 +333,11 @@ export default function BaulPrivadoPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-[#0F1F63]">{title}</p>
-                      <p className="mt-1 text-sm text-muted-foreground break-all">{detail}</p>
+                      <p className="mt-1 break-all text-sm text-muted-foreground">{detail}</p>
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => void handleDelete(item.id)}
                     className="inline-flex h-9 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 text-sm font-medium text-red-700 hover:bg-red-100"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -665,15 +347,15 @@ export default function BaulPrivadoPage() {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{copy.type}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tipo</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{type}</p>
                   </div>
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{copy.created}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Creado</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{formatDate(item.created_at, locale)}</p>
                   </div>
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{copy.updated}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Actualizado</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{formatDate(item.updated_at, locale)}</p>
                   </div>
                 </div>
@@ -682,13 +364,6 @@ export default function BaulPrivadoPage() {
           })}
         </div>
       )}
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <p>{copy.contract}</p>
-        </div>
-      </div>
     </div>
   )
 }

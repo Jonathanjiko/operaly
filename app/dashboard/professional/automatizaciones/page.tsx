@@ -1,17 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { calculateNextRun } from "@/lib/automation-engine"
-import {
-  fetchProfessionalRuntime,
-  normalizeRuntimeStatus,
-  type ProfessionalRuntimeSnapshot,
-} from "@/lib/professional-runtime"
 import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
 import {
-  Bell,
   CalendarClock,
   CheckSquare,
   ChevronRight,
@@ -21,7 +15,6 @@ import {
   Plus,
   RefreshCw,
   Repeat,
-  ShieldCheck,
   Trash2,
   X,
   Zap,
@@ -42,10 +35,10 @@ type RecurringTaskRow = {
 const TEMPLATES = [
   {
     id: "reminder_weekly",
-    icon: Bell,
+    icon: Clock,
     color: "#3B82F6",
     label: "Recordatorio semanal",
-    desc: "Te avisa cada semana sobre algo importante",
+    desc: "Para algo que quiere volver a ver cada semana",
     defaults: { repeat_type: "weekly", repeat_interval: 1 },
     placeholder: "Ej: Revisar pagos pendientes",
   },
@@ -54,7 +47,7 @@ const TEMPLATES = [
     icon: CheckSquare,
     color: "#10B981",
     label: "Tarea diaria",
-    desc: "Una acción que repites todos los días",
+    desc: "Para algo que se repite todos los días",
     defaults: { repeat_type: "daily", repeat_interval: 1 },
     placeholder: "Ej: Revisar agenda del día",
   },
@@ -63,7 +56,7 @@ const TEMPLATES = [
     icon: CalendarClock,
     color: "#7C3AED",
     label: "Seguimiento mensual",
-    desc: "Recordatorio de seguimiento cada mes",
+    desc: "Para volver a un tema cada mes",
     defaults: { repeat_type: "monthly", repeat_interval: 1 },
     placeholder: "Ej: Llamar a clientes activos",
   },
@@ -72,7 +65,7 @@ const TEMPLATES = [
     icon: Zap,
     color: "#F59E0B",
     label: "Personalizada",
-    desc: "Configura tu propio ritmo y frecuencia",
+    desc: "Para elegir su propio ritmo",
     defaults: { repeat_type: "weekly", repeat_interval: 1 },
     placeholder: "Ej: Enviar reporte de avances",
   },
@@ -103,22 +96,15 @@ function formatNextRun(value: string | null, locale: string) {
   }).format(d)
 }
 
-function isAutomationEvent(eventType: string | null | undefined) {
-  const normalized = String(eventType || "").toLowerCase()
-  return normalized.includes("automation") || normalized.includes("recurring")
-}
-
 export default function AutomatizacionesPage() {
   const [clientId, setClientId] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [items, setItems] = useState<RecurringTaskRow[]>([])
-  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [locale, setLocale] = useState("es-PE")
   const [showWizard, setShowWizard] = useState(false)
   const [step, setStep] = useState<1 | 2>(1)
-
   const [selectedTemplate, setSelectedTemplate] = useState<(typeof TEMPLATES)[number] | null>(null)
   const [title, setTitle] = useState("")
   const [repeatType, setRepeatType] = useState("weekly")
@@ -141,16 +127,11 @@ export default function AutomatizacionesPage() {
         setLocale(localeFromLanguage(resolvedLanguage))
 
         await load(id)
-        try {
-          setRuntimeSnapshot(await fetchProfessionalRuntime())
-        } catch (runtimeError) {
-          console.error("No se pudo cargar runtime de automatizaciones:", runtimeError)
-        }
       } finally {
         setLoading(false)
       }
     }
-    init()
+    void init()
   }, [])
 
   const load = async (cid: string) => {
@@ -244,27 +225,24 @@ export default function AutomatizacionesPage() {
 
   const active = items.filter((item) => item.status === "active")
   const paused = items.filter((item) => item.status !== "active")
-  const recentAutomationEvents = useMemo(() => {
-    return (runtimeSnapshot?.recentEvents || []).filter((event) => isAutomationEvent(event?.event_type)).slice(0, 4)
-  }, [runtimeSnapshot])
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Automatizaciones</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Tareas que Operaly ejecuta por ti sin que tengas que recordarlas
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Deja listas las tareas y recordatorios que quieres repetir.
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Sincronizado con Supabase y WhatsApp · {labelForLanguage(language)} · {locale}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {active.length} activas · {items.length} en total · {labelForLanguage(language)}
           </p>
         </div>
         <Button
           onClick={openWizard}
-          className="h-10 px-5 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-medium hover:opacity-90"
+          className="h-10 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] px-5 text-white font-medium hover:opacity-90"
         >
-          <Plus className="w-4 h-4 mr-2" /> Nueva automatización
+          <Plus className="mr-2 h-4 w-4" /> Nueva automatización
         </Button>
       </div>
 
@@ -276,83 +254,26 @@ export default function AutomatizacionesPage() {
         ].map((stat) => (
           <div key={stat.label} className={`${stat.bg} rounded-2xl border border-border p-4 text-center`}>
             <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{stat.label}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Estado operativo</h2>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Este módulo ya muestra las recurrencias visibles en Supabase y ayuda a separar lo que ya está guardado de la ejecución viva que WhatsApp debe honrar.
-          </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Visibles</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{items.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Automatizaciones persistidas en tu cuenta.</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Activas</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{active.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Listas para dispararse según su siguiente ejecución.</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Señal backend</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {recentAutomationEvents.length > 0 ? "Con señal" : "Pendiente"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">La ejecución real por WhatsApp todavía depende de la siguiente capa backend.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#0F1F63]">Señales recientes</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Aquí aparecerán los eventos recientes cuando el backend registre activaciones, pausas o ejecuciones de recurrencias.
-          </p>
-          <div className="mt-4 space-y-3">
-            {recentAutomationEvents.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-secondary/10 p-4 text-sm text-muted-foreground">
-                Aún no hay eventos recientes de automatizaciones en runtime.
-              </div>
-            ) : (
-              recentAutomationEvents.map((event) => (
-                <div key={String(event.id || event.created_at)} className="rounded-2xl border border-border bg-secondary/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Runtime</p>
-                  <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
-                    {normalizeRuntimeStatus(String(event.event_type || "automation_event"))}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {event.created_at ? new Date(event.created_at).toLocaleString(locale) : "—"}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-          <RefreshCw className="w-4 h-4 animate-spin" /> Cargando...
+        <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+          <RefreshCw className="h-4 w-4 animate-spin" /> Cargando...
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-card rounded-2xl border border-dashed border-border p-12 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/10 to-[#7C3AED]/10 flex items-center justify-center mx-auto mb-4">
-            <Zap className="w-7 h-7 text-[#7C3AED]" />
+        <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3B82F6]/10 to-[#7C3AED]/10">
+            <Zap className="h-7 w-7 text-[#7C3AED]" />
           </div>
-          <p className="font-semibold text-[#0F1F63] text-lg">Sin automatizaciones aún</p>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
-            Crea tu primera automatización y deja que Operaly haga el seguimiento por ti
+          <p className="text-lg font-semibold text-[#0F1F63]">Sin automatizaciones aún</p>
+          <p className="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">
+            Crea la primera y deja listo lo que no quieres volver a perseguir a mano.
           </p>
           <Button onClick={openWizard} className="mt-5 rounded-xl bg-[#3B82F6] text-white hover:bg-[#2563EB]">
-            <Plus className="w-4 h-4 mr-2" /> Crear primera automatización
+            <Plus className="mr-2 h-4 w-4" /> Crear primera automatización
           </Button>
         </div>
       ) : (
@@ -363,21 +284,21 @@ export default function AutomatizacionesPage() {
             return (
               <div
                 key={item.id}
-                className={`bg-card rounded-2xl border p-5 flex items-center gap-4 transition-all ${
+                className={`flex items-center gap-4 rounded-2xl border bg-card p-5 transition-all ${
                   isActive ? "border-border" : "border-border opacity-60"
                 }`}
               >
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${
                     isActive ? "bg-gradient-to-br from-[#3B82F6]/10 to-[#7C3AED]/10" : "bg-secondary"
                   }`}
                 >
-                  <RepeatIcon className={`w-5 h-5 ${isActive ? "text-[#3B82F6]" : "text-muted-foreground"}`} />
+                  <RepeatIcon className={`h-5 w-5 ${isActive ? "text-[#3B82F6]" : "text-muted-foreground"}`} />
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#0F1F63] truncate">{item.title || "Automatización"}</p>
-                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-[#0F1F63]">{item.title || "Automatización"}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
                     <span className="text-xs text-muted-foreground">
                       {REPEAT_LABELS[item.repeat_type || "weekly"]} · cada {item.repeat_interval}
                     </span>
@@ -388,31 +309,31 @@ export default function AutomatizacionesPage() {
                 </div>
 
                 <span
-                  className={`text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 ${
+                  className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
                     isActive ? "bg-[#10B981]/10 text-[#059669]" : "bg-secondary text-muted-foreground"
                   }`}
                 >
                   {isActive ? "Activa" : "Pausada"}
                 </span>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
-                    onClick={() => toggle(item.id, item.status)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors"
+                    onClick={() => void toggle(item.id, item.status)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-secondary"
                     title={isActive ? "Pausar" : "Activar"}
                   >
                     {isActive ? (
-                      <Pause className="w-4 h-4 text-muted-foreground" />
+                      <Pause className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <Play className="w-4 h-4 text-[#10B981]" />
+                      <Play className="h-4 w-4 text-[#10B981]" />
                     )}
                   </button>
                   <button
-                    onClick={() => remove(item.id)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#FEF2F2] transition-colors"
+                    onClick={() => void remove(item.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[#FEF2F2]"
                     title="Eliminar"
                   >
-                    <Trash2 className="w-4 h-4 text-[#EF4444]" />
+                    <Trash2 className="h-4 w-4 text-[#EF4444]" />
                   </button>
                 </div>
               </div>
@@ -424,44 +345,44 @@ export default function AutomatizacionesPage() {
       {showWizard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowWizard(false)} />
-          <div className="relative bg-card rounded-3xl border border-border shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-5">
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Paso {step} de 2
                 </p>
-                <h3 className="text-lg font-bold text-[#0F1F63] mt-0.5">
+                <h3 className="mt-0.5 text-lg font-bold text-[#0F1F63]">
                   {step === 1 ? "¿Qué tipo de automatización?" : "Configura el detalle"}
                 </h3>
               </div>
               <button
                 onClick={() => setShowWizard(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-secondary transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-xl transition-colors hover:bg-secondary"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {step === 1 && (
-              <div className="p-5 grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 p-5">
                 {TEMPLATES.map((tpl) => {
                   const Icon = tpl.icon
                   return (
                     <button
                       key={tpl.id}
                       onClick={() => selectTemplate(tpl)}
-                      className="group p-4 rounded-2xl border border-border bg-background hover:border-[#3B82F6]/40 hover:bg-[#EFF6FF]/50 text-left transition-all"
+                      className="group rounded-2xl border border-border bg-background p-4 text-left transition-all hover:border-[#3B82F6]/40 hover:bg-[#EFF6FF]/50"
                     >
                       <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                        className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl"
                         style={{ backgroundColor: `${tpl.color}15` }}
                       >
-                        <Icon className="w-5 h-5" style={{ color: tpl.color }} />
+                        <Icon className="h-5 w-5" style={{ color: tpl.color }} />
                       </div>
-                      <p className="font-semibold text-sm text-[#0F1F63] group-hover:text-[#1D4ED8]">{tpl.label}</p>
-                      <p className="text-xs text-muted-foreground mt-1 leading-snug">{tpl.desc}</p>
-                      <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[#3B82F6] opacity-0 group-hover:opacity-100 transition-opacity">
-                        Seleccionar <ChevronRight className="w-3 h-3" />
+                      <p className="text-sm font-semibold text-[#0F1F63] group-hover:text-[#1D4ED8]">{tpl.label}</p>
+                      <p className="mt-1 text-xs leading-snug text-muted-foreground">{tpl.desc}</p>
+                      <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[#3B82F6] opacity-0 transition-opacity group-hover:opacity-100">
+                        Seleccionar <ChevronRight className="h-3 w-3" />
                       </div>
                     </button>
                   )
@@ -470,13 +391,13 @@ export default function AutomatizacionesPage() {
             )}
 
             {step === 2 && selectedTemplate && (
-              <div className="p-5 space-y-4">
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50">
+              <div className="space-y-4 p-5">
+                <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3">
                   <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg"
                     style={{ backgroundColor: `${selectedTemplate.color}15` }}
                   >
-                    <selectedTemplate.icon className="w-4 h-4" style={{ color: selectedTemplate.color }} />
+                    <selectedTemplate.icon className="h-4 w-4" style={{ color: selectedTemplate.color }} />
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-[#0F1F63]">{selectedTemplate.label}</p>
@@ -488,7 +409,7 @@ export default function AutomatizacionesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#0F1F63] mb-1.5">
+                  <label className="mb-1.5 block text-sm font-medium text-[#0F1F63]">
                     ¿Qué hace esta automatización?
                   </label>
                   <input
@@ -496,13 +417,13 @@ export default function AutomatizacionesPage() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder={selectedTemplate.placeholder}
-                    className="w-full h-11 px-4 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]"
+                    className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm focus:border-[#3B82F6] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20"
                     autoFocus
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#0F1F63] mb-1.5">Frecuencia</label>
+                  <label className="mb-1.5 block text-sm font-medium text-[#0F1F63]">Frecuencia</label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { value: "daily", label: "Diaria", icon: Clock },
@@ -515,13 +436,13 @@ export default function AutomatizacionesPage() {
                           key={opt.value}
                           type="button"
                           onClick={() => setRepeatType(opt.value)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
+                          className={`rounded-xl border p-3 text-left transition-all ${
                             repeatType === opt.value
                               ? "border-[#3B82F6] bg-[#EFF6FF]"
                               : "border-border bg-background hover:border-[#3B82F6]/40"
                           }`}
                         >
-                          <Icon className={`w-4 h-4 mb-1.5 ${repeatType === opt.value ? "text-[#3B82F6]" : "text-muted-foreground"}`} />
+                          <Icon className={`mb-1.5 h-4 w-4 ${repeatType === opt.value ? "text-[#3B82F6]" : "text-muted-foreground"}`} />
                           <p className={`text-xs font-semibold ${repeatType === opt.value ? "text-[#3B82F6]" : "text-[#0F1F63]"}`}>
                             {opt.label}
                           </p>
@@ -532,24 +453,24 @@ export default function AutomatizacionesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[#0F1F63] mb-1.5">
+                  <label className="mb-1.5 block text-sm font-medium text-[#0F1F63]">
                     Cada ¿cuántas {repeatType === "daily" ? "días" : repeatType === "weekly" ? "semanas" : "meses"}?
                   </label>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setInterval(Math.max(1, interval - 1))}
-                      className="w-10 h-10 rounded-xl border border-border flex items-center justify-center text-lg font-bold hover:bg-secondary transition-colors"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-border text-lg font-bold transition-colors hover:bg-secondary"
                     >
                       −
                     </button>
-                    <div className="flex-1 h-10 rounded-xl border border-[#3B82F6]/30 bg-[#EFF6FF] flex items-center justify-center text-lg font-bold text-[#1D4ED8]">
+                    <div className="flex h-10 flex-1 items-center justify-center rounded-xl border border-[#3B82F6]/30 bg-[#EFF6FF] text-lg font-bold text-[#1D4ED8]">
                       {interval}
                     </div>
                     <button
                       type="button"
                       onClick={() => setInterval(interval + 1)}
-                      className="w-10 h-10 rounded-xl border border-border flex items-center justify-center text-lg font-bold hover:bg-secondary transition-colors"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-border text-lg font-bold transition-colors hover:bg-secondary"
                     >
                       +
                     </button>
@@ -570,23 +491,23 @@ export default function AutomatizacionesPage() {
                   <button
                     type="button"
                     onClick={() => setShowWizard(false)}
-                    className="flex-1 h-11 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors"
+                    className="h-11 flex-1 rounded-xl border border-border text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary"
                   >
                     Cancelar
                   </button>
                   <Button
                     onClick={create}
                     disabled={saving || !title.trim()}
-                    className="flex-1 h-11 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-medium hover:opacity-90"
+                    className="h-11 flex-1 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white font-medium hover:opacity-90"
                   >
                     {saving ? (
                       <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                         Guardando...
                       </>
                     ) : (
                       <>
-                        <Zap className="w-4 h-4 mr-2" />
+                        <Zap className="mr-2 h-4 w-4" />
                         Crear automatización
                       </>
                     )}
