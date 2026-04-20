@@ -11,7 +11,7 @@ export type ProfessionalRuntimeSnapshot = {
   recentUnderstandingRuns?: Array<Record<string, any>>
 }
 
-const PROFESSIONAL_RUNTIME_TIMEOUT_MS = 8000
+const PROFESSIONAL_RUNTIME_TIMEOUT_MS = 12000
 
 async function fetchWithProfessionalTimeout(input: string, init: RequestInit) {
   const controller = new AbortController()
@@ -24,7 +24,7 @@ async function fetchWithProfessionalTimeout(input: string, init: RequestInit) {
     })
   } catch (error: any) {
     if (error?.name === "AbortError") {
-      throw new Error("El runtime profesional tardó demasiado. Supabase o el backend siguen degradados.")
+      throw new Error("Esta información tardó más de lo normal. Se mostrarán los últimos datos disponibles.")
     }
     throw error
   } finally {
@@ -47,7 +47,7 @@ export async function fetchProfessionalRuntime(): Promise<ProfessionalRuntimeSna
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar el runtime profesional."))
+    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta información por ahora."))
   }
 
   return payload as ProfessionalRuntimeSnapshot
@@ -55,7 +55,7 @@ export async function fetchProfessionalRuntime(): Promise<ProfessionalRuntimeSna
 
 export function normalizeRuntimeStatus(value: string | null | undefined) {
   const normalized = String(value || "").toLowerCase()
-  if (!normalized) return "Sin señal"
+  if (!normalized) return "Sin actividad reciente"
   if (normalized.includes("sent")) return "Enviado"
   if (normalized.includes("failed")) return "Falló"
   if (normalized.includes("pending")) return "Pendiente"

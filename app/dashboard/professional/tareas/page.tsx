@@ -156,9 +156,9 @@ export default function TareasPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Tareas</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{grouped.pending.length} pendientes · {tasks.length} total</p>
-          <p className="text-xs text-muted-foreground mt-1">Sincronizado con Supabase y WhatsApp · {labelForLanguage(language)} · {locale} · {timezone}</p>
-          <p className="text-xs text-[#5F6B7A] mt-1">Las tareas con fecha alimentan agenda y usan recordatorio base de 10 min salvo ajuste explícito.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{grouped.pending.length} pendientes · {tasks.length} en total</p>
+          <p className="text-xs text-muted-foreground mt-1">{labelForLanguage(language)} · {timezone}</p>
+          <p className="text-xs text-[#5F6B7A] mt-1">Cree, ordene y cierre pendientes sin perder lo importante del día.</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary"><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></button>

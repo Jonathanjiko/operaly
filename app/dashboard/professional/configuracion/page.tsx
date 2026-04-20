@@ -635,7 +635,7 @@ export default function ProfessionalSettingsPage() {
       } catch (dashboardRuntimeError) {
         console.warn("dashboard runtime query error:", dashboardRuntimeError)
         setOperationalWarning(
-          "El runtime operativo no respondió a tiempo. Esta pantalla cayó a lecturas de respaldo y algunos datos pueden tardar en reflejarse."
+          "Esta pantalla tardó más de lo normal. Le mostramos los últimos datos disponibles mientras termina de actualizarse."
         )
       }
 
@@ -666,7 +666,7 @@ export default function ProfessionalSettingsPage() {
         console.warn("professional runtime query error:", runtimeError)
         setOperationalWarning((current) =>
           current ||
-          "La lectura auth-bound de esta cuenta sigue degradada. Puede revisar y guardar, pero algunos bloques podrían verse desactualizados."
+          "Puede seguir revisando y guardando cambios. Algunos datos pueden tardar un poco más en reflejarse."
         )
       }
 
@@ -687,7 +687,7 @@ export default function ProfessionalSettingsPage() {
       }
 
     } catch (error: any) {
-      setOperationalWarning(error.message || "No se pudo cargar la configuración operativa de esta cuenta.")
+      setOperationalWarning(error.message || "No se pudo cargar esta sección completa por ahora.")
     } finally {
       setLoading(false)
     }
@@ -859,18 +859,7 @@ export default function ProfessionalSettingsPage() {
       <div>
         <h1 className="text-3xl font-bold text-[#0F1F63]">Configuración y facturación</h1>
         <p className="text-muted-foreground mt-1">
-          Administra tu perfil, idioma base, timezone, seguridad y suscripción.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-card p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {runtimeSource === "auth_bound"
-            ? "Esta vista ya toma primero el runtime auth-bound para plan, límites y voz."
-            : runtimeSource === "legacy"
-              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
-            : "Esta vista todavía está preparando la lectura operativa de su cuenta."}
+          Revise su perfil, su plan y lo que tiene activo hoy, sin perder tiempo en datos técnicos.
         </p>
       </div>
 
@@ -883,25 +872,25 @@ export default function ProfessionalSettingsPage() {
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Su cuenta hoy</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               {runtimeSource === "auth_bound"
-                ? "La cuenta ya toma primero plan, limites, voz y senales vivas desde el runtime auth-bound."
+                ? "Ya estamos mostrando su plan, su voz y su configuración más reciente."
                 : runtimeSource === "legacy"
-                  ? "La pantalla sigue util, pero cayo a lecturas de respaldo mientras el runtime nuevo no respondio."
-                  : "La cuenta todavia esta preparando su lectura operativa."}
+                  ? "Le mostramos sus últimos datos disponibles mientras terminamos de actualizar la cuenta."
+                  : "Estamos preparando la lectura completa de su cuenta."}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué puede revisar aquí</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Lo que ajuste aqui deberia reflejarse luego en voz, asistente, agenda, WhatsApp y llamadas sin tener que repetirlo.
+              Su idioma, su forma de atención, su voz y su plan para que todo se mantenga alineado en Operaly.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no cuadra</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si aqui queda guardado pero Operaly no lo aplica, el hueco ya no es solo visual: toca revisar runtime, trazas o integracion viva.
+              Puede guardar igual. Si algún cambio tarda un poco más en reflejarse, esta vista se actualizará con la información más reciente.
             </p>
           </div>
         </div>
@@ -921,52 +910,52 @@ export default function ProfessionalSettingsPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">senal viva</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">último movimiento</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {normalizeRuntimeStatus(String(recentRuntimeEvent?.event_type || recentRuntimeEvent?.action || recentRuntimeEvent?.type || ""))}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {recentRuntimeEvent
-              ? "Ultimo movimiento visible del runtime para esta cuenta."
-              : "Todavia no hay una senal viva visible del runtime."}
+              ? "Última actualización registrada para esta cuenta."
+              : "Todavía no hay una actualización reciente visible."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz visible</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz activa</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {runtimeVoiceVisible || "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {runtimeVoiceVisible
-              ? "Esto es lo que backend ya alcanza a reflejar como voz visible."
-              : "Todavia no hay una voz visible confirmada por runtime."}
+              ? "Esta es la voz que hoy aparece aplicada a su cuenta."
+              : "Todavía no aparece una voz aplicada en esta cuenta."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">asistente visible</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo del asistente</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {runtimeAssistantTone || "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {runtimeAssistantTone || runtimeAssistantStyle
-              ? `Runtime: ${runtimeAssistantTone || "sin tono"} · ${runtimeAssistantStyle || "sin estilo"}`
-              : "Todavia no hay una personalidad visible confirmada por runtime."}
+              ? `${runtimeAssistantTone || "sin tono"} · ${runtimeAssistantStyle || "sin estilo"}`
+              : "Todavía no aparece un estilo visible para esta cuenta."}
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">idioma visible</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">idioma principal</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {runtimeLanguageVisible || preferredLanguage || language || "es"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Debe reflejar lo que Operaly use al responder y no solo lo que esta guardado en perfil.
+            Este idioma guía cómo le responde Operaly y cómo se muestran sus recordatorios y ayudas.
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">comprension reciente</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última comprensión</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
             {recentUnderstanding?.confidence != null
               ? `${Math.round(Number(recentUnderstanding.confidence) * 100)}%`
@@ -974,8 +963,8 @@ export default function ProfessionalSettingsPage() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {recentUnderstanding
-              ? `Decision: ${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
-              : "Todavia no hay una corrida reciente visible del entendimiento."}
+              ? `${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
+              : "Todavía no hay una lectura reciente visible."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -1202,7 +1191,7 @@ export default function ProfessionalSettingsPage() {
             <div className="mt-6 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
               <div className="mb-4 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#7C3AED]" />
-                <p className="text-sm font-semibold text-[#0F1F63]">Estado aplicado vs guardado</p>
+                <p className="text-sm font-semibold text-[#0F1F63]">Resumen de su cuenta</p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1212,9 +1201,9 @@ export default function ProfessionalSettingsPage() {
                     Guardado: {preferredLanguage || language || "es"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Runtime: {normalizeRuntimeStatus(String(runtimeSnapshot?.preferences?.preferred_language || "")) === "Sin señal"
-                      ? "Sin lectura runtime visible"
-                      : String(runtimeSnapshot?.preferences?.preferred_language || "Sin señal")}
+                    Actual: {normalizeRuntimeStatus(String(runtimeSnapshot?.preferences?.preferred_language || "")) === "Sin actividad reciente"
+                      ? "Sin actualización visible"
+                      : String(runtimeSnapshot?.preferences?.preferred_language || "Sin actualización visible")}
                   </p>
                 </div>
 
@@ -1243,7 +1232,7 @@ export default function ProfessionalSettingsPage() {
                     Guardado: {voiceSettings?.voice_name || voiceSettings?.voice_id || "Sin voz"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Runtime: {runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "Sin lectura runtime visible"}
+                    Actual: {runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "Sin actualización visible"}
                   </p>
                 </div>
 
@@ -1253,7 +1242,7 @@ export default function ProfessionalSettingsPage() {
                     Guardado: {preferredLanguage || "es"} · {profession || "sin profesión"} · {fullName || "sin nombre"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Runtime: {runtimeSnapshot?.preferences?.assistant_tone || "Sin señal de tono"} · {runtimeSnapshot?.preferences?.assistant_style || "Sin señal de estilo"}
+                    Actual: {runtimeSnapshot?.preferences?.assistant_tone || "Sin tono visible"} · {runtimeSnapshot?.preferences?.assistant_style || "Sin estilo visible"}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     Esto debería definir cómo le habla Operaly a usted, qué tono usa y desde qué profesión o rol lo acompaña.

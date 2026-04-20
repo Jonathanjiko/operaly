@@ -197,7 +197,7 @@ export default function ListasPage() {
         dashboardSnapshotLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar snapshot auth-bound de listas:", dashboardError)
-        setOperationalWarning("La lectura auth-bound de listas no respondió a tiempo. Se muestra la mejor lectura directa disponible.")
+        setOperationalWarning("Las listas tardaron más de lo normal. Le mostramos lo último disponible mientras terminan de actualizarse.")
       }
 
       const [{ data: lr, error: listsError }, { data: cr, error: checklistsError }, { data: profile }] = await Promise.all([
@@ -392,12 +392,12 @@ export default function ListasPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">{copy.title}</h1>
           <p className="text-sm text-muted-foreground">{copy.subtitle}</p>
-          <p className="mt-1 text-xs text-slate-500">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
+          <p className="mt-1 text-xs text-slate-500">{labelForLanguage(language)} · {timezone}</p>
           <p className="mt-1 text-xs text-[#5F6B7A]">{copy.reminder}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {syncSource === "auth_bound"
-              ? "Esta vista ya prioriza el snapshot auth-bound para reflejar mejor lo que Operaly guarda por WhatsApp."
-              : "Esta vista lee directo desde su cuenta por RLS. Si una lista creada en WhatsApp no aparece, el hueco ya no es solo visual: conviene revisar sesión, JWT o backend."}
+              ? "Sus listas ya están mostrando la información más reciente disponible."
+              : "Le mostramos lo que ya tiene guardado mientras termina de actualizarse esta vista."}
           </p>
         </div>
         <div className="flex gap-2">
@@ -417,23 +417,23 @@ export default function ListasPage() {
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-5">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Su espacio de trabajo</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               {syncSource === "auth_bound"
-                ? "La vista ya intenta reflejar primero lo que backend guarda y devuelve para listas y checklists."
-                : "La vista sigue dependiendo de lectura directa por cuenta, asi que cualquier hueco puede venir de sesion, RLS o backend."}
+                ? "Aquí puede crear, ordenar y marcar listas sin perder el ritmo."
+                : "Aquí puede seguir trabajando con sus listas mientras se actualiza la lectura más reciente."}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué puede hacer</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si crea algo por WhatsApp, aqui deberia aparecer con mejor claridad: fecha visible, avance y contenido pendiente.
+              Crear listas, marcar avances, separar pasos y dejar todo listo para retomarlo después.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no baja</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Cuando una lista no aparece aqui, el problema ya no es solo la UI: toca revisar escritura real, JWT, RLS o trazas del runtime.
+              Puede seguir trabajando. Si una lista nueva tarda un poco en aparecer, esta vista se actualizará sola.
             </p>
           </div>
         </div>
@@ -507,11 +507,11 @@ export default function ListasPage() {
       <div className="grid gap-3 md:grid-cols-3">
         <div className={`rounded-2xl border p-4 ${syncSource === "auth_bound" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
           <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">lectura viva</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{syncSource === "auth_bound" ? "Auth-bound" : "RLS directo"}</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{syncSource === "auth_bound" ? "Actualizado" : "Disponible"}</p>
           <p className="mt-1 text-xs text-slate-600">
             {syncSource === "auth_bound"
-              ? "Esta vista ya está intentando reflejar mejor lo que Operaly guarda por WhatsApp."
-              : "Todavía depende de lectura directa de su cuenta, así que cualquier hueco puede venir de sesión o backend."}
+              ? "Sus cambios ya se están reflejando con normalidad."
+              : "Le mostramos sus listas guardadas mientras termina de actualizarse esta vista."}
           </p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">

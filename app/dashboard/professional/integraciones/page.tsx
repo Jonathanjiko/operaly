@@ -394,7 +394,7 @@ export default function IntegracionesPage() {
       } catch (dashboardRuntimeError) {
         console.error("No se pudo cargar dashboard runtime de integraciones:", dashboardRuntimeError)
         setOperationalWarning(
-          "El runtime operativo de integraciones no respondió a tiempo. Esta vista cayó a lecturas de respaldo y algunas señales pueden verse atrasadas."
+          "Las integraciones tardaron más de lo normal. Le mostramos el último estado disponible mientras terminan de actualizarse."
         )
       }
 
@@ -628,10 +628,10 @@ export default function IntegracionesPage() {
               <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {runtimeSource === "auth_bound"
-                  ? "Leyendo su plan real desde el runtime nuevo."
+                  ? "Su plan actual ya se está tomando en cuenta."
                   : runtimeSource === "legacy"
-                    ? "Cayendo al contrato anterior mientras el runtime nuevo no responde."
-                    : "Preparando la lectura operativa de su cuenta."}
+                    ? "Le mostramos el último estado disponible mientras termina de actualizarse."
+                    : "Estamos preparando la lectura completa de su cuenta."}
               </p>
             </div>
           </div>
@@ -653,35 +653,34 @@ export default function IntegracionesPage() {
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Su acceso hoy</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               {runtimeSource === "auth_bound"
-                ? "La pantalla ya toma primero la capacidad real desde el runtime auth-bound."
+                ? "Ya puede revisar con claridad qué integraciones tiene listas para usar."
                 : runtimeSource === "legacy"
-                  ? "La pantalla sigue util, pero cayo al contrato anterior mientras el runtime nuevo no respondio."
-                  : "La pantalla todavia esta preparando la lectura operativa de integraciones."}
+                  ? "Le mostramos el último estado disponible mientras termina de actualizarse esta vista."
+                  : "Estamos preparando sus integraciones."}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué debería notar</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Cuando conecte Google, agenda, Drive, Gmail y personas deberian sentirse disponibles tambien desde WhatsApp y el runtime vivo.
+              Cuando conecte Google, agenda, Drive, Gmail y personas deberían sentirse listos también en WhatsApp.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no aplica</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si aqui se ve conectado pero Operaly no lo usa bien, el hueco ya no es solo visual: toca revisar trazas, permisos o routing real.
+              Si un cambio tarda un poco más en verse, puede seguir usando la cuenta y esta vista se actualizará sola.
             </p>
           </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Conéctelo una vez</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Esta vista ya intenta decidir primero desde el runtime auth-bound si Google está habilitado en su plan.
-          Si aquí ve algo distinto a lo que luego siente por WhatsApp o en agenda, el hueco restante ya no es solo visual.
+          Active aquí sus servicios y después úselos desde Operaly sin tener que reconfigurarlos cada vez.
         </p>
       </div>
 

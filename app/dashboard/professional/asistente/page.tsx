@@ -167,7 +167,7 @@ export default function AsistentePage() {
         if (!client?.preferred_style) setStyle(prefs.assistant_style || "balanceado")
       } catch (assistantError) {
         console.error("No se pudo cargar snapshot auth-bound del asistente:", assistantError)
-        setOperationalWarning("La lectura auth-bound del asistente no respondió a tiempo. Se muestra la mejor señal local disponible.")
+        setOperationalWarning("La configuración del asistente tardó más de lo normal. Le mostramos lo último disponible.")
       }
 
       if (!client) {
@@ -204,7 +204,7 @@ export default function AsistentePage() {
         dashboardRuntimeLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar dashboard runtime del asistente:", dashboardError)
-        setOperationalWarning((current) => current || "El runtime auth-bound del asistente sigue degradado.")
+        setOperationalWarning((current) => current || "Todavía no pudimos actualizar algunos detalles del asistente.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -236,7 +236,7 @@ export default function AsistentePage() {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
         console.error("No se pudo cargar runtime del asistente:", runtimeError)
-        setOperationalWarning((current) => current || "No se pudo confirmar el runtime profesional del asistente en tiempo útil.")
+        setOperationalWarning((current) => current || "Algunos cambios del asistente pueden tardar un poco más en reflejarse.")
       }
     } catch (err) {
       console.error(err)
@@ -380,13 +380,9 @@ export default function AsistentePage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Lo que ajusta aquí</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {runtimeSource === "auth_bound"
-            ? "Esta vista ya toma primero el runtime auth-bound para plan y personalización avanzada."
-            : runtimeSource === "legacy"
-              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
-              : "Esta vista todavía está preparando la lectura operativa del asistente."}
+          El nombre con el que lo trata, el tono que usa y la forma en que responde en su día a día.
         </p>
       </div>
 
@@ -397,9 +393,9 @@ export default function AsistentePage() {
       ) : null}
 
       <div className="rounded-2xl border border-[#3B82F6]/20 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Acompanamiento en vivo</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Así debería sentirse</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Esta vista ya no solo guarda tono y contexto. Tambien deja ver si el runtime esta aplicando esa personalidad y si la comprension reciente mantiene una senal util.
+          Más claro, más personal y más alineado con su forma de trabajar, sin respuestas genéricas.
         </p>
       </div>
 
@@ -441,14 +437,14 @@ export default function AsistentePage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">sincronia del agente</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estado del estilo</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeAligned ? "Alineada" : "Pendiente de reflejar"}
+            {runtimeAligned ? "Aplicado" : "Por actualizar"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {runtimeSnapshot?.preferences
-              ? "El runtime ya devuelve una personalidad visible para contrastarla con esta configuracion."
-              : "Todavia no hay una personalidad visible confirmada por backend."}
+              ? "Ya hay una personalidad visible para contrastar con su configuración."
+              : "Todavía no aparece una personalidad visible en esta cuenta."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -491,9 +487,9 @@ export default function AsistentePage() {
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-[#0F1F63]">Senal viva del asistente</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Última actividad visible</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Lo ultimo visible del runtime sobre tono, contexto y comprension.
+              Revise lo último que ya se alcanzó a reflejar en su asistente.
             </p>
           </div>
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
@@ -708,7 +704,7 @@ export default function AsistentePage() {
         </Button>
         {saved && (
           <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-            <Check className="h-4 w-4" /> Guardado en Supabase
+            <Check className="h-4 w-4" /> Cambios guardados
           </div>
         )}
         {lastSavedAt ? (
@@ -746,7 +742,7 @@ export default function AsistentePage() {
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Si Operaly todavía le responde con un tono genérico, mezcla idiomas o ignora su profesión, el problema ya no está en esta pantalla sino en la aplicación real del runtime.
+        Si todavía nota respuestas genéricas o fuera de tono, vuelva a revisar estos ajustes y pruébelos otra vez en WhatsApp.
       </div>
     </div>
   )

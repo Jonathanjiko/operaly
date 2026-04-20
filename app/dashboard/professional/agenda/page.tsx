@@ -94,7 +94,7 @@ async function fetchWithAgendaTimeout(input: string, init: RequestInit) {
     })
   } catch (error: any) {
     if (error?.name === "AbortError") {
-      throw new Error("La agenda auth-bound tardó demasiado. Supabase o el backend siguen degradados.")
+      throw new Error("La agenda tardó más de lo normal. Le mostramos la información más reciente disponible.")
     }
     throw error
   } finally {
@@ -422,7 +422,7 @@ export default function AgendaPage() {
             setAgendaWarning(
               dashboardAgendaError instanceof Error
                 ? dashboardAgendaError.message
-                : "La agenda auth-bound no respondió a tiempo. Se muestran datos degradados."
+                : "La agenda tardó más de lo normal. Se muestran sus próximos pendientes mientras termina de actualizarse."
             )
           }
         }
@@ -560,16 +560,16 @@ export default function AgendaPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">{copy.title}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{events.length} {copy.totalEvents}</p>
-          <p className="text-xs text-muted-foreground mt-1">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
+          <p className="text-xs text-muted-foreground mt-1">{labelForLanguage(language)} · {timezone}</p>
           <p className="text-xs text-[#5F6B7A] mt-1">{copy.reminder}</p>
           <p className="text-xs text-muted-foreground mt-1">
             {agendaSource === "auth_bound"
-              ? "Leyendo agenda desde el snapshot auth-bound con señal viva de Google Calendar."
+              ? "Su agenda ya está mostrando la información más reciente disponible."
               : agendaSource === "mixed"
-                ? "El snapshot auth-bound respondió, pero sin eventos visibles; se complementa con tareas locales."
+                ? "Complementamos la vista con sus tareas y recordatorios para que no pierda nada."
                 : agendaSource === "fallback"
-                  ? "Mostrando tareas y automatizaciones locales mientras la lectura auth-bound no respondió."
-                  : "Preparando lectura operativa de la agenda."}
+                  ? "Le mostramos sus próximos pendientes mientras termina de actualizarse la agenda completa."
+                  : "Estamos preparando su agenda."}
           </p>
           {googleSignals.contactsSyncStatus ? <p className="mt-2 text-[11px] font-medium text-slate-500">Estado de sync: {googleSignals.contactsSyncStatus}</p> : null}
         </div>
@@ -593,27 +593,27 @@ export default function AgendaPage() {
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Estado operativo</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Su día en una sola vista</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               {agendaSource === "auth_bound"
-                ? "La agenda ya viene del snapshot vivo y deberia reflejar mejor lo que backend entiende y resume."
+                ? "Revise lo que viene hoy, lo que sigue después y lo que necesita mover o resolver primero."
                 : agendaSource === "mixed"
-                  ? "La lectura auth-bound ya existe, pero todavia se complementa con senal local para no perder contexto."
+                  ? "Le mostramos su agenda junto con tareas y recordatorios para que no se le escape nada."
                   : agendaSource === "fallback"
-                    ? "La pantalla sigue util, pero depende de lectura local mientras el canal auth-bound se recupera."
-                    : "La agenda todavia esta preparando su lectura operativa."}
+                    ? "Su agenda sigue disponible con los datos guardados mientras termina de actualizarse."
+                    : "Estamos preparando su agenda."}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Que deberia notar</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué debería notar</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Prioridad, tipo de item, hora visible o pendiente, y una lectura mas util de lo que tiene hoy o manana.
+              Prioridad, hora, tipo de actividad y una lectura clara de lo que tiene hoy o mañana.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
-            <p className="text-sm font-semibold text-[#0F1F63]">Si algo no cuadra</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Si WhatsApp resume distinto o Google no refleja un cambio, el hueco ya no es solo visual: hay que releer trazas del runtime vivo.
+              Puede seguir usando esta vista. Si un cambio reciente tarda un poco más en aparecer, se actualizará solo.
             </p>
           </div>
         </div>

@@ -24,7 +24,7 @@ export function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-const DASHBOARD_FETCH_TIMEOUT_MS = 8000
+const DASHBOARD_FETCH_TIMEOUT_MS = 12000
 
 async function fetchWithDashboardTimeout(input: string, init: RequestInit) {
   const controller = new AbortController()
@@ -37,7 +37,7 @@ async function fetchWithDashboardTimeout(input: string, init: RequestInit) {
     })
   } catch (error: any) {
     if (error?.name === "AbortError") {
-      throw new Error("La lectura auth-bound tardó demasiado. Supabase o el backend siguen degradados.")
+      throw new Error("Esta sección tardó más de lo normal. Le mostramos la información más reciente disponible.")
     }
     throw error
   } finally {
@@ -60,9 +60,7 @@ export async function fetchDashboardRuntime(): Promise<DashboardRuntimePayload |
 
   const payload = (await response.json().catch(() => ({}))) as DashboardRuntimePayload
   if (!response.ok) {
-    throw new Error(
-      String(payload?.detail || payload?.error || "No se pudo cargar el runtime auth-bound.")
-    )
+    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta sección por ahora."))
   }
 
   return payload
@@ -83,7 +81,7 @@ export async function fetchDashboardJson<T = Record<string, any>>(path: string):
 
   const payload = (await response.json().catch(() => ({}))) as T & { detail?: string; error?: string }
   if (!response.ok) {
-    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar el dashboard auth-bound."))
+    throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta vista por ahora."))
   }
 
   return payload as T

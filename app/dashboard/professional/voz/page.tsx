@@ -156,7 +156,7 @@ export default function VozPage() {
         dashboardRuntimeLoaded = true
       } catch (dashboardError) {
         console.error("No se pudo cargar dashboard runtime para voz:", dashboardError)
-        setOperationalWarning("El runtime auth-bound de voz no respondió a tiempo. Se muestra la mejor señal local disponible.")
+        setOperationalWarning("La información de voz tardó más de lo normal. Le mostramos los últimos datos disponibles.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -186,7 +186,7 @@ export default function VozPage() {
         voiceSnapshotLoaded = true
       } catch (voiceError) {
         console.error("No se pudo cargar snapshot auth-bound de voz:", voiceError)
-        setOperationalWarning((current) => current || "La lectura auth-bound de voz sigue degradada. La pantalla cayó a una lectura más frágil.")
+        setOperationalWarning((current) => current || "Algunos detalles de voz todavía se están actualizando.")
       }
 
       if (!voiceSnapshotLoaded) {
@@ -213,7 +213,7 @@ export default function VozPage() {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
       } catch (runtimeError) {
         console.error("No se pudo cargar runtime de voz:", runtimeError)
-        setOperationalWarning((current) => current || "No se pudo confirmar el runtime profesional de voz en tiempo útil.")
+        setOperationalWarning((current) => current || "La actividad reciente de voz puede tardar un poco más en reflejarse.")
       }
 
       if (!dashboardRuntimeLoaded) {
@@ -363,13 +363,9 @@ export default function VozPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Lectura operativa</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Lo que ajusta aquí</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {runtimeSource === "auth_bound"
-            ? "Esta vista ya toma primero el runtime auth-bound para minutos y habilitación de voz."
-            : runtimeSource === "legacy"
-              ? "Esta vista cayó al contrato anterior porque el runtime auth-bound no respondió."
-              : "Esta vista todavía está preparando la lectura operativa de voz."}
+          La voz que usa Operaly, cómo le habla en audio y cómo prioriza audios o llamadas.
         </p>
       </div>
 
@@ -380,9 +376,9 @@ export default function VozPage() {
       ) : null}
 
       <div className="rounded-2xl border border-[#06B6D4]/20 bg-gradient-to-r from-[#06B6D4]/5 via-white to-[#7C3AED]/5 p-4">
-        <p className="text-sm font-semibold text-[#0F1F63]">Canal de audio en vivo</p>
+        <p className="text-sm font-semibold text-[#0F1F63]">Cómo debería oírse</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Esta vista deja ver si la configuracion guardada ya se esta reflejando en el runtime y si el canal de audio reciente muestra movimiento real.
+          Revise si la voz elegida y el estilo de llamada ya se sienten como usted espera.
         </p>
       </div>
 
@@ -422,14 +418,14 @@ export default function VozPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">sincronia runtime</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estado de la voz</p>
           <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeMatchesSelection ? "Alineada" : runtimeVoiceId ? "Pendiente de aplicar" : "Sin reflejo aun"}
+            {runtimeMatchesSelection ? "Aplicada" : runtimeVoiceId ? "Por actualizar" : "Pendiente"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {runtimeVoiceName
-              ? `Runtime visible: ${runtimeVoiceName}`
-              : "Todavia no hay una voz visible confirmada por backend."}
+              ? `${runtimeVoiceName}`
+              : "Todavía no aparece una voz visible en esta cuenta."}
           </p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
@@ -459,9 +455,9 @@ export default function VozPage() {
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-[#0F1F63]">Senal viva del canal</p>
+            <p className="text-sm font-semibold text-[#0F1F63]">Última actividad visible</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Ultimo movimiento visible del runtime relacionado con voz, audio o llamada.
+              Revise lo último que ya se alcanzó a reflejar en voz, audio o llamada.
             </p>
           </div>
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
@@ -754,7 +750,7 @@ export default function VozPage() {
         </Button>
         {saved && (
           <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-            <Check className="h-4 w-4" /> Guardado en Supabase
+            <Check className="h-4 w-4" /> Cambios guardados
           </div>
         )}
         {lastSavedAt ? (
@@ -771,7 +767,7 @@ export default function VozPage() {
       ) : null}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Si Operaly todavía suena distinto, habla con otra voz o no respeta este estilo en llamadas, el pendiente ya no está en esta pantalla sino en la integración viva de fondo.
+        Si todavía escucha otra voz o un estilo distinto, vuelva a guardar y haga una prueba nueva desde WhatsApp.
       </div>
     </div>
   )
