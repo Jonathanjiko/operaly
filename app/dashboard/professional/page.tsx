@@ -6,6 +6,7 @@ import {
   Users,
   Calendar,
   CheckSquare,
+  Bell,
   Plus,
   ArrowRight,
   Clock,
