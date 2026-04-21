@@ -356,6 +356,7 @@ export default function VozPage() {
       ) : null}
 
       {false ? (
+      <>
       <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#06B6D4]/5 p-4">
         <p className="text-sm font-semibold text-[#0F1F63]">Lo que puede ajustar aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
@@ -483,6 +484,7 @@ export default function VozPage() {
           </div>
         </div>
       </div>
+      </>
       ) : null}
 
       <div className="rounded-2xl border border-border bg-card p-5">
