@@ -32,6 +32,13 @@ type CaseRow = {
   last_event_type?: string | null
 }
 
+type ContactOption = {
+  id: string
+  label: string
+  email: string | null
+  source: string | null
+}
+
 type Toast = { open: boolean; msg: string; type: "success" | "error" | "info" }
 type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
 type GoogleProductState = {
@@ -133,7 +140,21 @@ function DetailModal({ cas, locale, copy, onClose, onEdit, onDelete }: { cas: Ca
   )
 }
 
-function FormModal({ cas, copy, onClose, onSave }: { cas?: CaseRow; copy: Record<string, string>; onClose: () => void; onSave: (payload: any) => Promise<void> }) {
+function FormModal({
+  cas,
+  copy,
+  contactOptions,
+  googleContactsActive,
+  onClose,
+  onSave,
+}: {
+  cas?: CaseRow
+  copy: Record<string, string>
+  contactOptions: ContactOption[]
+  googleContactsActive: boolean
+  onClose: () => void
+  onSave: (payload: any) => Promise<void>
+}) {
   const [title, setTitle] = useState(cas?.case_title || cas?.title || "")
   const [person, setPerson] = useState(cas?.person_name || cas?.person_key || "")
   const [summary, setSummary] = useState(cas?.summary || "")
@@ -163,7 +184,23 @@ function FormModal({ cas, copy, onClose, onSave }: { cas?: CaseRow; copy: Record
           </div>
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{copy.personLabel}</label>
-            <input value={person} onChange={(event) => setPerson(event.target.value)} placeholder={copy.personPlaceholder} className="w-full h-10 px-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]" />
+            <input
+              value={person}
+              onChange={(event) => setPerson(event.target.value)}
+              list="case-contact-options"
+              placeholder={copy.personPlaceholder}
+              className="w-full h-10 px-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]"
+            />
+            <datalist id="case-contact-options">
+              {contactOptions.map((option) => (
+                <option key={option.id} value={option.label} />
+              ))}
+            </datalist>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {googleContactsActive
+                ? "Puede elegir desde su libreta y también desde los contactos conectados de Google."
+                : "Puede elegir desde su libreta actual y luego relacionar documentos o seguimiento a este caso."}
+            </p>
           </div>
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">{copy.summaryLabel}</label>
@@ -212,6 +249,7 @@ export default function CasosPage() {
     driveSyncStatus: "",
     contactsSyncStatus: "",
   })
+  const [contactOptions, setContactOptions] = useState<ContactOption[]>([])
 
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
@@ -231,7 +269,7 @@ export default function CasosPage() {
       const [{ data: client }, { data, error }, { data: contacts }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", currentClientId).maybeSingle(),
         supabase.from("cases").select("*").eq("client_id", currentClientId).order("created_at", { ascending: false }),
-        supabase.from("contacts").select("id,email,source").eq("client_id", currentClientId),
+        supabase.from("contacts").select("*").eq("client_id", currentClientId),
       ])
       if (error) throw error
       const resolvedLanguage = resolveLanguageCode(client?.preferred_language || client?.language || "es")
@@ -240,6 +278,27 @@ export default function CasosPage() {
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
       setCases((data || []) as CaseRow[])
       const contactRows = contacts || []
+      setContactOptions(
+        contactRows
+          .map((contact: any) => {
+            const label = String(
+              contact.full_name ||
+              contact.display_name ||
+              contact.name ||
+              contact.contact_name ||
+              contact.email ||
+              ""
+            ).trim()
+            if (!label) return null
+            return {
+              id: String(contact.id || label),
+              label,
+              email: contact.email ? String(contact.email) : null,
+              source: contact.source ? String(contact.source) : null,
+            } satisfies ContactOption
+          })
+          .filter(Boolean) as ContactOption[]
+      )
       setContactSignals({
         total: contactRows.length,
         googleLike: contactRows.filter((contact) => {
@@ -397,30 +456,30 @@ export default function CasosPage() {
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <div className={`rounded-2xl border p-4 ${googleSignals.contactsConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personas</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.contactsConnected ? "Contacts activo" : "Base interna"}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Personas involucradas</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.contactsConnected ? "Libreta + Google" : "Libreta interna"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {googleSignals.contactsConnected
-                  ? `Los casos ya pueden apoyarse en contactos Google o fusionados. Estado: ${googleSignals.contactsSyncStatus || "ok"}.`
-                  : `Todavia dependemos de la base interna y de ${contactSignals.googleLike} contacto${contactSignals.googleLike !== 1 ? "s" : ""} con senal Google local.`}
+                  ? `Al crear un caso ya puede asociar personas desde sus contactos y retomar ese hilo después por nombre o referencia.`
+                  : `Cada caso ya puede apoyarse en su libreta propia para relacionar personas, documentos y seguimiento.`}
               </p>
             </div>
             <div className={`rounded-2xl border p-4 ${googleSignals.gmailConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Correo del caso</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.gmailConnected ? "Gmail activo" : "Pendiente"}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Seguimiento del caso</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.gmailConnected ? "Correo listo" : "Listo para continuar"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {googleSignals.gmailConnected
-                  ? `Ya puede escalar a correo operativo desde el runtime. Estado: ${googleSignals.gmailSyncStatus || "ok"}.`
-                  : `${contactSignals.withEmail} contacto${contactSignals.withEmail !== 1 ? "s" : ""} con email ya preparan el terreno para Gmail.`}
+                  ? `Puede escalar un caso a correo cuando haga falta y mantener a la persona correcta dentro del hilo.`
+                  : `${contactSignals.withEmail} contacto${contactSignals.withEmail !== 1 ? "s" : ""} ya tiene email para futuras acciones desde el caso.`}
               </p>
             </div>
             <div className={`rounded-2xl border p-4 ${googleSignals.driveConnected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white/80"}`}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Documentos del caso</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.driveConnected ? "Drive activo" : "Pendiente"}</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleSignals.driveConnected ? "Listos para asociar" : "Base documental activa"}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {googleSignals.driveConnected
-                  ? `Los casos ya pueden nutrirse con importacion y busqueda documental remota. Estado: ${googleSignals.driveSyncStatus || "ok"}.`
-                  : "La continuidad documental local ya existe, pero el puente operativo con Drive aun no se refleja aqui con toda su fuerza."}
+                  ? `Puede conectar documentos remotos o propios y volver a pedirle a Operaly que siga ese caso más adelante.`
+                  : "Los documentos propios ya pueden darle continuidad al caso aunque todavía no todo venga desde integraciones."}
               </p>
             </div>
           </div>
@@ -506,9 +565,9 @@ export default function CasosPage() {
         </div>
       )}
 
-      {creating && <FormModal copy={copy} onClose={() => setCreating(false)} onSave={createCase} />}
+      {creating && <FormModal copy={copy} contactOptions={contactOptions} googleContactsActive={googleSignals.contactsConnected} onClose={() => setCreating(false)} onSave={createCase} />}
       {detail && !editing && <DetailModal cas={detail} locale={locale} copy={copy} onClose={() => setDetail(null)} onEdit={() => { setEditing(detail); setDetail(null) }} onDelete={() => { deleteCase(detail.id); setDetail(null) }} />}
-      {editing && <FormModal cas={editing} copy={copy} onClose={() => setEditing(null)} onSave={updateCase} />}
+      {editing && <FormModal cas={editing} copy={copy} contactOptions={contactOptions} googleContactsActive={googleSignals.contactsConnected} onClose={() => setEditing(null)} onSave={updateCase} />}
       <AppToast open={toast.open} message={toast.msg} type={toast.type} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
     </div>
   )

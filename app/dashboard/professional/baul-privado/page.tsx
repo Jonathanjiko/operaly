@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
+  FileKey2,
   FolderLock,
   KeyRound,
   Link2,
@@ -9,10 +10,16 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldCheck,
   Trash2,
 } from "lucide-react"
 import { getCurrentClientId } from "@/lib/dashboard-client"
-import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
+import {
+  labelForLanguage,
+  localeFromLanguage,
+  resolveLanguageCode,
+  type SupportedLanguage,
+} from "@/lib/runtime-locale"
 import { supabase } from "@/lib/supabase"
 
 type VaultRow = Record<string, any> & {
@@ -25,31 +32,34 @@ type VaultRow = Record<string, any> & {
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     title: "Baúl privado",
-    subtitle: "Guarde aquí lo sensible y vuelva a encontrarlo rápido.",
-    sync: "Solo lo importante y sensible, siempre a mano",
-    search: "Buscar por nombre, tipo o referencia...",
+    subtitle:
+      "Guarde aquí documentos, enlaces y notas privadas para volver a usarlos cuando lo necesite.",
+    sync: "Solo lo sensible y lo importante, siempre a mano",
+    search: "Buscar por nombre, categoría o referencia...",
     empty: "Aún no tiene elementos en su baúl",
-    emptyHint: "Cuando guarde algo sensible, aparecerá aquí para revisarlo, buscarlo o eliminarlo.",
+    emptyHint:
+      "Cuando guarde algo sensible, aparecerá aquí para revisarlo, buscarlo o eliminarlo.",
     refresh: "Actualizar",
     delete: "Eliminar",
     count: "registros",
   },
   en: {
     title: "Private vault",
-    subtitle: "Keep sensitive items here and find them fast.",
-    sync: "Only what matters, easy to reach",
-    search: "Search by name, type, or reference...",
+    subtitle: "Save private files, links, and notes here so you can retrieve them later.",
+    sync: "Only what matters, always close at hand",
+    search: "Search by name, category, or reference...",
     empty: "No private items yet",
-    emptyHint: "When you save something sensitive, it will appear here so you can review it, search it, or delete it.",
+    emptyHint:
+      "When you save something sensitive, it will appear here so you can review it, search it, or delete it.",
     refresh: "Refresh",
     delete: "Delete",
     count: "records",
   },
   pt: {
     title: "Baú privado",
-    subtitle: "Guarde aqui o sensível e encontre depois sem perder tempo.",
-    sync: "Só o importante, sempre à mão",
-    search: "Buscar por nome, tipo ou referência...",
+    subtitle: "Guarde aqui arquivos, links e notas privadas para usar depois sem perder tempo.",
+    sync: "Só o sensível e o importante, sempre à mão",
+    search: "Buscar por nome, categoria ou referência...",
     empty: "Ainda não há itens no baú",
     emptyHint: "Quando você guardar algo sensível, ele aparecerá aqui para revisar, buscar ou excluir.",
     refresh: "Atualizar",
@@ -58,9 +68,9 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
   },
   de: {
     title: "Privater Tresor",
-    subtitle: "Bewahren Sie hier das Sensible auf und finden Sie es schnell wieder.",
-    sync: "Nur das Wichtige, immer griffbereit",
-    search: "Nach Name, Typ oder Referenz suchen...",
+    subtitle: "Speichern Sie hier private Dateien, Links und Notizen, um sie später schnell wiederzufinden.",
+    sync: "Nur das Wichtige und Sensible, immer griffbereit",
+    search: "Nach Name, Kategorie oder Referenz suchen...",
     empty: "Noch keine Einträge im Tresor",
     emptyHint: "Sobald Sie etwas Sensibles speichern, erscheint es hier zum Prüfen, Suchen oder Löschen.",
     refresh: "Aktualisieren",
@@ -69,20 +79,21 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
   },
   fr: {
     title: "Coffre privé",
-    subtitle: "Gardez ici le sensible et retrouvez-le vite.",
-    sync: "Seulement l’important, toujours accessible",
-    search: "Rechercher par nom, type ou référence...",
-    empty: "Aucun élément dans le coffre pour l’instant",
-    emptyHint: "Quand vous sauvegardez quelque chose de sensible, il apparaît ici pour le revoir, le chercher ou le supprimer.",
+    subtitle: "Gardez ici vos fichiers, liens et notes privées pour les retrouver quand vous en avez besoin.",
+    sync: "Seulement le sensible et l'important, toujours à portée",
+    search: "Rechercher par nom, catégorie ou référence...",
+    empty: "Aucun élément dans le coffre pour l'instant",
+    emptyHint:
+      "Quand vous sauvegardez quelque chose de sensible, il apparaît ici pour le revoir, le chercher ou le supprimer.",
     refresh: "Actualiser",
     delete: "Supprimer",
     count: "éléments",
   },
   it: {
     title: "Caveau privato",
-    subtitle: "Conserva qui ciò che è sensibile e ritrovalo in fretta.",
-    sync: "Solo ciò che conta, sempre a portata",
-    search: "Cerca per nome, tipo o riferimento...",
+    subtitle: "Conserva qui file, link e note private per ritrovarli quando servono.",
+    sync: "Solo ciò che è sensibile e importante, sempre disponibile",
+    search: "Cerca per nome, categoria o riferimento...",
     empty: "Nessun elemento nel caveau",
     emptyHint: "Quando salvi qualcosa di sensibile, apparirà qui per rivederlo, cercarlo o eliminarlo.",
     refresh: "Aggiorna",
@@ -91,8 +102,25 @@ const COPY: Record<SupportedLanguage, Record<string, string>> = {
   },
 }
 
+const CATEGORY_OPTIONS = [
+  "Receta médica",
+  "Bancos",
+  "Personal",
+  "Familia",
+  "Estudio",
+  "Deudas",
+  "Otros",
+]
+
+const KIND_OPTIONS = [
+  { value: "note", label: "Nota privada" },
+  { value: "link", label: "Link" },
+  { value: "file", label: "Archivo" },
+  { value: "document", label: "Documento" },
+]
+
 function inferVaultType(item: VaultRow) {
-  return String(item.item_type || item.type || item.kind || item.category || "registro")
+  return String(item.item_type || item.type || item.kind || "registro")
 }
 
 function inferVaultTitle(item: VaultRow) {
@@ -120,6 +148,10 @@ function inferVaultDetail(item: VaultRow) {
   )
 }
 
+function inferVaultCategory(item: VaultRow) {
+  return String(item.category || item.group_name || item.group || "Otros")
+}
+
 function formatDate(value: string | null | undefined, locale: string) {
   if (!value) return "—"
   const parsed = new Date(value)
@@ -135,6 +167,9 @@ function TypeIcon({ type }: { type: string }) {
   if (normalized.includes("link") || normalized.includes("url")) {
     return <Link2 className="h-4 w-4 text-[#3B82F6]" />
   }
+  if (normalized.includes("file") || normalized.includes("document")) {
+    return <FileKey2 className="h-4 w-4 text-[#10B981]" />
+  }
   return <Lock className="h-4 w-4 text-[#10B981]" />
 }
 
@@ -149,7 +184,12 @@ export default function BaulPrivadoPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
-  const [draft, setDraft] = useState({ title: "", type: "", detail: "" })
+  const [draft, setDraft] = useState({
+    title: "",
+    category: "Otros",
+    kind: "note",
+    detail: "",
+  })
 
   const copy = COPY[language]
 
@@ -195,7 +235,10 @@ export default function BaulPrivadoPage() {
     const q = search.trim().toLowerCase()
     if (!q) return items
     return items.filter((item) =>
-      [inferVaultTitle(item), inferVaultType(item), inferVaultDetail(item)].join(" ").toLowerCase().includes(q)
+      [inferVaultTitle(item), inferVaultType(item), inferVaultCategory(item), inferVaultDetail(item)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     )
   }, [items, search])
 
@@ -205,10 +248,35 @@ export default function BaulPrivadoPage() {
     setSaveMessage("")
 
     const attempts = [
-      { client_id: clientId, title: draft.title.trim(), item_type: draft.type.trim() || "registro", notes: draft.detail.trim() || null, source: "dashboard" },
-      { client_id: clientId, title: draft.title.trim(), item_type: draft.type.trim() || "registro", notes: draft.detail.trim() || null },
-      { client_id: clientId, title: draft.title.trim(), type: draft.type.trim() || "registro", description: draft.detail.trim() || null },
-      { client_id: clientId, name: draft.title.trim(), type: draft.type.trim() || "registro", notes: draft.detail.trim() || null },
+      {
+        client_id: clientId,
+        title: draft.title.trim(),
+        item_type: draft.kind,
+        category: draft.category,
+        notes: draft.detail.trim() || null,
+        source: "dashboard",
+      },
+      {
+        client_id: clientId,
+        title: draft.title.trim(),
+        item_type: draft.kind,
+        category: draft.category,
+        notes: draft.detail.trim() || null,
+      },
+      {
+        client_id: clientId,
+        title: draft.title.trim(),
+        type: draft.kind,
+        category: draft.category,
+        description: draft.detail.trim() || null,
+      },
+      {
+        client_id: clientId,
+        name: draft.title.trim(),
+        type: draft.kind,
+        category: draft.category,
+        notes: draft.detail.trim() || null,
+      },
     ]
 
     let lastError: any = null
@@ -216,7 +284,7 @@ export default function BaulPrivadoPage() {
       const result = await supabase.from("private_vault_items").insert(payload).select("*").single()
       if (!result.error) {
         setItems((prev) => [result.data as VaultRow, ...prev])
-        setDraft({ title: "", type: "", detail: "" })
+        setDraft({ title: "", category: "Otros", kind: "note", detail: "" })
         setShowCreate(false)
         setSaveMessage("Guardado correctamente.")
         setSaving(false)
@@ -268,24 +336,96 @@ export default function BaulPrivadoPage() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Guarde con categoría</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Recetas, bancos, familia, estudio, deudas u otros datos que quiera mantener protegidos.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Análisis cuando aplica</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            PDF, Office y las imágenes JPG o PNG se preparan para resumen, consulta o seguimiento posterior.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Recuperación rápida</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Luego puede pedirlo desde WhatsApp o la web y Operaly lo ubica por referencia, categoría o contenido.
+          </p>
+        </div>
+      </div>
+
       {saveMessage ? (
-        <div className={`rounded-2xl border px-4 py-3 text-sm ${saveMessage.toLowerCase().includes("no se pudo") ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            saveMessage.toLowerCase().includes("no se pudo")
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+          }`}
+        >
           {saveMessage}
         </div>
       ) : null}
 
       {showCreate ? (
         <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-3">
-            <input value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} placeholder="Nombre o referencia" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
-            <input value={draft.type} onChange={(event) => setDraft((prev) => ({ ...prev, type: event.target.value }))} placeholder="Qué quiere guardar" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
-            <input value={draft.detail} onChange={(event) => setDraft((prev) => ({ ...prev, detail: event.target.value }))} placeholder="Dato o nota breve" className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none" />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <input
+              value={draft.title}
+              onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Nombre o referencia"
+              className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none"
+            />
+            <select
+              value={draft.category}
+              onChange={(event) => setDraft((prev) => ({ ...prev, category: event.target.value }))}
+              className="h-10 rounded-xl border border-[#D9E1EC] bg-white px-3 text-sm focus:border-[#3B82F6] focus:outline-none"
+            >
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              value={draft.kind}
+              onChange={(event) => setDraft((prev) => ({ ...prev, kind: event.target.value }))}
+              className="h-10 rounded-xl border border-[#D9E1EC] bg-white px-3 text-sm focus:border-[#3B82F6] focus:outline-none"
+            >
+              {KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={draft.detail}
+              onChange={(event) => setDraft((prev) => ({ ...prev, detail: event.target.value }))}
+              placeholder="Dato, enlace o nota breve"
+              className="h-10 rounded-xl border border-[#D9E1EC] px-3 text-sm focus:border-[#3B82F6] focus:outline-none md:col-span-2 xl:col-span-1"
+            />
+          </div>
+          <div className="mt-3 flex items-start gap-2 rounded-2xl border border-[#D9E1EC] bg-[#F8FAFC] px-4 py-3 text-sm text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#3B82F6]" />
+            <p>
+              Puede guardar cualquier formato. Los PDF, Office y las imágenes JPG o PNG quedan listos
+              para análisis cuando corresponda.
+            </p>
           </div>
           <div className="mt-3 flex gap-2">
-            <button onClick={() => void saveVaultItem()} disabled={saving || !draft.title.trim()} className="inline-flex h-10 items-center justify-center rounded-xl bg-[#3B82F6] px-4 text-sm font-medium text-white hover:bg-[#2563EB] disabled:opacity-50">
+            <button
+              onClick={() => void saveVaultItem()}
+              disabled={saving || !draft.title.trim()}
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-[#3B82F6] px-4 text-sm font-medium text-white hover:bg-[#2563EB] disabled:opacity-50"
+            >
               {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Guardar"}
             </button>
-            <button onClick={() => setShowCreate(false)} className="inline-flex h-10 items-center justify-center rounded-xl border border-border px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+            <button
+              onClick={() => setShowCreate(false)}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-border px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+            >
               Cerrar
             </button>
           </div>
@@ -323,6 +463,7 @@ export default function BaulPrivadoPage() {
             const type = inferVaultType(item)
             const title = inferVaultTitle(item)
             const detail = inferVaultDetail(item)
+            const category = inferVaultCategory(item)
 
             return (
               <div key={item.id} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -347,16 +488,16 @@ export default function BaulPrivadoPage() {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tipo</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Categoría</p>
+                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{category}</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-secondary/20 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tipo de guardado</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{type}</p>
                   </div>
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Creado</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Guardado</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{formatDate(item.created_at, locale)}</p>
-                  </div>
-                  <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Actualizado</p>
-                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{formatDate(item.updated_at, locale)}</p>
                   </div>
                 </div>
               </div>

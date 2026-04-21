@@ -87,6 +87,30 @@ function isImportedDocument(doc: DocumentRow) {
   return source.includes("import")
 }
 
+function supportsDocumentAnalysis(doc: Pick<DocumentRow, "mime_type" | "file_name">) {
+  const mime = String(doc.mime_type || "").toLowerCase()
+  const fileName = String(doc.file_name || "").toLowerCase()
+  return (
+    mime.includes("pdf") ||
+    mime.includes("word") ||
+    mime.includes("document") ||
+    mime.includes("sheet") ||
+    mime.includes("excel") ||
+    mime.includes("csv") ||
+    mime.includes("image/jpeg") ||
+    mime.includes("image/png") ||
+    fileName.endsWith(".pdf") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx") ||
+    fileName.endsWith(".xls") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv") ||
+    fileName.endsWith(".jpg") ||
+    fileName.endsWith(".jpeg") ||
+    fileName.endsWith(".png")
+  )
+}
+
 function formatSize(bytes: number | null) {
   if (!bytes) return "—"
   if (bytes < 1024) return `${bytes} B`
@@ -398,6 +422,8 @@ export default function DocumentosPage() {
   const sensitiveCandidates = documents.filter((doc) => looksSensitiveDocument(doc)).length
   const driveDocuments = remoteDocuments.length || documents.filter((doc) => isDriveDocument(doc)).length
   const importedDocuments = documents.filter((doc) => isImportedDocument(doc)).length
+  const analyzableDocuments = documents.filter((doc) => supportsDocumentAnalysis(doc)).length
+  const storedOnlyDocuments = Math.max(documents.length - analyzableDocuments, 0)
   const indexedDocuments = documents.filter((doc) => String(doc.embedding_status || "").toLowerCase() === "indexed").length
   const visionReady = documents.filter((doc) => {
     const status = String(doc.vision_status || "").toLowerCase()
@@ -419,7 +445,7 @@ export default function DocumentosPage() {
             {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             {uploading ? copy.uploading : copy.upload}
           </button>
-          <input ref={inputRef} type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.zip" onChange={(event) => handleUpload(event.target.files)} />
+          <input ref={inputRef} type="file" multiple className="hidden" onChange={(event) => handleUpload(event.target.files)} />
         </div>
       </div>
 
@@ -432,10 +458,10 @@ export default function DocumentosPage() {
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-[#0F1F63]" />
-          <h2 className="text-lg font-semibold text-[#0F1F63]">Documentos listos para usar 📂</h2>
+          <h2 className="text-lg font-semibold text-[#0F1F63]">Documentos listos para usar</h2>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Aqui deberia ver tanto lo que ya esta dentro de Operaly como lo que solo esta visible desde integraciones y puede traer cuando lo necesite.
+          Aquí ve qué archivos ya puede resumir o analizar, cuáles solo quedan guardados y cuáles conviene relacionar con una persona o un caso.
         </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
@@ -444,16 +470,14 @@ export default function DocumentosPage() {
               <p className="mt-1 text-xs text-muted-foreground">Archivos que ya forman parte de su base documental.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para revisar</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{processed}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Ya se pueden consultar mejor desde Operaly.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Listos para resumir</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{analyzableDocuments}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Formatos que Operaly ya puede leer, chunkear y reutilizar mejor.</p>
             </div>
             <div className="rounded-2xl border border-border bg-secondary/20 p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Actividad reciente</p>
-              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-                {recentDocumentEvents.length > 0 ? "Con señal" : "Pendiente"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">Le muestra si hubo movimiento reciente con archivos.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Solo guardados</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{storedOnlyDocuments}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Formatos que hoy se almacenan, aunque no se lean automáticamente.</p>
             </div>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -500,7 +524,7 @@ export default function DocumentosPage() {
       <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#0EA5E9]/5 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Contenido sensible 🔒</h2>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Contenido sensible</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               Si un archivo resulta sensible, deberia terminar tambien en el baul privado para que quede mejor separado del resto.
             </p>
@@ -537,7 +561,7 @@ export default function DocumentosPage() {
       <div className="rounded-2xl border border-[#10B981]/15 bg-gradient-to-r from-[#10B981]/5 via-white to-[#3B82F6]/5 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F1F63]">Cuando un archivo pide más de un destino 💡</h2>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Cuando un archivo pide más de un destino</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
               Operaly ya viene mejor preparado para detectar si algo debe quedarse como documento, pasar al baúl privado, crear recordatorio o abrir seguimiento en otra parte.
             </p>
