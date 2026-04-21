@@ -1080,6 +1080,8 @@ export default function ProfessionalSettingsPage() {
             </Button>
           </div>
 
+        </div>
+
           <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
