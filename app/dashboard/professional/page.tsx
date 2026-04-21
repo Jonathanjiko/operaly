@@ -11,7 +11,6 @@ import {
   Clock,
   Sparkles,
   TrendingUp,
-  Bell,
   Bot,
   Mic,
   Plug,
@@ -1270,75 +1269,9 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <div className="mb-5">
-            <h3 className="text-lg font-semibold text-[#0F1F63]">WhatsApp reciente</h3>
-            <p className="text-sm text-muted-foreground">
-              Aquí ve lo último que Operaly estuvo haciendo o entendiendo.
-            </p>
-          </div>
-
-          {recentRuntimeActivity.length > 0 ? (
-            <div className="space-y-3">
-              {recentRuntimeActivity.map((event) => (
-                <div key={event.id} className="rounded-2xl border border-border bg-secondary/20 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-[#0F1F63]">{event.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {event.detail || "Movimiento reciente"} · {formatRuntimeDate(event.createdAt, runtimeLocale)}
-                      </p>
-                    </div>
-                    <Bell className="h-4 w-4 text-[#7C3AED]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-[#D9E1EC] p-8 text-center">
-              <p className="font-medium text-[#0F1F63]">Todavía no hay actividad reciente visible.</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Cuando use WhatsApp, aquí verá lo último que hizo Operaly.
-              </p>
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.welcomeStatus).card}`}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-[#0F1F63]">Primer saludo</h3>
-              <p className="text-sm text-muted-foreground">
-                Le muestra si el primer mensaje quedó bien enviado.
-              </p>
-            </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getRuntimeTone(operationalSignals.welcomeStatus).pill}`}>
-              {operationalSignals.welcomeStatus}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">provider message id</p>
-              <p className="mt-2 text-sm font-medium text-[#0F1F63] break-all">
-                {runtimeSnapshot.welcome?.provider_message_id || "Todavía no visible"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/60 bg-white/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">último envío</p>
-              <p className="mt-2 text-sm font-medium text-[#0F1F63]">
-                {formatRuntimeDate(
-                  runtimeSnapshot.welcome?.sent_at ||
-                    runtimeSnapshot.welcome?.updated_at ||
-                    runtimeSnapshot.preferences.welcome_initial_sent_at,
-                  runtimeLocale
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.phoneStatus).card}`}>
           <div className="flex items-center justify-between gap-3">
             <div>

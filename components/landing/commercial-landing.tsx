@@ -63,6 +63,10 @@ const heroCopy: Record<LandingLocale, HeroCopy> = {
       "Se olvidó de la lista de compras",
       "Demasiados pendientes de casa",
       "Perdió la reserva del hotel",
+      "Perdió la reserva del restaurante",
+      "Falló una presentación",
+      "Se olvidó de comprar algo",
+      "Perdió la cita con un cliente",
     ],
     overloadTitle: "DESORDEN",
     badge: "Operaly le facilita la vida desde WhatsApp",
@@ -395,35 +399,6 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-12">
           <div className="pt-8 text-white">
-            <div className="relative mb-16 min-h-[520px] overflow-visible text-center">
-              <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/72">
-                {t.overload}
-              </p>
-              <div className="relative mx-auto mt-10 flex max-w-[74rem] flex-wrap justify-center gap-x-4 gap-y-5 px-2">
-                {t.overloadWords.map((pill, index) => (
-                  <span
-                    key={pill}
-                    className="inline-flex rounded-full border border-white/18 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
-                    style={{
-                      transform: `translate(${[-22, 18, -34, 24, -16, 26, -28, 20, -12, 30, -24, 14, -30, 18][index % 14]}px, ${[8, -6, 16, 0, 14, -4, 10, 22, -2, 15, 4, 18, 10, 2][index % 14]}px) rotate(${[-11, 7, -8, 10, -5, 8, -9, 6, -7, 9, -4, 7, -10, 5][index % 14]}deg)`,
-                      animation: `rain-pill 6.6s ease-in-out ${index * 0.2}s infinite`,
-                    }}
-                  >
-                    {pill}
-                  </span>
-                ))}
-              </div>
-              <h2 className="mx-auto mt-12 w-full text-center text-[6rem] font-black leading-[0.82] tracking-[-0.09em] text-white/14 sm:text-[8rem] lg:text-[12.5rem]">
-                {t.overloadTitle}
-              </h2>
-            </div>
-
-            
-
-            
-
-            
-
             <div className="hidden mt-8 flex flex-wrap gap-2">
               {[
                 locale === "es" ? "7 días gratis" : "7 days free",
@@ -573,6 +548,31 @@ export function CommercialLanding({ locale = "es" }: { locale?: string }) {
             </div>
           </div>
 
+          </div>
+
+          <div className="pt-4 text-white">
+            <div className="relative min-h-[640px] overflow-visible text-center">
+              <p className="text-lg font-semibold uppercase tracking-[0.34em] text-white/88 sm:text-2xl">
+                {t.overload}
+              </p>
+              <div className="relative mx-auto mt-12 flex max-w-[86rem] flex-wrap justify-center gap-x-2 gap-y-5 px-2">
+                {t.overloadWords.map((pill, index) => (
+                  <span
+                    key={pill}
+                    className="inline-flex rounded-full border border-white/16 bg-white/12 px-5 py-3 text-[15px] font-semibold text-white/92 shadow-[0_24px_54px_-28px_rgba(15,31,99,0.84)] backdrop-blur-xl"
+                    style={{
+                      transform: `translate(${[-64, 58, -92, 44, -36, 88, -76, 32, -48, 74, -20, 62, -82, 18, -54, 68, -26, 56][index % 18]}px, ${[28, -12, 30, -4, 24, -16, 18, 40, 6, 34, 10, 38, 16, 8, 26, -6, 14, 22][index % 18]}px) rotate(${[-24, 18, -20, 11, -15, 22, -19, 9, -17, 16, -11, 13, -21, 7, -14, 19, -8, 12][index % 18]}deg)`,
+                      animation: `rain-pill 8.2s ease-in-out ${index * 0.18}s infinite`,
+                    }}
+                  >
+                    {pill}
+                  </span>
+                ))}
+              </div>
+              <h2 className="mx-auto mt-20 w-full text-center text-[7.4rem] font-black leading-[0.74] tracking-[-0.12em] text-white/16 sm:text-[10rem] lg:text-[16rem]">
+                {t.overloadTitle}
+              </h2>
+            </div>
           </div>
 
           <div className="grid gap-6">
