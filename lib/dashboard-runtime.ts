@@ -24,6 +24,43 @@ export function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function readDashboardCurrentPlan(userFacing: Record<string, any> | null | undefined) {
+  const raw = userFacing?.current_plan
+  if (typeof raw === "string") return raw
+  if (raw && typeof raw === "object") {
+    return String((raw as Record<string, any>).code || (raw as Record<string, any>).plan_code || "")
+  }
+  return ""
+}
+
+export function resolveDashboardPlanCode(
+  payload: DashboardRuntimePayload | null | undefined,
+  fallback = "trial"
+) {
+  const userFacing = payload?.user_facing
+  const resolved = String(
+    readDashboardCurrentPlan(userFacing) ||
+      payload?.plan?.effective_plan_code ||
+      payload?.plan?.plan_type ||
+      payload?.plan?.code ||
+      payload?.effective_plan_code ||
+      payload?.limits?.effective_plan_code ||
+      fallback
+  )
+    .trim()
+    .toLowerCase()
+
+  return resolved || String(fallback || "trial").trim().toLowerCase() || "trial"
+}
+
+export function resolveDashboardPlanLimits(payload: DashboardRuntimePayload | null | undefined) {
+  const numeric = payload?.user_facing?.plan_limits_numeric
+  if (numeric && typeof numeric === "object") {
+    return numeric as Record<string, any>
+  }
+  return (payload?.limits || {}) as Record<string, any>
+}
+
 const DASHBOARD_FETCH_TIMEOUT_MS = 12000
 
 async function fetchWithDashboardTimeout(input: string, init: RequestInit) {

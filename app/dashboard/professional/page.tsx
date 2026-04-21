@@ -23,6 +23,7 @@ import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { labelForLanguage, localeFromLanguage } from "@/lib/runtime-locale"
 import { getCurrentPeriodMonth, getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
+import { resolveDashboardPlanCode, resolveDashboardPlanLimits } from "@/lib/dashboard-runtime"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
 
 type DashboardProfile = {
@@ -418,16 +419,13 @@ export default function ProfessionalDashboardPage() {
 
               if (dashboardRuntimeResponse.ok) {
                 usedDashboardSnapshot = true
-                const effectivePlanCode =
-                  String(
-                    dashboardRuntimePayload?.plan?.effective_plan_code ||
-                      dashboardRuntimePayload?.effective_plan_code ||
-                      dashboardRuntimePayload?.limits?.effective_plan_code ||
-                      ""
-                  ) || null
+                const effectivePlanCode = resolveDashboardPlanCode(
+                  dashboardRuntimePayload,
+                  client?.plan_code || meta.selected_plan || "trial"
+                )
 
                 const usage = dashboardRuntimePayload?.usage || {}
-                const limits = dashboardRuntimePayload?.limits || {}
+                const limits = resolveDashboardPlanLimits(dashboardRuntimePayload)
                 const featureAccess = dashboardRuntimePayload?.feature_access || dashboardRuntimePayload?.limits || {}
 
                 setUsageSummary({

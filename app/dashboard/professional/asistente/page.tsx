@@ -31,7 +31,7 @@ import {
   normalizeRuntimeStatus,
   type ProfessionalRuntimeSnapshot,
 } from "@/lib/professional-runtime"
-import { fetchDashboardJson, fetchDashboardRuntime } from "@/lib/dashboard-runtime"
+import { fetchDashboardJson, fetchDashboardRuntime, resolveDashboardPlanCode } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
@@ -190,13 +190,7 @@ export default function AsistentePage() {
       try {
         const runtime = await fetchDashboardRuntime()
         const featureAccess = runtime?.feature_access || runtime?.limits || {}
-        const resolvedPlanCode = String(
-          runtime?.plan?.effective_plan_code ||
-            runtime?.effective_plan_code ||
-            runtime?.limits?.effective_plan_code ||
-            client?.plan_code ||
-            "trial"
-        )
+        const resolvedPlanCode = resolveDashboardPlanCode(runtime, String(client?.plan_code || "trial"))
 
         setPlanCode(resolvedPlanCode)
         setCustomAgentEnabled(Boolean(featureAccess?.custom_agent_enabled ?? false))

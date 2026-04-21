@@ -25,7 +25,7 @@ import {
 } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
-import { fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
+import { fetchDashboardRuntime, resolveDashboardPlanCode, resolveDashboardPlanLimits, toNumber } from "@/lib/dashboard-runtime"
 import {
   fetchProfessionalRuntime,
   normalizeRuntimeStatus,
@@ -590,23 +590,27 @@ export default function ProfessionalSettingsPage() {
       try {
         const runtime = await fetchDashboardRuntime()
         if (runtime) {
-          const limits = runtime.limits || {}
+          const limits = resolveDashboardPlanLimits(runtime)
           const featureAccess = runtime.feature_access || limits || {}
           const usage = runtime.usage || {}
-          const resolvedPlanCode = String(
-            runtime.plan?.effective_plan_code ||
-              runtime.effective_plan_code ||
-              limits?.effective_plan_code ||
-              client.plan_code ||
-              metadata.selected_plan ||
-              "trial"
+          const resolvedPlanCode = resolveDashboardPlanCode(
+            runtime,
+            String(client.plan_code || metadata.selected_plan || "trial")
           )
 
           setEffectiveLimits({
             effective_plan_code: resolvedPlanCode,
-            max_audio_minutes: toNumber(limits?.max_audio_minutes),
-            max_messages_month: toNumber(limits?.max_messages_month),
-            max_storage_mb: toNumber(limits?.max_storage_mb),
+            max_audio_minutes: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.audio_minutes ?? limits?.max_audio_minutes
+            ),
+            max_messages_month: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.messages ?? limits?.max_messages_month
+            ),
+            max_storage_mb: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.storage_gb ?? limits?.storage_gb
+            )
+              ? toNumber(runtime.user_facing?.plan_limits_numeric?.storage_gb ?? limits?.storage_gb) * 1024
+              : toNumber(limits?.max_storage_mb),
             voice_enabled: Boolean(featureAccess?.voice_enabled ?? false),
             google_enabled: Boolean(featureAccess?.google_enabled ?? false),
             custom_agent_enabled: Boolean(featureAccess?.custom_agent_enabled ?? false),

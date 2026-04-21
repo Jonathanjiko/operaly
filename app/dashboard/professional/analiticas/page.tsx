@@ -28,7 +28,13 @@ import {
   type EffectiveLimitsRuntime,
 } from "@/lib/effective-limits"
 import { getDefaultOwnerCatalog, type OwnerCatalogAddon } from "@/lib/owner-catalog"
-import { fetchDashboardRuntime, type DashboardRuntimePayload, toNumber } from "@/lib/dashboard-runtime"
+import {
+  fetchDashboardRuntime,
+  resolveDashboardPlanCode,
+  resolveDashboardPlanLimits,
+  type DashboardRuntimePayload,
+  toNumber,
+} from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { formatLimit, getDisplayPlanName } from "@/lib/plans"
@@ -198,7 +204,7 @@ export default function ProfessionalAnalyticsPage() {
   const [activeRecurringCount, setActiveRecurringCount] = useState(0)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [storageUsedMb, setStorageUsedMb] = useState(0)
-  const [resolvedPlanCode, setResolvedPlanCode] = useState("trial")
+  const [resolvedPlanCode, setResolvedPlanCode] = useState("")
 
   const loadAnalytics = async () => {
     setLoading(true)
@@ -212,20 +218,14 @@ export default function ProfessionalAnalyticsPage() {
         const dashboardRuntime = (await fetchDashboardRuntime()) as DashboardRuntimePayload | null
         if (dashboardRuntime) {
           const usage = dashboardRuntime.usage || {}
-          const runtimeLimits = dashboardRuntime.limits || {}
+          const runtimeLimits = resolveDashboardPlanLimits(dashboardRuntime)
           const plan = dashboardRuntime.plan || {}
           const featureAccess = dashboardRuntime.feature_access || runtimeLimits || {}
-          const runtimePlanCode =
-            String(
-              plan?.effective_plan_code ||
-                plan?.plan_type ||
-                plan?.code ||
-                dashboardRuntime.effective_plan_code ||
-                runtimeLimits?.effective_plan_code ||
-                fallbackPlanCode
-            )
-              .trim()
-              .toLowerCase() || fallbackPlanCode
+          const runtimePlanCode = resolveDashboardPlanCode(dashboardRuntime, fallbackPlanCode)
+          const numericPlanLimits = dashboardRuntime.user_facing?.plan_limits_numeric || {}
+          const resolvedStorageGb =
+            toNumber(plan?.storage_gb ?? numericPlanLimits?.storage_gb ?? runtimeLimits?.storage_gb) ||
+            toNumber(runtimeLimits?.max_storage_mb) / 1024
           setResolvedPlanCode(runtimePlanCode)
 
           setLimits({
@@ -233,17 +233,23 @@ export default function ProfessionalAnalyticsPage() {
             plan: {
               ...plan,
               plan_type: runtimePlanCode,
-              calls_minutes: toNumber(plan?.calls_minutes ?? runtimeLimits?.max_audio_minutes),
-              storage_gb: toNumber(plan?.storage_gb ?? runtimeLimits?.max_storage_mb) / 1024,
-              ia_limit: toNumber(plan?.ia_limit ?? runtimeLimits?.max_messages_month),
-              automations_limit: toNumber(plan?.automations_limit ?? runtimeLimits?.max_automations),
+              calls_minutes: toNumber(
+                plan?.calls_minutes ?? numericPlanLimits?.audio_minutes ?? runtimeLimits?.max_audio_minutes
+              ),
+              storage_gb: resolvedStorageGb,
+              ia_limit: toNumber(
+                plan?.ia_limit ?? numericPlanLimits?.messages ?? runtimeLimits?.max_messages_month
+              ),
+              automations_limit: toNumber(
+                plan?.automations_limit ?? numericPlanLimits?.automations ?? runtimeLimits?.max_automations
+              ),
             },
             addons: {},
             usage,
             limits: {
-              calls_minutes_total: toNumber(runtimeLimits?.max_audio_minutes),
-              storage_gb_total: toNumber(runtimeLimits?.max_storage_mb) / 1024,
-              ia_limit_total: toNumber(runtimeLimits?.max_messages_month),
+              calls_minutes_total: toNumber(numericPlanLimits?.audio_minutes ?? runtimeLimits?.max_audio_minutes),
+              storage_gb_total: resolvedStorageGb,
+              ia_limit_total: toNumber(numericPlanLimits?.messages ?? runtimeLimits?.max_messages_month),
               voice_enabled: Boolean(featureAccess?.voice_enabled ?? false),
               google_enabled: Boolean(featureAccess?.google_enabled ?? false),
             },
@@ -371,10 +377,9 @@ export default function ProfessionalAnalyticsPage() {
   const lim = limits?.limits || {}
   const plan = limits?.plan || {}
   const periodMonth = String(limits?.usage_period_month || limits?.period || getCurrentPeriodMonth())
-  const effectivePlanCode =
-    String(resolvedPlanCode || limits?.effective_plan_code || getEffectivePlanCode(limits) || "trial")
-      .trim()
-      .toLowerCase() || "trial"
+  const effectivePlanCode = String(resolvedPlanCode || limits?.effective_plan_code || getEffectivePlanCode(limits) || "trial")
+    .trim()
+    .toLowerCase() || "trial"
   const totalStorageGb = Number(plan.storage_gb ?? lim.storage_gb_total ?? 0)
   const storageValueLabel = `${formatStorageUsed(storageUsedMb)} / ${formatStorageCapacity(totalStorageGb)}`
 

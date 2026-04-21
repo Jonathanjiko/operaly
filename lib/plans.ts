@@ -93,7 +93,10 @@ export function getDisplayPlanPeriodicity(planCode: string | null | undefined) {
 }
 
 export function getDisplayPlanName(planCode: string | null | undefined) {
-  return getPlanByCode(planCode)?.name ?? String(planCode || "Trial")
+  const normalized = String(planCode || "").trim().toLowerCase()
+  if (normalized === "owner") return "Owner"
+  if (normalized === "owner_unlimited") return "Owner Unlimited"
+  return getPlanByCode(normalized)?.name ?? String(planCode || "Trial")
 }
 
 export function hasIncludedLimit(limit: number | null | undefined, enabled = true) {

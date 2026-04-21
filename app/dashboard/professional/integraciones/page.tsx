@@ -19,7 +19,7 @@ import {
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
 import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
-import { fetchDashboardRuntime } from "@/lib/dashboard-runtime"
+import { fetchDashboardRuntime, resolveDashboardPlanCode } from "@/lib/dashboard-runtime"
 import { getDisplayPlanName } from "@/lib/plans"
 
 type GoogleStatusPayload = {
@@ -378,12 +378,7 @@ export default function IntegracionesPage() {
       try {
         const runtime = await fetchDashboardRuntime()
         const featureAccess = runtime?.feature_access || runtime?.limits || {}
-        const resolvedPlanCode = String(
-          runtime?.plan?.effective_plan_code ||
-            runtime?.effective_plan_code ||
-            runtime?.limits?.effective_plan_code ||
-            ""
-        )
+        const resolvedPlanCode = resolveDashboardPlanCode(runtime, "")
 
         if (resolvedPlanCode) {
           setPlanCode(resolvedPlanCode)
