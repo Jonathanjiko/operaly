@@ -606,7 +606,7 @@ export default function OwnerDashboardPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "No se pudo actualizar el plan.")
+        throw new Error(payload?.detail || payload?.error || "No se pudo actualizar el plan.")
       }
 
       await loadOwnerDashboard(true)
@@ -634,7 +634,7 @@ export default function OwnerDashboardPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "No se pudo actualizar el estado del cliente.")
+        throw new Error(payload?.detail || payload?.error || "No se pudo actualizar el estado del cliente.")
       }
 
       await loadOwnerDashboard(true)
@@ -670,10 +670,10 @@ export default function OwnerDashboardPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "No se pudo eliminar por completo al cliente.")
+        throw new Error(payload?.detail || payload?.error || "No se pudo eliminar por completo al cliente.")
       }
 
-      setSelectedClient(null)
+      setSelectedClientId("")
       await loadOwnerDashboard(true)
       alert("Cliente eliminado por completo. Ya puedes volver a registrarlo desde cero.")
     } catch (error: any) {

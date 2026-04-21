@@ -62,7 +62,7 @@ type SubscriptionRow = {
 
 type OwnerActivityEntry = {
   id: string
-  action: "plan_change" | "status_change"
+  action: "plan_change" | "status_change" | "client_delete"
   clientId: string
   clientName: string
   previousValue: string | null
@@ -151,7 +151,10 @@ async function requireOwner(request: Request) {
     throw new HttpError(500, ownerError.message)
   }
 
-  if (!ownerClient || String(ownerClient.plan_code || "").toLowerCase() !== "owner") {
+  if (
+    !ownerClient ||
+    !["owner", "owner_unlimited"].includes(String(ownerClient.plan_code || "").toLowerCase())
+  ) {
     throw new HttpError(403, "forbidden")
   }
 

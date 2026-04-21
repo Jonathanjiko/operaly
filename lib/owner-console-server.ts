@@ -20,6 +20,16 @@ export class OwnerHttpError extends Error {
   }
 }
 
+export type OwnerActivityEntry = {
+  id: string
+  action: "plan_change" | "status_change" | "client_delete"
+  clientId: string
+  clientName: string
+  previousValue: string | null
+  nextValue: string | null
+  createdAt: string
+}
+
 function getEnv(name: string): string {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Missing environment variable: ${name}`)
@@ -163,6 +173,31 @@ export async function upsertClientPreference(clientId: string, prefKey: string, 
   if (error) {
     throw new OwnerHttpError(500, error.message)
   }
+}
+
+export async function appendOwnerActivity(clientId: string, entry: OwnerActivityEntry) {
+  const admin = getAdminClient()
+  const { data: prefRow, error: prefError } = await admin
+    .from("client_preferences")
+    .select("pref_value")
+    .eq("client_id", clientId)
+    .eq("pref_key", OWNER_ACTIVITY_PREF_KEY)
+    .maybeSingle()
+
+  if (prefError) {
+    throw new OwnerHttpError(500, prefError.message)
+  }
+
+  let history: OwnerActivityEntry[] = []
+  try {
+    history = JSON.parse(String(prefRow?.pref_value || "[]"))
+    if (!Array.isArray(history)) history = []
+  } catch {
+    history = []
+  }
+
+  const nextHistory = [entry, ...history].slice(0, 100)
+  await upsertClientPreference(clientId, OWNER_ACTIVITY_PREF_KEY, JSON.stringify(nextHistory))
 }
 
 export async function getResolvedOwnerCatalog(clientId?: string) {
