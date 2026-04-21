@@ -3,15 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   CreditCard,
-  Globe,
   Layers3,
-  Lock,
-  MapPin,
-  Mic,
-  Phone,
   RefreshCcw,
   Sparkles,
-  ShieldCheck,
   User,
   Wallet,
 } from "lucide-react"
@@ -31,7 +25,6 @@ import {
 } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
-import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
 import { fetchDashboardRuntime, toNumber } from "@/lib/dashboard-runtime"
 import {
   fetchProfessionalRuntime,
@@ -875,7 +868,7 @@ export default function ProfessionalSettingsPage() {
             <p className="text-sm font-semibold text-[#0F1F63]">Su cuenta hoy</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
               {runtimeSource === "auth_bound"
-                ? "Ya estamos mostrando su plan, su voz y su configuración más reciente."
+                ? "Ya estamos mostrando su plan y la configuración más reciente de su cuenta."
                 : runtimeSource === "legacy"
                   ? "Le mostramos sus últimos datos disponibles mientras terminamos de actualizar la cuenta."
                   : "Estamos preparando la lectura completa de su cuenta."}
@@ -884,7 +877,7 @@ export default function ProfessionalSettingsPage() {
           <div className="rounded-2xl border border-border bg-white/80 p-4">
             <p className="text-sm font-semibold text-[#0F1F63]">Qué puede revisar aquí</p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Su idioma, su forma de atención, su voz y su plan para que todo se mantenga alineado en Operaly.
+              Su perfil, su plan y la forma en que quiere usar Operaly cada día, sin entrar en detalles técnicos.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-white/80 p-4">
@@ -907,77 +900,6 @@ export default function ProfessionalSettingsPage() {
           {saveFeedback.message}
         </div>
       ) : null}
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">último movimiento</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {normalizeRuntimeStatus(String(recentRuntimeEvent?.event_type || recentRuntimeEvent?.action || recentRuntimeEvent?.type || ""))}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {recentRuntimeEvent
-              ? "Última actualización registrada para esta cuenta."
-              : "Todavía no hay una actualización reciente visible."}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">voz activa</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeVoiceVisible || "Pendiente"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {runtimeVoiceVisible
-              ? "Esta es la voz que hoy aparece aplicada a su cuenta."
-              : "Todavía no aparece una voz aplicada en esta cuenta."}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo del asistente</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeAssistantTone || "Pendiente"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {runtimeAssistantTone || runtimeAssistantStyle
-              ? `${runtimeAssistantTone || "sin tono"} · ${runtimeAssistantStyle || "sin estilo"}`
-              : "Todavía no aparece un estilo visible para esta cuenta."}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">idioma principal</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeLanguageVisible || preferredLanguage || language || "es"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Este idioma guía cómo le responde Operaly y cómo se muestran sus recordatorios y ayudas.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">última comprensión</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {recentUnderstanding?.confidence != null
-              ? `${Math.round(Number(recentUnderstanding.confidence) * 100)}%`
-              : "Sin senal"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {recentUnderstanding
-              ? `${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
-              : "Todavía no hay una lectura reciente visible."}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">aplicacion real</p>
-          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
-            {runtimeSource === "auth_bound" ? "Contrastable" : "Parcial"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Si WhatsApp o llamadas siguen distintos, la diferencia ya no nace en esta pantalla sino en el runtime vivo.
-          </p>
-        </div>
-      </div>
-
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
@@ -1149,37 +1071,6 @@ export default function ProfessionalSettingsPage() {
                 />
               </div>
             </div>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border p-4 bg-secondary/20">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                  Fuente de timezone
-                </p>
-                <p className="text-sm font-medium text-[#0F1F63]">
-                  {timezoneSource || "—"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4 bg-secondary/20">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                  Estado del teléfono
-                </p>
-                <span
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPhoneStatusBadgeClass(
-                    phoneVerificationStatus
-                  )}`}
-                >
-                  {phoneVerificationStatus || "pending"}
-                </span>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Verificado: {formatDateTime(phoneVerifiedAt)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Solicitud: {formatDateTime(phoneVerificationRequestedAt)}
-                </p>
-              </div>
-            </div>
-
             <Button
               className="mt-6 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
               onClick={handleSave}
@@ -1187,127 +1078,9 @@ export default function ProfessionalSettingsPage() {
             >
               {saving ? "Guardando..." : "Guardar cambios"}
             </Button>
-
-            <div className="mt-6 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#7C3AED]" />
-                <p className="text-sm font-semibold text-[#0F1F63]">Resumen de su cuenta</p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Idioma operativo</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                    Guardado: {preferredLanguage || language || "es"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Actual: {normalizeRuntimeStatus(String(runtimeSnapshot?.preferences?.preferred_language || "")) === "Sin actividad reciente"
-                      ? "Sin actualización visible"
-                      : String(runtimeSnapshot?.preferences?.preferred_language || "Sin actualización visible")}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Welcome y teléfono</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                    Welcome: {normalizeRuntimeStatus(
-                      String(
-                        runtimeSnapshot?.preferences?.welcome_initial_status ||
-                          runtimeSnapshot?.welcome?.status ||
-                          runtimeSnapshot?.welcome?.message_status ||
-                          ""
-                      )
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Teléfono: {normalizeRuntimeStatus(
-                      String(runtimeSnapshot?.client?.phone_verification_status || phoneVerificationStatus || "")
-                    )}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Voz</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                    Guardado: {voiceSettings?.voice_name || voiceSettings?.voice_id || "Sin voz"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Actual: {runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "Sin actualización visible"}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-border bg-secondary/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Asistente por usuario</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0F1F63]">
-                    Guardado: {preferredLanguage || "es"} · {profession || "sin profesión"} · {fullName || "sin nombre"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Actual: {runtimeSnapshot?.preferences?.assistant_tone || "Sin tono visible"} · {runtimeSnapshot?.preferences?.assistant_style || "Sin estilo visible"}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Esto debería definir cómo le habla Operaly a usted, qué tono usa y desde qué profesión o rol lo acompaña.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <div className="bg-card rounded-2xl border border-border p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <ShieldCheck className="w-5 h-5 text-[#10B981]" />
-              <h2 className="text-xl font-semibold text-[#0F1F63]">
-                Resumen operativo
-              </h2>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Phone className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">WhatsApp operativo</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {phoneNormalized || phone || "No configurado"}
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Este es el WhatsApp principal de su cuenta. Si cambia, Operaly debe reconocerlo y responderle por aquí sin perder el contexto.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <MapPin className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Ubicación base</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {city || "—"} {countryCode ? `(${countryCode})` : ""}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Globe className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Idioma y zona horaria</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {preferredLanguage || language || "es"} · {timezone || "America/Lima"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Lock className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Moneda de cobro</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {BILLING_CURRENCY_CODE}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-8">
+          <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
               <Wallet className="w-5 h-5 text-[#0EA5E9]" />
@@ -1766,18 +1539,6 @@ export default function ProfessionalSettingsPage() {
           </div>
         </div>
 
-      </div>
-
-      <div className="mt-6">
-        <VoiceSettingsSection
-          clientId={clientId}
-          planCode={effectivePlanCode}
-          voiceEnabled={Boolean(effectiveLimits?.voice_enabled ?? voiceMinutesLimit > 0)}
-          voiceSettings={voiceSettings}
-          minutesUsed={voiceMinutesUsed}
-          minutesLimit={voiceMinutesLimit}
-          onSaved={loadData}
-        />
       </div>
     </div>
   )
