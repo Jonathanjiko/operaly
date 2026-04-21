@@ -372,6 +372,7 @@ export default function AsistentePage() {
         </div>
       ) : null}
 
+      {false ? (
       <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
         <p className="text-sm font-semibold text-[#0F1F63]">Qué define aquí</p>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
@@ -527,6 +528,7 @@ export default function AsistentePage() {
           </div>
         </div>
       </div>
+      ) : null}
 
       <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center gap-2">

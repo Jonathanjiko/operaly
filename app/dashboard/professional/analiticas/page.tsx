@@ -69,6 +69,7 @@ function UsageBar({
   total,
   unit,
   warningAt = 75,
+  valueLabel,
 }: {
   label: string
   icon: any
@@ -77,14 +78,16 @@ function UsageBar({
   total: number
   unit: string
   warningAt?: number
+  valueLabel?: string
 }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0
   const barColor = pct >= 90 ? "#EF4444" : pct >= warningAt ? "#F59E0B" : "#3B82F6"
   const formattedTotal = formatLimit(total)
   const usageLabel =
-    formattedTotal === "No incluido"
+    valueLabel ||
+    (formattedTotal === "No incluido"
       ? `${used.toLocaleString()} / ${formattedTotal}`
-      : `${used.toLocaleString()} / ${formattedTotal} ${unit}`
+      : `${used.toLocaleString()} / ${formattedTotal} ${unit}`)
 
   return (
     <div className="space-y-2">
@@ -152,6 +155,31 @@ function getCommercialPriceBadge(addon: OwnerCatalogAddon) {
   return addon.category === "storage" ? "Cargo mensual adicional" : "Pago unico"
 }
 
+function extractStorageUsedMb(usage: Record<string, any>) {
+  return toNumber(
+    usage?.storage_used_mb ??
+      usage?.storage?.used_mb ??
+      usage?.storage?.mb ??
+      usage?.storage_mb_used ??
+      usage?.storage_usage_mb ??
+      usage?.storage?.used
+  )
+}
+
+function formatStorageUsed(usedMb: number) {
+  const roundedMb = Math.max(0, Math.round(usedMb))
+  const gbValue = roundedMb / 1024
+  if (roundedMb < 1024) return `${roundedMb} MB · ${gbValue.toFixed(2)} GB`
+  return `${gbValue.toFixed(2)} GB · ${roundedMb} MB`
+}
+
+function formatStorageCapacity(totalGb: number) {
+  const gbValue = Math.max(0, Number(totalGb || 0))
+  const mbValue = Math.round(gbValue * 1024)
+  if (gbValue <= 0) return "No incluido"
+  return `${gbValue.toFixed(1)} GB · ${mbValue} MB`
+}
+
 export default function ProfessionalAnalyticsPage() {
   const { pricing, isPeru } = usePricingCurrency()
   const [loading, setLoading] = useState(true)
@@ -169,12 +197,16 @@ export default function ProfessionalAnalyticsPage() {
   const [tasksCount, setTasksCount] = useState(0)
   const [activeRecurringCount, setActiveRecurringCount] = useState(0)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [storageUsedMb, setStorageUsedMb] = useState(0)
+  const [resolvedPlanCode, setResolvedPlanCode] = useState("trial")
 
   const loadAnalytics = async () => {
     setLoading(true)
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
+      const { data: clientRow } = await supabase.from("clients").select("plan_code").eq("id", cid).maybeSingle()
+      const fallbackPlanCode = String(clientRow?.plan_code || "").trim().toLowerCase() || "trial"
 
       try {
         const dashboardRuntime = (await fetchDashboardRuntime()) as DashboardRuntimePayload | null
@@ -183,18 +215,24 @@ export default function ProfessionalAnalyticsPage() {
           const runtimeLimits = dashboardRuntime.limits || {}
           const plan = dashboardRuntime.plan || {}
           const featureAccess = dashboardRuntime.feature_access || runtimeLimits || {}
+          const runtimePlanCode =
+            String(
+              plan?.effective_plan_code ||
+                plan?.plan_type ||
+                plan?.code ||
+                dashboardRuntime.effective_plan_code ||
+                runtimeLimits?.effective_plan_code ||
+                fallbackPlanCode
+            )
+              .trim()
+              .toLowerCase() || fallbackPlanCode
+          setResolvedPlanCode(runtimePlanCode)
 
           setLimits({
-            effective_plan_code:
-              String(
-                plan?.effective_plan_code ||
-                  dashboardRuntime.effective_plan_code ||
-                  runtimeLimits?.effective_plan_code ||
-                  ""
-              ) || null,
+            effective_plan_code: runtimePlanCode || null,
             plan: {
               ...plan,
-              plan_type: plan?.plan_type || plan?.code || dashboardRuntime.effective_plan_code || "trial",
+              plan_type: runtimePlanCode,
               calls_minutes: toNumber(plan?.calls_minutes ?? runtimeLimits?.max_audio_minutes),
               storage_gb: toNumber(plan?.storage_gb ?? runtimeLimits?.max_storage_mb) / 1024,
               ia_limit: toNumber(plan?.ia_limit ?? runtimeLimits?.max_messages_month),
@@ -211,6 +249,7 @@ export default function ProfessionalAnalyticsPage() {
             },
             period: getCurrentPeriodMonth(),
           } as EffectiveLimits)
+          setStorageUsedMb(extractStorageUsedMb(usage))
         } else {
           throw new Error("dashboard_runtime_unavailable")
         }
@@ -221,14 +260,28 @@ export default function ProfessionalAnalyticsPage() {
             p_client_id: cid,
           })
           if (!limitsError && limitsData) {
-            setLimits(limitsData as EffectiveLimits)
+            const rpcLimits = limitsData as EffectiveLimits
+            setResolvedPlanCode(
+              String(
+                rpcLimits?.effective_plan_code ||
+                  rpcLimits?.plan?.plan_type ||
+                  fallbackPlanCode
+              )
+                .trim()
+                .toLowerCase() || fallbackPlanCode
+            )
+            setLimits(rpcLimits)
           } else {
             const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
             if (myLimits) {
               const tel = myLimits as any
+              const legacyPlanCode =
+                String(tel.plan_code || tel.effective_plan_code || fallbackPlanCode).trim().toLowerCase() ||
+                fallbackPlanCode
+              setResolvedPlanCode(legacyPlanCode)
               setLimits({
-                effective_plan_code: getEffectivePlanCode(tel),
-                plan: { plan_type: tel.plan_code, calls_minutes: tel.max_audio_minutes || 0 },
+                effective_plan_code: legacyPlanCode,
+                plan: { plan_type: legacyPlanCode, calls_minutes: tel.max_audio_minutes || 0 },
                 addons: {},
                 usage: {},
                 limits: {
@@ -274,7 +327,7 @@ export default function ProfessionalAnalyticsPage() {
       }
 
       const [docsRes, contactsRes, casesRes, tasksRes, recurringRes, notifRes] = await Promise.all([
-        supabase.from("documents").select("id", { count: "exact", head: true }).eq("client_id", cid),
+        supabase.from("documents").select("id,file_size_bytes").eq("client_id", cid),
         supabase.from("contacts").select("id", { count: "exact", head: true }).eq("client_id", cid),
         supabase.from("cases").select("id", { count: "exact", head: true }).eq("client_id", cid),
         supabase.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", cid).eq("status", "pending"),
@@ -290,12 +343,19 @@ export default function ProfessionalAnalyticsPage() {
           .eq("is_read", false),
       ])
 
-      setDocumentsCount(docsRes.count || 0)
+      const documentsRows = docsRes.data || []
+      const storageFromDocuments = documentsRows.reduce(
+        (sum, doc) => sum + toNumber((doc as { file_size_bytes?: number | null }).file_size_bytes),
+        0
+      ) / 1048576
+
+      setDocumentsCount(documentsRows.length)
       setContactsCount(contactsRes.count || 0)
       setCasesCount(casesRes.count || 0)
       setTasksCount(tasksRes.count || 0)
       setActiveRecurringCount(recurringRes.count || 0)
       setUnreadNotifications(notifRes.count || 0)
+      setStorageUsedMb((current) => (current > 0 ? current : storageFromDocuments))
     } catch (err: any) {
       alert(err.message || "No se pudieron cargar las analiticas.")
     } finally {
@@ -311,7 +371,12 @@ export default function ProfessionalAnalyticsPage() {
   const lim = limits?.limits || {}
   const plan = limits?.plan || {}
   const periodMonth = String(limits?.usage_period_month || limits?.period || getCurrentPeriodMonth())
-  const effectivePlanCode = getEffectivePlanCode(limits)
+  const effectivePlanCode =
+    String(resolvedPlanCode || limits?.effective_plan_code || getEffectivePlanCode(limits) || "trial")
+      .trim()
+      .toLowerCase() || "trial"
+  const totalStorageGb = Number(plan.storage_gb ?? lim.storage_gb_total ?? 0)
+  const storageValueLabel = `${formatStorageUsed(storageUsedMb)} / ${formatStorageCapacity(totalStorageGb)}`
 
   const statsCards = useMemo(
     () => [
@@ -328,6 +393,13 @@ export default function ProfessionalAnalyticsPage() {
         helper: "audios y llamadas",
         icon: Mic,
         color: "#7C3AED",
+      },
+      {
+        label: "Espacio ocupado",
+        value: formatStorageUsed(storageUsedMb),
+        helper: "uso real acumulado",
+        icon: HardDrive,
+        color: "#06B6D4",
       },
       {
         label: "Documentos cargados",
@@ -364,15 +436,8 @@ export default function ProfessionalAnalyticsPage() {
         icon: Zap,
         color: "#8B5CF6",
       },
-      {
-        label: "Notificaciones",
-        value: unreadNotifications,
-        helper: "sin leer",
-        icon: Bell,
-        color: "#14B8A6",
-      },
     ],
-    [usage, documentsCount, contactsCount, casesCount, tasksCount, activeRecurringCount, unreadNotifications]
+    [usage, storageUsedMb, documentsCount, contactsCount, casesCount, tasksCount, activeRecurringCount]
   )
 
   const catalogAddonsMap = useMemo(() => new Map(catalogAddons.map((addon) => [addon.code, addon])), [catalogAddons])
@@ -478,9 +543,10 @@ export default function ProfessionalAnalyticsPage() {
             label="Almacenamiento"
             icon={HardDrive}
             iconColor="#06B6D4"
-            used={Math.round(((usage.storage_used_mb ?? 0) / 1024) * 100) / 100}
-            total={lim.storage_gb_total ?? 0}
+            used={storageUsedMb / 1024}
+            total={totalStorageGb}
             unit="GB"
+            valueLabel={storageValueLabel}
           />
           <UsageBar
             label="Automatizaciones"
@@ -650,7 +716,7 @@ export default function ProfessionalAnalyticsPage() {
             {[
               ["Mensajes con Operaly", usage.messages_used ?? 0, "mensajes"],
               ["Minutos de voz y llamadas", Number((usage.audio_minutes_used ?? 0).toFixed(1)), "min"],
-              ["Espacio ocupado", `${Math.round(((usage.storage_used_mb ?? 0) / 1024) * 100) / 100}`, "GB"],
+              ["Espacio ocupado", formatStorageUsed(storageUsedMb), ""],
               ["Automatizaciones activas", usage.automations_used ?? activeRecurringCount, "activas"],
               ["Documentos cargados", documentsCount, "documentos"],
               ["Pendientes abiertos", tasksCount, "pendientes"],
@@ -678,7 +744,7 @@ export default function ProfessionalAnalyticsPage() {
                 formatLimit(plan.ia_limit) === "No incluido" ? "No incluido" : `${formatLimit(plan.ia_limit)} mensajes`,
               ],
               ["Voz y llamadas", `${plan.calls_minutes ?? 0} min por periodo`],
-              ["Almacenamiento", `${plan.storage_gb ?? 0.5} GB disponibles`],
+              ["Almacenamiento", `${formatStorageCapacity(totalStorageGb)} disponibles`],
               [
                 "Contactos",
                 formatLimit(plan.contacts_limit) === "No incluido" ? "No incluido" : `hasta ${formatLimit(plan.contacts_limit)}`,

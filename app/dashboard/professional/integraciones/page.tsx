@@ -612,6 +612,7 @@ export default function IntegracionesPage() {
           </div>
         </div>
 
+        {false ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold text-[#0F1F63]">Estado actual</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -636,6 +637,7 @@ export default function IntegracionesPage() {
             </div>
           </div>
         </div>
+        ) : null}
       </div>
 
       {statusError && (
@@ -650,6 +652,7 @@ export default function IntegracionesPage() {
         </div>
       ) : null}
 
+      {false ? (
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white/80 p-4">
@@ -676,17 +679,22 @@ export default function IntegracionesPage() {
           </div>
         </div>
       </div>
+      ) : null}
 
+      {false ? (
       <div className="rounded-2xl border border-slate-200 bg-card p-4">
         <p className="text-sm font-semibold text-[#0F1F63]">Conéctelo una vez</p>
         <p className="mt-1 text-sm text-muted-foreground">
           Active aquí sus servicios y después úselos desde Operaly sin tener que reconfigurarlos cada vez.
         </p>
       </div>
+      ) : null}
 
+      {false ? (
       <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
         Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez 🙂
       </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-border bg-card p-4">

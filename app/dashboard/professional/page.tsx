@@ -1239,6 +1239,7 @@ export default function ProfessionalDashboardPage() {
             </div>
           </div>
 
+          {false ? (
           <div className="mt-5 rounded-2xl border border-dashed border-[#D9E1EC] bg-white p-4">
               <p className="text-sm font-semibold text-[#0F1F63]">Lo que ya dejó listo</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1268,10 +1269,12 @@ export default function ProfessionalDashboardPage() {
                 </div>
               </div>
           </div>
+          ) : null}
         </div>
 
       </div>
 
+      {false ? (
       <div className="grid gap-6 xl:grid-cols-2">
         <div className={`rounded-2xl border p-6 ${getRuntimeTone(operationalSignals.phoneStatus).card}`}>
           <div className="flex items-center justify-between gap-3">
@@ -1321,6 +1324,7 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
       </div>
+      ) : null}
 
       <div className="bg-card rounded-2xl border border-border p-6">
         <div className="flex items-center justify-between mb-6">
