@@ -173,6 +173,44 @@ function clampPercentage(value: number) {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
 }
 
+function isPastDate(value: string | null | undefined) {
+  if (!value) return false
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return false
+  return parsed.getTime() < Date.now()
+}
+
+function getResolvedSubscriptionStatus(subscription: SubscriptionRow) {
+  const rawStatus = String(subscription.status || "").toLowerCase()
+  const planCode = String(subscription.plan_code || "").toLowerCase()
+  const expired = isPastDate(subscription.current_period_end)
+
+  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && rawStatus === "active") return "expired"
+  return rawStatus || "inactive"
+}
+
+function getResolvedClientStatus(client: ClientRow) {
+  const rawStatus = String(client.status || "").toLowerCase()
+  const planCode = String(client.plan_code || "").toLowerCase()
+  const expired = isPastDate(client.current_period_end)
+
+  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && rawStatus === "active") return "expired"
+  return rawStatus || "inactive"
+}
+
+function getResolvedStatusLabel(status: string) {
+  if (status === "trial_expired") return "trial expirado"
+  if (status === "expired") return "expirado"
+  if (status === "inactive") return "inactivo"
+  if (status === "blocked") return "bloqueado"
+  if (status === "active") return "activo"
+  if (status === "pending") return "pendiente"
+  if (status === "cancelled") return "cancelado"
+  return status || "sin estado"
+}
+
 function getOwnerPlanLabel(planCode: string | null | undefined) {
   const normalized = String(planCode || "").toLowerCase()
   if (normalized === "owner") return "Owner interno"
@@ -420,6 +458,10 @@ export default function OwnerDashboardPage() {
       return "border-slate-200 bg-slate-100 text-slate-700"
     }
 
+    if (normalized === "trial_expired" || normalized === "expired") {
+      return "border-red-200 bg-red-50 text-red-700"
+    }
+
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
@@ -436,6 +478,10 @@ export default function OwnerDashboardPage() {
 
     if (normalized === "inactive") {
       return "border-slate-200 bg-slate-100 text-slate-700"
+    }
+
+    if (normalized === "trial_expired" || normalized === "expired") {
+      return "border-red-200 bg-red-50 text-red-700"
     }
 
     return "border-slate-200 bg-slate-100 text-slate-700"
@@ -912,7 +958,7 @@ export default function OwnerDashboardPage() {
     )
 
     const activeSubscriptions = filteredSubscriptions.filter(
-      (subscription) => String(subscription.status || "").toLowerCase() === "active"
+      (subscription) => getResolvedSubscriptionStatus(subscription) === "active"
     )
 
     const approvedTotal = approvedPayments.reduce(
@@ -1755,7 +1801,10 @@ export default function OwnerDashboardPage() {
               </div>
 
               <div className="space-y-4">
-                {filteredSubscriptions.map((subscription) => (
+                {filteredSubscriptions.map((subscription) => {
+                  const resolvedStatus = getResolvedSubscriptionStatus(subscription)
+                  const showTrialRecovery = resolvedStatus === "trial_expired"
+                  return (
                   <div
                     key={subscription.id}
                     className="rounded-2xl border border-slate-200 p-4"
@@ -1776,6 +1825,11 @@ export default function OwnerDashboardPage() {
                           Periodo: {formatDateTime(subscription.current_period_start)} →{" "}
                           {formatDateTime(subscription.current_period_end)}
                         </p>
+                        {showTrialRecovery ? (
+                          <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                            Trial vencido. Conviene activar la secuencia comercial de recuperación por 48 horas.
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="text-left xl:text-right">
@@ -1784,15 +1838,16 @@ export default function OwnerDashboardPage() {
                         </p>
                         <span
                           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${subscriptionStatusClass(
-                            subscription.status
+                            resolvedStatus
                           )}`}
                         >
-                          {subscription.status}
+                          {getResolvedStatusLabel(resolvedStatus)}
                         </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
 
                 {filteredSubscriptions.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
@@ -1841,6 +1896,11 @@ export default function OwnerDashboardPage() {
                             Suscripcion: {formatDateShort(client.subscription_started_at || client.created_at)} · Vence:{" "}
                             {formatDateShort(client.current_period_end)}
                           </p>
+                          {getResolvedClientStatus(client) === "trial_expired" ? (
+                            <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                              Trial vencido. Ya deberia entrar a recuperacion comercial por 48 horas.
+                            </p>
+                          ) : null}
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                               <span className="font-semibold text-[#0F1F63]">{client.messages_used.toLocaleString()}</span> mensajes
@@ -1857,10 +1917,10 @@ export default function OwnerDashboardPage() {
                           </span>
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${clientStatusClass(
-                              client.status
+                              getResolvedClientStatus(client)
                             )}`}
                           >
-                            {client.status || "—"}
+                            {getResolvedStatusLabel(getResolvedClientStatus(client))}
                           </span>
                           <ChevronRight className="w-4 h-4 text-slate-400" />
                         </div>
@@ -1915,7 +1975,7 @@ export default function OwnerDashboardPage() {
                             {getOwnerPlanLabel(selectedClient.plan_code)}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
-                            Estado plan: {selectedClient.plan_status || "—"}
+                            Estado plan: {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
                           </p>
                         </div>
 
@@ -1925,10 +1985,10 @@ export default function OwnerDashboardPage() {
                           </p>
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${clientStatusClass(
-                              selectedClient.status
+                              getResolvedClientStatus(selectedClient)
                             )}`}
                           >
-                            {selectedClient.status || "—"}
+                            {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
                           </span>
                         </div>
                       </div>
@@ -2159,14 +2219,19 @@ export default function OwnerDashboardPage() {
                               {formatDateTime(subscription.current_period_start)} →{" "}
                               {formatDateTime(subscription.current_period_end)}
                             </p>
+                            {getResolvedSubscriptionStatus(subscription) === "trial_expired" ? (
+                              <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                                Trial vencido. Conviene pasar a recuperacion comercial y marcarlo como expirado.
+                              </p>
+                            ) : null}
                           </div>
 
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${subscriptionStatusClass(
-                              subscription.status
+                              getResolvedSubscriptionStatus(subscription)
                             )}`}
                           >
-                            {subscription.status}
+                            {getResolvedStatusLabel(getResolvedSubscriptionStatus(subscription))}
                           </span>
                         </div>
                       </div>

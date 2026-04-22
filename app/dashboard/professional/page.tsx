@@ -1164,6 +1164,7 @@ export default function ProfessionalDashboardPage() {
         </div>
       </div>
 
+      {false ? (
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
@@ -1271,6 +1272,7 @@ export default function ProfessionalDashboardPage() {
         </div>
 
       </div>
+      ) : null}
 
       {false ? (
       <div className="grid gap-6 xl:grid-cols-2">
