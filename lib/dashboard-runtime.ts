@@ -61,6 +61,40 @@ export function resolveDashboardPlanLimits(payload: DashboardRuntimePayload | nu
   return (payload?.limits || {}) as Record<string, any>
 }
 
+function readDashboardCurrentPlanStatus(userFacing: Record<string, any> | null | undefined) {
+  const raw = userFacing?.current_plan
+  if (raw && typeof raw === "object") {
+    return String((raw as Record<string, any>).status || (raw as Record<string, any>).plan_status || "")
+  }
+  return ""
+}
+
+export function resolveDashboardPlanStatus(
+  payload: DashboardRuntimePayload | null | undefined,
+  fallback = "trialing"
+) {
+  const resolved = String(
+    readDashboardCurrentPlanStatus(payload?.user_facing) ||
+      payload?.plan?.effective_status ||
+      payload?.plan?.status ||
+      payload?.limits?.effective_status ||
+      payload?.client?.plan_status ||
+      fallback
+  )
+    .trim()
+    .toLowerCase()
+
+  return resolved || String(fallback || "trialing").trim().toLowerCase() || "trialing"
+}
+
+export function isDashboardAccessRestricted(payload: DashboardRuntimePayload | null | undefined) {
+  const status = resolveDashboardPlanStatus(payload)
+  const gateAllowed = payload?.user_facing?.gate_allowed ?? payload?.limits?.gate_allowed
+
+  if (gateAllowed === false) return true
+  return ["expired", "trial_expired", "inactive", "cancelled"].includes(status)
+}
+
 const DASHBOARD_FETCH_TIMEOUT_MS = 12000
 
 async function fetchWithDashboardTimeout(input: string, init: RequestInit) {
