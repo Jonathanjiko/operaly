@@ -513,6 +513,14 @@ export default function ProfessionalDashboardLayout({
   }
 
   const paidPlans = useMemo(() => OPERLAY_PLANS.filter((plan) => plan.code !== "trial"), [])
+  const planTaglines = useMemo(
+    () => ({
+      core: "Empiece a ordenar su dia con capacidad estable.",
+      pro: "La opcion mas equilibrada para usar Operaly de verdad.",
+      pro_plus: "La capa mas completa para operar con mas amplitud.",
+    }),
+    []
+  )
   const isExpiredTrial = accessRestricted && planCode === "trial"
 
   if (checkingAccess) {
@@ -869,7 +877,7 @@ export default function ProfessionalDashboardLayout({
           setUpgradeOpen(nextOpen)
         }}
       >
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-5xl rounded-[28px] border-white/70 bg-white/95 p-0 shadow-2xl" showCloseButton={!accessRestricted}>
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-6xl rounded-[28px] border-white/70 bg-white/95 p-0 shadow-2xl" showCloseButton={!accessRestricted}>
           <div className="overflow-y-auto rounded-[28px] [-webkit-overflow-scrolling:touch]">
             <div className="bg-[radial-gradient(circle_at_top_left,_rgba(236,72,153,0.22),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,211,238,0.18),_transparent_28%),linear-gradient(135deg,#0F1F63_0%,#1D4ED8_50%,#06B6D4_100%)] px-6 pb-7 pt-6 text-white md:px-8 md:pb-8 md:pt-7">
               <DialogHeader className="text-left">
@@ -903,11 +911,11 @@ export default function ProfessionalDashboardLayout({
               </DialogHeader>
             </div>
 
-            <div className="grid gap-4 p-4 sm:p-5 md:grid-cols-3 md:p-6">
+            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3 lg:gap-5 lg:p-6">
               {paidPlans.map((plan) => (
                 <div
                   key={plan.code}
-                  className={`flex h-full flex-col rounded-[24px] border p-5 shadow-sm ${
+                  className={`flex h-full min-h-[380px] flex-col rounded-[24px] border p-5 shadow-sm lg:min-h-[410px] ${
                     plan.code === "pro"
                       ? "border-[#7C3AED]/30 bg-[linear-gradient(180deg,rgba(15,31,99,0.98),rgba(29,78,216,0.96))] text-white"
                       : "border-slate-200 bg-white text-[#0F1F63]"
@@ -928,16 +936,27 @@ export default function ProfessionalDashboardLayout({
                     {plan.billingPeriodLabel}
                   </p>
                   <p className={`mt-4 text-sm leading-6 ${plan.code === "pro" ? "text-white/85" : "text-slate-600"}`}>
-                    {plan.description}
+                    {planTaglines[plan.code as keyof typeof planTaglines] || plan.description}
                   </p>
-                  <ul className={`mt-4 space-y-2 text-sm ${plan.code === "pro" ? "text-white/90" : "text-slate-600"}`}>
-                    {plan.features.slice(0, 4).map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-current" />
-                        <span>{feature}</span>
-                      </li>
+                  <div className="mt-5 grid grid-cols-1 gap-2">
+                    {plan.features.slice(0, 3).map((feature) => (
+                      <div
+                        key={feature}
+                        className={`rounded-2xl border px-3 py-2 text-sm font-medium ${
+                          plan.code === "pro"
+                            ? "border-white/12 bg-white/10 text-white"
+                            : "border-slate-200 bg-slate-50 text-slate-700"
+                        }`}
+                      >
+                        {feature}
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+                  <p className={`mt-4 text-xs leading-5 ${plan.code === "pro" ? "text-white/70" : "text-slate-500"}`}>
+                    {plan.features[3]}
+                    {plan.features[4] ? ` · ${plan.features[4]}` : ""}
+                  </p>
+                  <div className="mt-6 flex-1" />
                   <Button
                     className={`h-11 w-full rounded-xl text-sm font-semibold ${
                       plan.code === "pro"
