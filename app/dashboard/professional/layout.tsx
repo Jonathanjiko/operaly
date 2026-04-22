@@ -5,6 +5,14 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import NotificationBell from "@/components/dashboard/NotificationBell"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,10 +46,18 @@ import {
   UserRound,
   Users,
   Zap,
+  Lock,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { labelForLanguage } from "@/lib/runtime-locale"
+import {
+  fetchDashboardRuntime,
+  isDashboardAccessRestricted,
+  resolveDashboardPlanCode,
+  resolveDashboardPlanStatus,
+} from "@/lib/dashboard-runtime"
+import { OPERLAY_PLANS, getDisplayPlanName } from "@/lib/plans"
 
 const sidebarItems = [
   { href: "/dashboard/professional", label: "Dashboard", icon: LayoutDashboard },
@@ -69,6 +85,12 @@ type SidebarProfile = {
   email: string
   preferredLanguage: string
 }
+
+const restrictedSettingsRoutes = new Set([
+  "/dashboard/professional/asistente",
+  "/dashboard/professional/voz",
+  "/dashboard/professional/integraciones",
+])
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard/professional": {
@@ -132,9 +154,13 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 function UserMenu({
   profile,
   onLogout,
+  accessRestricted,
+  onUpgradeRequest,
 }: {
   profile: SidebarProfile
   onLogout: () => Promise<void>
+  accessRestricted: boolean
+  onUpgradeRequest: () => void
 }) {
   return (
     <DropdownMenu>
@@ -169,24 +195,43 @@ function UserMenu({
               Configuración
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/dashboard/professional/asistente" className="rounded-xl px-3 py-2">
-              <Bot className="h-4 w-4" />
-              Asistente
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/dashboard/professional/voz" className="rounded-xl px-3 py-2">
-              <Mic className="h-4 w-4" />
-              Voz
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/dashboard/professional/integraciones" className="rounded-xl px-3 py-2">
-              <Plug className="h-4 w-4" />
-              Integraciones
-            </Link>
-          </DropdownMenuItem>
+          {accessRestricted ? (
+            <>
+              <DropdownMenuItem className="rounded-xl px-3 py-2 text-slate-400" onClick={onUpgradeRequest}>
+                <Bot className="h-4 w-4" />
+                Asistente
+              </DropdownMenuItem>
+              <DropdownMenuItem className="rounded-xl px-3 py-2 text-slate-400" onClick={onUpgradeRequest}>
+                <Mic className="h-4 w-4" />
+                Voz
+              </DropdownMenuItem>
+              <DropdownMenuItem className="rounded-xl px-3 py-2 text-slate-400" onClick={onUpgradeRequest}>
+                <Plug className="h-4 w-4" />
+                Integraciones
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/professional/asistente" className="rounded-xl px-3 py-2">
+                  <Bot className="h-4 w-4" />
+                  Asistente
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/professional/voz" className="rounded-xl px-3 py-2">
+                  <Mic className="h-4 w-4" />
+                  Voz
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/professional/integraciones" className="rounded-xl px-3 py-2">
+                  <Plug className="h-4 w-4" />
+                  Integraciones
+                </Link>
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem asChild>
             <Link href="/precios" className="rounded-xl px-3 py-2">
               <CreditCard className="h-4 w-4" />
@@ -221,6 +266,11 @@ export default function ProfessionalDashboardLayout({
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [checkingAccess, setCheckingAccess] = useState(true)
+  const [planCode, setPlanCode] = useState("trial")
+  const [planStatus, setPlanStatus] = useState("trialing")
+  const [accessRestricted, setAccessRestricted] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
   const [profile, setProfile] = useState<SidebarProfile>({
     fullName: "Tu cuenta",
     initials: "OP",
@@ -281,6 +331,25 @@ export default function ProfessionalDashboardLayout({
           email: String(user.email || ""),
           preferredLanguage: String(meta.preferred_language || meta.language || "es"),
         })
+
+        try {
+          const runtime = await fetchDashboardRuntime()
+          const resolvedPlan = resolveDashboardPlanCode(runtime, String(meta.selected_plan || "trial"))
+          const resolvedStatus = resolveDashboardPlanStatus(runtime, "trialing")
+          const restricted = isDashboardAccessRestricted(runtime)
+
+          setPlanCode(resolvedPlan)
+          setPlanStatus(resolvedStatus)
+          setAccessRestricted(restricted)
+          setUpgradeOpen(restricted)
+
+          if (restricted && restrictedSettingsRoutes.has(pathname)) {
+            router.replace("/dashboard/professional/configuracion")
+            return
+          }
+        } catch (runtimeError) {
+          console.error("Error validando estado del plan en dashboard:", runtimeError)
+        }
       } catch (err) {
         console.error(err)
         router.replace("/login")
@@ -290,7 +359,7 @@ export default function ProfessionalDashboardLayout({
     }
 
     void loadProfile()
-  }, [router])
+  }, [pathname, router])
 
   useEffect(() => {
     setMobileOpen(false)
@@ -303,6 +372,32 @@ export default function ProfessionalDashboardLayout({
       router.replace("/login")
     }
   }
+
+  const handleUpgradeCheckout = async (selectedPlanCode: string) => {
+    setCheckoutLoading(selectedPlanCode)
+    try {
+      const res = await fetch("/api/payments/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planCode: selectedPlanCode, provider: "mercadopago" }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.ok) {
+        throw new Error(String(data?.error || data?.detail || "No se pudo iniciar el cobro."))
+      }
+      const url = data.checkout_url || data.init_point || data.payment_url || ""
+      if (!url) throw new Error("No se pudo generar el link de pago.")
+      window.location.href = url
+    } catch (error) {
+      console.error(error)
+      alert(error instanceof Error ? error.message : "No se pudo iniciar el pago.")
+    } finally {
+      setCheckoutLoading(null)
+    }
+  }
+
+  const paidPlans = useMemo(() => OPERLAY_PLANS.filter((plan) => plan.code !== "trial"), [])
+  const isExpiredTrial = accessRestricted && planCode === "trial"
 
   if (checkingAccess) {
     return (
@@ -337,26 +432,57 @@ export default function ProfessionalDashboardLayout({
 
           <div className="flex items-center gap-2">
             <NotificationBell />
-            <UserMenu profile={profile} onLogout={handleLogout} />
+            <UserMenu
+              profile={profile}
+              onLogout={handleLogout}
+              accessRestricted={accessRestricted}
+              onUpgradeRequest={() => setUpgradeOpen(true)}
+            />
           </div>
         </div>
         <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
           <Link
-            href="/dashboard/professional/asistente"
+            href={accessRestricted ? "#" : "/dashboard/professional/asistente"}
+            onClick={(event) => {
+              if (accessRestricted) {
+                event.preventDefault()
+                setUpgradeOpen(true)
+              }
+            }}
             className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 text-xs font-semibold text-white shadow-sm"
           >
             <MessageCircleMore className="h-4 w-4" />
-            Subir de plan
+            {accessRestricted ? "Activar plan" : "Subir de plan"}
           </Link>
           <Link
-            href="/dashboard/professional/voz"
-            className="inline-flex h-10 shrink-0 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-[#0F1F63]"
+            href={accessRestricted ? "#" : "/dashboard/professional/voz"}
+            onClick={(event) => {
+              if (accessRestricted) {
+                event.preventDefault()
+                setUpgradeOpen(true)
+              }
+            }}
+            className={`inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-xs font-semibold ${
+              accessRestricted
+                ? "border-slate-200 bg-slate-100 text-slate-400"
+                : "border-slate-200 bg-white text-[#0F1F63]"
+            }`}
           >
             Ajustar voz
           </Link>
           <Link
-            href="/dashboard/professional/integraciones"
-            className="inline-flex h-10 shrink-0 items-center rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-[#0F1F63]"
+            href={accessRestricted ? "#" : "/dashboard/professional/integraciones"}
+            onClick={(event) => {
+              if (accessRestricted) {
+                event.preventDefault()
+                setUpgradeOpen(true)
+              }
+            }}
+            className={`inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-xs font-semibold ${
+              accessRestricted
+                ? "border-slate-200 bg-slate-100 text-slate-400"
+                : "border-slate-200 bg-white text-[#0F1F63]"
+            }`}
           >
             Integraciones
           </Link>
@@ -480,16 +606,28 @@ export default function ProfessionalDashboardLayout({
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={accessRestricted ? "#" : item.href}
+                  onClick={(event) => {
+                    if (accessRestricted) {
+                      event.preventDefault()
+                      setUpgradeOpen(true)
+                    }
+                  }}
                   className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-all ${
                     isActive
                       ? "bg-gradient-to-r from-[#7C3AED]/10 to-[#3B82F6]/10 text-[#0F1F63] shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
+                      : accessRestricted
+                        ? "text-slate-400"
+                        : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
                   } ${collapsed ? "justify-center px-0" : ""}`}
                 >
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
-                      isActive ? "bg-white text-[#7C3AED] shadow-sm" : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                      isActive
+                        ? "bg-white text-[#7C3AED] shadow-sm"
+                        : accessRestricted
+                          ? "bg-slate-100 text-slate-400"
+                          : "bg-slate-100 text-slate-500 group-hover:bg-white"
                     }`}
                   >
                     <item.icon className="h-4 w-4" />
@@ -517,10 +655,16 @@ export default function ProfessionalDashboardLayout({
             <div className="flex items-center gap-3">
               <div className="hidden items-center gap-2 xl:flex">
                 <Link
-                  href="/dashboard/professional/configuracion"
+                  href={accessRestricted ? "#" : "/dashboard/professional/configuracion"}
+                  onClick={(event) => {
+                    if (accessRestricted) {
+                      event.preventDefault()
+                      setUpgradeOpen(true)
+                    }
+                  }}
                   className="rounded-2xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#06B6D4] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
                 >
-                  Subir de plan
+                  {accessRestricted ? "Activar plan" : "Subir de plan"}
                 </Link>
                 <Link
                   href="/dashboard/professional/contactos"
@@ -536,15 +680,147 @@ export default function ProfessionalDashboardLayout({
                 </Link>
               </div>
               <NotificationBell />
-              <UserMenu profile={profile} onLogout={handleLogout} />
+              <UserMenu
+                profile={profile}
+                onLogout={handleLogout}
+                accessRestricted={accessRestricted}
+                onUpgradeRequest={() => setUpgradeOpen(true)}
+              />
             </div>
           </div>
         </header>
 
-        <main className="px-4 pb-8 pt-28 sm:px-6 lg:px-8 lg:pt-8">
-          <div className="mx-auto w-full max-w-[1500px]">{children}</div>
+        <main className="relative px-4 pb-8 pt-28 sm:px-6 lg:px-8 lg:pt-8">
+          {accessRestricted ? (
+            <div className="absolute inset-0 z-20 rounded-[32px] bg-white/55 backdrop-blur-[2px]">
+              <div className="sticky top-24 mx-auto flex max-w-2xl justify-center px-4">
+                <div className="pointer-events-auto w-full rounded-[28px] border border-white/80 bg-white/96 p-6 shadow-2xl shadow-slate-900/10">
+                  <div className="flex items-start gap-4">
+                    <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0F1F63] to-[#7C3AED] text-white shadow-sm">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7C3AED]">
+                        {isExpiredTrial ? "Prueba finalizada" : "Cuenta restringida"}
+                      </p>
+                      <h2 className="mt-2 text-2xl font-semibold leading-tight text-[#0F1F63]">
+                        {isExpiredTrial
+                          ? "Su trial ya terminó. Ahora su dashboard queda solo para consulta."
+                          : "Su cuenta necesita un plan vigente para volver a operar."}
+                      </h2>
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        Puede revisar su información sin problema, pero crear, editar, eliminar, subir, descargar o
+                        activar módulos como asistente, voz e integraciones queda bloqueado hasta completar su pago.
+                      </p>
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        <Button
+                          className="h-11 rounded-xl bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#7C3AED] px-5 text-sm font-semibold text-white hover:opacity-95"
+                          onClick={() => setUpgradeOpen(true)}
+                        >
+                          Ver planes y continuar
+                        </Button>
+                        <Link
+                          href="/dashboard/professional/analiticas"
+                          className="inline-flex h-11 items-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-[#0F1F63] transition hover:border-slate-300"
+                        >
+                          Ver mi consumo
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div
+            className={`mx-auto w-full max-w-[1500px] ${
+              accessRestricted ? "pointer-events-none select-none opacity-75" : ""
+            }`}
+          >
+            {children}
+          </div>
         </main>
       </div>
+
+      <Dialog
+        open={upgradeOpen}
+        onOpenChange={(nextOpen) => {
+          if (accessRestricted && !nextOpen) return
+          setUpgradeOpen(nextOpen)
+        }}
+      >
+        <DialogContent className="max-w-4xl rounded-[28px] border-white/70 bg-white/95 p-0 shadow-2xl" showCloseButton={!accessRestricted}>
+          <div className="overflow-hidden rounded-[28px]">
+            <div className="bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.22),_transparent_35%),linear-gradient(135deg,#0F1F63_0%,#1D4ED8_55%,#06B6D4_100%)] p-8 text-white">
+              <DialogHeader className="text-left">
+                <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
+                  <Lock className="h-3.5 w-3.5" />
+                  {isExpiredTrial ? "Trial vencido" : "Acceso restringido"}
+                </div>
+                <DialogTitle className="text-3xl font-semibold leading-tight">
+                  {isExpiredTrial
+                    ? "Su prueba terminó. Active un plan para seguir usando Operaly."
+                    : "Este módulo se activa cuando su plan ya está vigente."}
+                </DialogTitle>
+                <DialogDescription className="max-w-2xl text-sm text-white/80">
+                  Puede seguir mirando su información, pero para crear, editar, subir, borrar o volver a usar voz,
+                  asistente e integraciones necesita activar un plan pago.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="grid gap-5 p-6 md:grid-cols-3">
+              {paidPlans.map((plan) => (
+                <div
+                  key={plan.code}
+                  className={`rounded-[24px] border p-5 shadow-sm ${
+                    plan.code === "pro"
+                      ? "border-[#7C3AED]/30 bg-[linear-gradient(180deg,rgba(15,31,99,0.98),rgba(29,78,216,0.96))] text-white"
+                      : "border-slate-200 bg-white text-[#0F1F63]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{getDisplayPlanName(plan.code)}</p>
+                    {plan.popular ? (
+                      <span className="rounded-full bg-[#EC4899] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                        Más elegido
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-4 text-4xl font-semibold">
+                    {plan.price === 0 ? "Gratis" : `S/${plan.price}`}
+                  </p>
+                  <p className={`mt-1 text-sm ${plan.code === "pro" ? "text-white/80" : "text-slate-500"}`}>
+                    {plan.billingPeriodLabel}
+                  </p>
+                  <p className={`mt-4 text-sm leading-6 ${plan.code === "pro" ? "text-white/85" : "text-slate-600"}`}>
+                    {plan.description}
+                  </p>
+                  <ul className={`mt-4 space-y-2 text-sm ${plan.code === "pro" ? "text-white/90" : "text-slate-600"}`}>
+                    {plan.features.slice(0, 4).map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-current" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    className={`mt-6 h-11 w-full rounded-xl text-sm font-semibold ${
+                      plan.code === "pro"
+                        ? "bg-white text-[#0F1F63] hover:bg-white/90"
+                        : "bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white hover:opacity-95"
+                    }`}
+                    disabled={checkoutLoading === plan.code}
+                    onClick={() => void handleUpgradeCheckout(plan.code)}
+                  >
+                    {checkoutLoading === plan.code ? "Redirigiendo..." : `Elegir ${getDisplayPlanName(plan.code)}`}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
