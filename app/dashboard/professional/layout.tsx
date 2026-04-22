@@ -613,10 +613,11 @@ export default function ProfessionalDashboardLayout({
       ) : null}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full overflow-y-auto border-r border-white/70 bg-white/88 shadow-xl backdrop-blur-xl transition-all duration-300 ${
+        className={`fixed top-0 left-0 z-50 h-[100dvh] overflow-hidden border-r border-white/70 bg-white/88 shadow-xl backdrop-blur-xl transition-all duration-300 ${
           collapsed ? "w-[92px]" : "w-[290px]"
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
+        <div className="flex h-full min-h-0 flex-col">
         <div className="flex h-20 items-center justify-between border-b border-slate-100 px-5">
           {!collapsed ? (
             <Link href="/dashboard/professional" className="flex items-center gap-3">
@@ -653,6 +654,7 @@ export default function ProfessionalDashboardLayout({
           </div>
         </div>
 
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 [-webkit-overflow-scrolling:touch]">
         <div className={`px-4 py-4 ${collapsed ? "px-3" : ""}`}>
           <div
             className={`rounded-3xl border border-[#E9D5FF]/60 bg-[linear-gradient(135deg,rgba(124,58,237,0.10),rgba(59,130,246,0.10),rgba(6,182,212,0.08))] p-4 ${
@@ -753,6 +755,8 @@ export default function ProfessionalDashboardLayout({
               )
             })}
           </nav>
+        </div>
+        </div>
         </div>
       </aside>
 
@@ -865,31 +869,45 @@ export default function ProfessionalDashboardLayout({
           setUpgradeOpen(nextOpen)
         }}
       >
-        <DialogContent className="max-w-4xl rounded-[28px] border-white/70 bg-white/95 p-0 shadow-2xl" showCloseButton={!accessRestricted}>
-          <div className="overflow-hidden rounded-[28px]">
-            <div className="bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.22),_transparent_35%),linear-gradient(135deg,#0F1F63_0%,#1D4ED8_55%,#06B6D4_100%)] p-8 text-white">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1.5rem)] max-w-5xl rounded-[28px] border-white/70 bg-white/95 p-0 shadow-2xl" showCloseButton={!accessRestricted}>
+          <div className="overflow-y-auto rounded-[28px] [-webkit-overflow-scrolling:touch]">
+            <div className="bg-[radial-gradient(circle_at_top_left,_rgba(236,72,153,0.22),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(34,211,238,0.18),_transparent_28%),linear-gradient(135deg,#0F1F63_0%,#1D4ED8_50%,#06B6D4_100%)] px-6 pb-7 pt-6 text-white md:px-8 md:pb-8 md:pt-7">
               <DialogHeader className="text-left">
                 <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
                   <Lock className="h-3.5 w-3.5" />
                   {isExpiredTrial ? "Trial vencido" : "Acceso restringido"}
                 </div>
-                <DialogTitle className="text-3xl font-semibold leading-tight">
+                <p className="max-w-2xl text-sm font-medium text-cyan-100">
+                  No pierda su memoria, su asistente ni el ritmo de su día.
+                </p>
+                <DialogTitle className="mt-3 max-w-3xl text-3xl font-semibold leading-tight md:text-[2.55rem]">
                   {isExpiredTrial
                     ? "Su prueba terminó. Active un plan para seguir usando Operaly."
                     : "Este módulo se activa cuando su plan ya está vigente."}
                 </DialogTitle>
-                <DialogDescription className="max-w-2xl text-sm text-white/80">
+                <DialogDescription className="mt-3 max-w-2xl text-sm leading-6 text-white/85 md:text-[15px]">
                   Puede seguir mirando su información, pero para crear, editar, subir, borrar o volver a usar voz,
                   asistente e integraciones necesita activar un plan pago.
                 </DialogDescription>
+                <div className="mt-5 grid gap-3 text-sm text-white/90 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+                    Retome pendientes, contactos y documentos sin volver a empezar.
+                  </div>
+                  <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+                    Mantenga su seguimiento, recordatorios y orden activo.
+                  </div>
+                  <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+                    Active su plan y vaya directo a su pago sin salir de Operaly.
+                  </div>
+                </div>
               </DialogHeader>
             </div>
 
-            <div className="grid gap-5 p-6 md:grid-cols-3">
+            <div className="grid gap-4 p-4 sm:p-5 md:grid-cols-3 md:p-6">
               {paidPlans.map((plan) => (
                 <div
                   key={plan.code}
-                  className={`rounded-[24px] border p-5 shadow-sm ${
+                  className={`flex h-full flex-col rounded-[24px] border p-5 shadow-sm ${
                     plan.code === "pro"
                       ? "border-[#7C3AED]/30 bg-[linear-gradient(180deg,rgba(15,31,99,0.98),rgba(29,78,216,0.96))] text-white"
                       : "border-slate-200 bg-white text-[#0F1F63]"
@@ -903,7 +921,7 @@ export default function ProfessionalDashboardLayout({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-4 text-4xl font-semibold">
+                  <p className="mt-4 text-[2.4rem] font-semibold leading-none">
                     {plan.price === 0 ? "Gratis" : `S/${plan.price}`}
                   </p>
                   <p className={`mt-1 text-sm ${plan.code === "pro" ? "text-white/80" : "text-slate-500"}`}>
@@ -921,7 +939,7 @@ export default function ProfessionalDashboardLayout({
                     ))}
                   </ul>
                   <Button
-                    className={`mt-6 h-11 w-full rounded-xl text-sm font-semibold ${
+                    className={`h-11 w-full rounded-xl text-sm font-semibold ${
                       plan.code === "pro"
                         ? "bg-white text-[#0F1F63] hover:bg-white/90"
                         : "bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white hover:opacity-95"
@@ -940,3 +958,6 @@ export default function ProfessionalDashboardLayout({
     </div>
   )
 }
+
+
+
