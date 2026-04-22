@@ -17,6 +17,8 @@ export type DashboardRuntimePayload = {
   offers?: Array<Record<string, any>>
   addon_offers?: Array<Record<string, any>>
   user_facing?: Record<string, any> | null
+  commercial_status?: Record<string, any> | null
+  recovery?: Record<string, any> | null
 }
 
 export function toNumber(value: unknown) {
@@ -69,30 +71,62 @@ function readDashboardCurrentPlanStatus(userFacing: Record<string, any> | null |
   return ""
 }
 
+function normalizeStatus(value: unknown, fallback = "") {
+  return String(value ?? fallback)
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeBooleanLike(value: unknown) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === "true") return true
+    if (normalized === "false") return false
+  }
+  return null
+}
+
 export function resolveDashboardPlanStatus(
   payload: DashboardRuntimePayload | null | undefined,
   fallback = "trialing"
 ) {
-  const resolved = String(
-    readDashboardCurrentPlanStatus(payload?.user_facing) ||
+  const resolved = normalizeStatus(
+    payload?.user_facing?.account_status ||
+      payload?.commercial_status?.professional_dashboard_status ||
+      payload?.plan?.canonical_status ||
+      readDashboardCurrentPlanStatus(payload?.user_facing) ||
       payload?.plan?.effective_status ||
       payload?.plan?.status ||
       payload?.limits?.effective_status ||
       payload?.client?.plan_status ||
       fallback
   )
-    .trim()
-    .toLowerCase()
 
-  return resolved || String(fallback || "trialing").trim().toLowerCase() || "trialing"
+  return resolved || normalizeStatus(fallback || "trialing") || "trialing"
 }
 
 export function isDashboardAccessRestricted(payload: DashboardRuntimePayload | null | undefined) {
   const status = resolveDashboardPlanStatus(payload)
-  const gateAllowed = payload?.user_facing?.gate_allowed ?? payload?.limits?.gate_allowed
+  const gateAllowed =
+    normalizeBooleanLike(payload?.user_facing?.gate_allowed) ??
+    normalizeBooleanLike(payload?.limits?.gate_allowed)
+  const blockedReason = normalizeStatus(
+    payload?.user_facing?.blocked_reason || payload?.plan?.blocked_reason || payload?.commercial_status?.blocked_reason
+  )
 
   if (gateAllowed === false) return true
-  return ["expired", "trial_expired", "inactive", "cancelled"].includes(status)
+  if (blockedReason) return true
+  return [
+    "expired",
+    "trial_expired",
+    "paid_expired",
+    "inactive",
+    "cancelled",
+    "blocked",
+    "restricted",
+    "recovery_finished",
+  ].includes(status)
 }
 
 const DASHBOARD_FETCH_TIMEOUT_MS = 12000
