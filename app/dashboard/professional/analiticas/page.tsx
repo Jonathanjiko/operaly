@@ -205,6 +205,7 @@ export default function ProfessionalAnalyticsPage() {
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [storageUsedMb, setStorageUsedMb] = useState(0)
   const [resolvedPlanCode, setResolvedPlanCode] = useState("")
+  const [accountStatus, setAccountStatus] = useState("")
 
   const loadAnalytics = async () => {
     setLoading(true)
@@ -222,11 +223,22 @@ export default function ProfessionalAnalyticsPage() {
           const plan = dashboardRuntime.plan || {}
           const featureAccess = dashboardRuntime.feature_access || runtimeLimits || {}
           const runtimePlanCode = resolveDashboardPlanCode(dashboardRuntime, fallbackPlanCode)
+          const runtimeAccountStatus = String(
+            dashboardRuntime.user_facing?.account_status ||
+              dashboardRuntime.user_facing?.current_plan?.status ||
+              dashboardRuntime.plan?.canonical_status ||
+              dashboardRuntime.plan?.effective_status ||
+              dashboardRuntime.commercial_status?.professional_dashboard_status ||
+              ""
+          )
+            .trim()
+            .toLowerCase()
           const numericPlanLimits = dashboardRuntime.user_facing?.plan_limits_numeric || {}
           const resolvedStorageGb =
             toNumber(plan?.storage_gb ?? numericPlanLimits?.storage_gb ?? runtimeLimits?.storage_gb) ||
             toNumber(runtimeLimits?.max_storage_mb) / 1024
           setResolvedPlanCode(runtimePlanCode)
+          setAccountStatus(runtimeAccountStatus)
 
           setLimits({
             effective_plan_code: runtimePlanCode || null,
@@ -285,6 +297,7 @@ export default function ProfessionalAnalyticsPage() {
                 String(tel.plan_code || tel.effective_plan_code || fallbackPlanCode).trim().toLowerCase() ||
                 fallbackPlanCode
               setResolvedPlanCode(legacyPlanCode)
+              setAccountStatus(String(tel.effective_status || "").trim().toLowerCase())
               setLimits({
                 effective_plan_code: legacyPlanCode,
                 plan: { plan_type: legacyPlanCode, calls_minutes: tel.max_audio_minutes || 0 },
@@ -380,6 +393,20 @@ export default function ProfessionalAnalyticsPage() {
   const effectivePlanCode = String(resolvedPlanCode || limits?.effective_plan_code || getEffectivePlanCode(limits) || "trial")
     .trim()
     .toLowerCase() || "trial"
+  const readableAccountStatus =
+    accountStatus === "trial_expired"
+      ? "Trial expirado"
+      : accountStatus === "paid_expired" || accountStatus === "expired"
+        ? "Plan expirado"
+        : accountStatus === "trial_active"
+          ? "Trial activo"
+          : accountStatus === "paid_active" || accountStatus === "active"
+            ? "Activa"
+            : accountStatus === "restricted"
+              ? "Restringida"
+              : accountStatus
+                ? accountStatus.replace(/_/g, " ")
+                : "Activa"
   const totalStorageGb = Number(plan.storage_gb ?? lim.storage_gb_total ?? 0)
   const storageValueLabel = `${formatStorageUsed(storageUsedMb)} / ${formatStorageCapacity(totalStorageGb)}`
 
@@ -511,6 +538,12 @@ export default function ProfessionalAnalyticsPage() {
           <p className="text-sm font-semibold text-[#0F1F63]">Actualizacion simple</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Si acaba de hacer un cambio, actualice esta pantalla y revise el consumo de nuevo.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Estado actual</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {readableAccountStatus}. Esta lectura sigue el mismo estado operativo del runtime.
           </p>
         </div>
       </div>

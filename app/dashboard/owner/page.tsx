@@ -81,6 +81,9 @@ type SubscriptionRow = {
   current_period_start: string | null
   current_period_end: string | null
   created_at: string
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  recovery_status?: string | null
 }
 
 type ClientRow = {
@@ -103,6 +106,17 @@ type ClientRow = {
   automations_used: number
   storage_used_mb: number
   docs_count: number
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  professional_dashboard_status?: string | null
+  recovery_status?: string | null
+  recovery_started_at?: string | null
+  recovery_ends_at?: string | null
+  recovery_last_message_at?: string | null
+  recovery_messages_sent?: number
+  converted_after_recovery?: boolean
+  blocked_reason?: string | null
+  gate_allowed?: boolean
 }
 
 type OwnerActivityEntry = {
@@ -181,6 +195,12 @@ function isPastDate(value: string | null | undefined) {
 }
 
 function getResolvedSubscriptionStatus(subscription: SubscriptionRow) {
+  const ownerStatus = String(subscription.owner_dashboard_status || "").toLowerCase()
+  if (ownerStatus) return ownerStatus
+  const canonicalStatus = String(subscription.canonical_status || "").toLowerCase()
+  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
+  if (canonicalStatus === "paid_expired") return "expired"
+  if (canonicalStatus) return canonicalStatus
   const rawStatus = String(subscription.status || "").toLowerCase()
   const planCode = String(subscription.plan_code || "").toLowerCase()
   const expired = isPastDate(subscription.current_period_end)
@@ -191,6 +211,12 @@ function getResolvedSubscriptionStatus(subscription: SubscriptionRow) {
 }
 
 function getResolvedClientStatus(client: ClientRow) {
+  const ownerStatus = String(client.owner_dashboard_status || "").toLowerCase()
+  if (ownerStatus) return ownerStatus
+  const canonicalStatus = String(client.canonical_status || "").toLowerCase()
+  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
+  if (canonicalStatus === "paid_expired") return "expired"
+  if (canonicalStatus) return canonicalStatus
   const rawStatus = String(client.status || "").toLowerCase()
   const planCode = String(client.plan_code || "").toLowerCase()
   const expired = isPastDate(client.current_period_end)
@@ -201,13 +227,18 @@ function getResolvedClientStatus(client: ClientRow) {
 }
 
 function getResolvedStatusLabel(status: string) {
+  if (status === "trial_recovery_active") return "trial expirado en recuperación"
   if (status === "trial_expired") return "trial expirado"
   if (status === "expired") return "expirado"
   if (status === "inactive") return "inactivo"
   if (status === "blocked") return "bloqueado"
   if (status === "active") return "activo"
+  if (status === "paid_expired") return "expirado"
+  if (status === "trial_active") return "trial activo"
+  if (status === "paid_active") return "activo"
   if (status === "pending") return "pendiente"
   if (status === "cancelled") return "cancelado"
+  if (status === "converted") return "convertido"
   return status || "sin estado"
 }
 
@@ -462,6 +493,10 @@ export default function OwnerDashboardPage() {
       return "border-red-200 bg-red-50 text-red-700"
     }
 
+    if (normalized === "trial_recovery_active") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
+    }
+
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
@@ -482,6 +517,10 @@ export default function OwnerDashboardPage() {
 
     if (normalized === "trial_expired" || normalized === "expired") {
       return "border-red-200 bg-red-50 text-red-700"
+    }
+
+    if (normalized === "trial_recovery_active") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
     }
 
     return "border-slate-200 bg-slate-100 text-slate-700"
@@ -1896,9 +1935,11 @@ export default function OwnerDashboardPage() {
                             Suscripcion: {formatDateShort(client.subscription_started_at || client.created_at)} · Vence:{" "}
                             {formatDateShort(client.current_period_end)}
                           </p>
-                          {getResolvedClientStatus(client) === "trial_expired" ? (
+                          {["trial_expired", "trial_recovery_active"].includes(getResolvedClientStatus(client)) ? (
                             <p className="mt-2 text-xs font-medium text-[#C2410C]">
-                              Trial vencido. Ya deberia entrar a recuperacion comercial por 48 horas.
+                              {getResolvedClientStatus(client) === "trial_recovery_active"
+                                ? "Trial vencido. La recuperación comercial sigue activa dentro de la ventana de 48 horas."
+                                : "Trial vencido. Ya debería entrar a recuperación comercial por 48 horas."}
                             </p>
                           ) : null}
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1977,6 +2018,14 @@ export default function OwnerDashboardPage() {
                           <p className="text-xs text-slate-500 mt-1">
                             Estado plan: {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
                           </p>
+                          {selectedClient.recovery_status && selectedClient.recovery_status !== "inactive" ? (
+                            <p className="mt-2 text-xs text-[#C2410C]">
+                              Recuperación: {getResolvedStatusLabel(selectedClient.recovery_status)}.
+                              {selectedClient.recovery_ends_at
+                                ? ` Ventana hasta ${formatDateTime(selectedClient.recovery_ends_at)}.`
+                                : ""}
+                            </p>
+                          ) : null}
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
@@ -2219,9 +2268,11 @@ export default function OwnerDashboardPage() {
                               {formatDateTime(subscription.current_period_start)} →{" "}
                               {formatDateTime(subscription.current_period_end)}
                             </p>
-                            {getResolvedSubscriptionStatus(subscription) === "trial_expired" ? (
+                            {["trial_expired", "trial_recovery_active"].includes(getResolvedSubscriptionStatus(subscription)) ? (
                               <p className="mt-2 text-xs font-medium text-[#C2410C]">
-                                Trial vencido. Conviene pasar a recuperacion comercial y marcarlo como expirado.
+                                {getResolvedSubscriptionStatus(subscription) === "trial_recovery_active"
+                                  ? "Trial vencido. La recuperación comercial está activa y ya no debería verse como activo."
+                                  : "Trial vencido. Conviene pasar a recuperación comercial y marcarlo como expirado."}
                               </p>
                             ) : null}
                           </div>

@@ -24,6 +24,17 @@ type ClientRow = {
   automations_used: number
   storage_used_mb: number
   docs_count: number
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  professional_dashboard_status?: string | null
+  recovery_status?: string | null
+  recovery_started_at?: string | null
+  recovery_ends_at?: string | null
+  recovery_last_message_at?: string | null
+  recovery_messages_sent?: number
+  converted_after_recovery?: boolean
+  blocked_reason?: string | null
+  gate_allowed?: boolean
 }
 
 type PaymentRow = {
@@ -58,6 +69,18 @@ type SubscriptionRow = {
   current_period_start: string | null
   current_period_end: string | null
   created_at: string
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  recovery_status?: string | null
+}
+
+type RecoverySnapshot = {
+  status?: string | null
+  started_at?: string | null
+  ends_at?: string | null
+  last_message_at?: string | null
+  messages_sent?: number | null
+  converted_after_recovery?: boolean | null
 }
 
 type OwnerActivityEntry = {
@@ -71,6 +94,7 @@ type OwnerActivityEntry = {
 }
 
 const OWNER_ACTIVITY_PREF_KEY = "owner_console_activity"
+const COMMERCIAL_RECOVERY_PREF_KEY = "commercial_recovery_state_v1"
 
 class HttpError extends Error {
   status: number
@@ -104,6 +128,78 @@ function getCurrentPeriodMonth() {
   const year = now.getUTCFullYear()
   const month = String(now.getUTCMonth() + 1).padStart(2, "0")
   return `${year}-${month}-01`
+}
+
+function isPastDate(value: string | null | undefined) {
+  if (!value) return false
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return false
+  return parsed.getTime() < Date.now()
+}
+
+function normalizeStatus(value: string | null | undefined) {
+  return String(value || "").trim().toLowerCase()
+}
+
+function deriveCommercialSnapshot(input: {
+  planCode?: string | null
+  rawStatus?: string | null
+  planStatus?: string | null
+  currentPeriodEnd?: string | null
+  recovery?: RecoverySnapshot | null
+}) {
+  const planCode = normalizeStatus(input.planCode)
+  const rawStatus = normalizeStatus(input.rawStatus)
+  const planStatus = normalizeStatus(input.planStatus)
+  const expired = isPastDate(input.currentPeriodEnd)
+  const isTrial = planCode === "trial"
+  const isPaidPlan = Boolean(planCode) && !["trial", "owner", "owner_unlimited"].includes(planCode)
+  const recoveryStatus = normalizeStatus(input.recovery?.status)
+
+  let canonicalStatus = "inactive"
+  if (rawStatus === "cancelled" || planStatus === "cancelled") {
+    canonicalStatus = "cancelled"
+  } else if (rawStatus === "blocked") {
+    canonicalStatus = "blocked"
+  } else if (isTrial) {
+    canonicalStatus = expired ? "trial_expired" : "trial_active"
+  } else if (isPaidPlan) {
+    canonicalStatus = expired ? "paid_expired" : "paid_active"
+  } else if (rawStatus === "active" && !expired) {
+    canonicalStatus = "paid_active"
+  }
+
+  const gateAllowed = ["trial_active", "paid_active"].includes(canonicalStatus)
+
+  let ownerDashboardStatus = canonicalStatus
+  if (canonicalStatus === "trial_expired" && recoveryStatus === "active") {
+    ownerDashboardStatus = "trial_recovery_active"
+  } else if (canonicalStatus === "trial_expired" && recoveryStatus === "converted") {
+    ownerDashboardStatus = "converted"
+  } else if (canonicalStatus === "trial_expired" && recoveryStatus === "completed_without_conversion") {
+    ownerDashboardStatus = "trial_expired"
+  } else if (canonicalStatus === "paid_expired") {
+    ownerDashboardStatus = "expired"
+  } else if (canonicalStatus === "paid_active" || canonicalStatus === "trial_active") {
+    ownerDashboardStatus = "active"
+  }
+
+  const professionalDashboardStatus = gateAllowed ? "active" : "restricted"
+  const blockedReason = gateAllowed
+    ? null
+    : canonicalStatus === "trial_expired"
+      ? "trial_expired"
+      : canonicalStatus === "paid_expired"
+        ? "plan_expired"
+        : canonicalStatus
+
+  return {
+    canonicalStatus,
+    ownerDashboardStatus,
+    professionalDashboardStatus,
+    gateAllowed,
+    blockedReason,
+  }
 }
 
 function extractBearerToken(request: Request): string {
@@ -221,6 +317,29 @@ export async function GET(request: Request) {
 
     if (ownerActivityPrefRes.error) throw new HttpError(500, ownerActivityPrefRes.error.message)
 
+    const clientIds = ((clientsRes.data || []) as any[]).map((row) => String(row.id))
+    const recoveryPrefMap = new Map<string, RecoverySnapshot>()
+    if (clientIds.length > 0) {
+      const recoveryPrefsRes = await admin
+        .from("client_preferences")
+        .select("client_id, pref_value")
+        .eq("pref_key", COMMERCIAL_RECOVERY_PREF_KEY)
+        .in("client_id", clientIds)
+
+      if (recoveryPrefsRes.error) {
+        throw new HttpError(500, recoveryPrefsRes.error.message)
+      }
+
+      ;((recoveryPrefsRes.data || []) as any[]).forEach((row) => {
+        try {
+          const parsed = JSON.parse(String(row.pref_value || "{}")) as RecoverySnapshot
+          recoveryPrefMap.set(String(row.client_id), parsed || {})
+        } catch {
+          recoveryPrefMap.set(String(row.client_id), {})
+        }
+      })
+    }
+
     const usageMap = new Map(
       ((usageRows || []) as any[]).map((row) => [
         String(row.client_id),
@@ -250,6 +369,14 @@ export async function GET(request: Request) {
       const usage = usageMap.get(String(row.id))
       const latestSubscription = latestSubscriptionByClient.get(String(row.id))
       const latestPayment = latestPaymentByClient.get(String(row.id))
+      const recovery = recoveryPrefMap.get(String(row.id)) || null
+      const commercial = deriveCommercialSnapshot({
+        planCode: row.plan_code,
+        rawStatus: row.status,
+        planStatus: row.plan_status,
+        currentPeriodEnd: latestSubscription?.current_period_end ?? null,
+        recovery,
+      })
 
       return {
         id: String(row.id),
@@ -271,6 +398,17 @@ export async function GET(request: Request) {
         automations_used: usage?.automations_used ?? 0,
         storage_used_mb: usage?.storage_used_mb ?? 0,
         docs_count: usage?.docs_count ?? 0,
+        canonical_status: commercial.canonicalStatus,
+        owner_dashboard_status: commercial.ownerDashboardStatus,
+        professional_dashboard_status: commercial.professionalDashboardStatus,
+        recovery_status: normalizeStatus(recovery?.status) || "inactive",
+        recovery_started_at: recovery?.started_at ?? null,
+        recovery_ends_at: recovery?.ends_at ?? null,
+        recovery_last_message_at: recovery?.last_message_at ?? null,
+        recovery_messages_sent: Number(recovery?.messages_sent || 0),
+        converted_after_recovery: Boolean(recovery?.converted_after_recovery),
+        blocked_reason: commercial.blockedReason,
+        gate_allowed: commercial.gateAllowed,
       }
     })
 
@@ -299,6 +437,14 @@ export async function GET(request: Request) {
 
     const subscriptions: SubscriptionRow[] = ((subscriptionsRes.data || []) as any[]).map((row) => {
       const client = clientMap.get(String(row.client_id))
+      const recovery = recoveryPrefMap.get(String(row.client_id)) || null
+      const commercial = deriveCommercialSnapshot({
+        planCode: row.plan_code || client?.plan_code,
+        rawStatus: row.status || client?.status,
+        planStatus: client?.plan_status,
+        currentPeriodEnd: row.current_period_end ?? null,
+        recovery,
+      })
       return {
         id: String(row.id),
         client_id: String(row.client_id),
@@ -313,6 +459,9 @@ export async function GET(request: Request) {
         current_period_start: row.current_period_start ?? row.started_at ?? null,
         current_period_end: row.current_period_end ?? null,
         created_at: row.created_at,
+        canonical_status: commercial.canonicalStatus,
+        owner_dashboard_status: commercial.ownerDashboardStatus,
+        recovery_status: normalizeStatus(recovery?.status) || "inactive",
       }
     })
 
@@ -348,7 +497,7 @@ export async function GET(request: Request) {
 
     const summary = {
       total_clients: clients.length,
-      active_clients: clients.filter((client) => String(client.status || "").toLowerCase() === "active").length,
+      active_clients: clients.filter((client) => client.owner_dashboard_status === "active").length,
       trial_clients: clients.filter((client) => String(client.plan_code || "").toLowerCase() === "trial").length,
       paid_clients: clients.filter((client) => ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())).length,
       pro_plus_clients: clients.filter((client) => String(client.plan_code || "").toLowerCase() === "pro_plus").length,
@@ -358,7 +507,7 @@ export async function GET(request: Request) {
       payments_today_total: approvedPayments.filter((item) => new Date(item.created_at) >= todayStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
       payments_week_total: approvedPayments.filter((item) => new Date(item.created_at) >= weekStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
       payments_month_total: approvedPayments.filter((item) => new Date(item.created_at) >= monthStart).reduce((acc, item) => acc + Number(item.amount || 0), 0),
-      subscriptions_active: subscriptions.filter((item) => String(item.status || "").toLowerCase() === "active").length,
+      subscriptions_active: subscriptions.filter((item) => item.owner_dashboard_status === "active").length,
       subscriptions_pending: subscriptions.filter((item) => String(item.status || "").toLowerCase() === "pending").length,
       subscriptions_cancelled: subscriptions.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length,
     }
