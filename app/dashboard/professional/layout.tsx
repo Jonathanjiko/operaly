@@ -97,6 +97,14 @@ function normalizePlanStatus(value: string | null | undefined, fallback = "") {
   return String(value || fallback).trim().toLowerCase()
 }
 
+function isTrialWindowElapsed(value: string | null | undefined) {
+  if (!value) return false
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return false
+  const trialEndsAt = parsed.getTime() + 7 * 24 * 60 * 60 * 1000
+  return trialEndsAt < Date.now()
+}
+
 const restrictedSettingsRoutes = new Set([
   "/dashboard/professional/asistente",
   "/dashboard/professional/voz",
@@ -353,7 +361,7 @@ export default function ProfessionalDashboardLayout({
             const [{ data: clientRow }, { data: latestSubscription }] = await Promise.all([
               supabase
                 .from("clients")
-                .select("plan_code, plan_status, status")
+                .select("plan_code, plan_status, status, created_at")
                 .eq("id", clientId)
                 .maybeSingle(),
               supabase
@@ -382,14 +390,21 @@ export default function ProfessionalDashboardLayout({
                 "trialing"
             )
             const expiredByDate = isPastDate(latestSubscription?.current_period_end)
+            const expiredByTrialWindow =
+              fallbackPlan === "trial" &&
+              (isTrialWindowElapsed(latestSubscription?.current_period_start) ||
+                isTrialWindowElapsed(clientRow?.created_at))
             const expiredByStatus = ["expired", "trial_expired", "inactive", "cancelled", "blocked"].includes(
               fallbackStatus
             )
 
-            if ((fallbackPlan === "trial" && expiredByDate) || expiredByStatus) {
+            if ((fallbackPlan === "trial" && (expiredByDate || expiredByTrialWindow)) || expiredByStatus) {
               restricted = true
               resolvedPlan = fallbackPlan
-              resolvedStatus = expiredByDate && fallbackPlan === "trial" ? "trial_expired" : fallbackStatus
+              resolvedStatus =
+                (expiredByDate || expiredByTrialWindow) && fallbackPlan === "trial"
+                  ? "trial_expired"
+                  : fallbackStatus
             }
           }
 
