@@ -911,17 +911,17 @@ export default function ProfessionalDashboardLayout({
               </DialogHeader>
             </div>
 
-            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3 lg:gap-5 lg:p-6">
+            <div className="flex flex-col gap-4 p-4 sm:p-5 lg:gap-5 lg:p-6">
               {paidPlans.map((plan) => (
                 <div
                   key={plan.code}
-                  className={`flex h-full min-h-[380px] flex-col rounded-[24px] border p-5 shadow-sm lg:min-h-[410px] ${
+                  className={`rounded-[24px] border p-5 shadow-sm ${
                     plan.code === "pro"
                       ? "border-[#7C3AED]/30 bg-[linear-gradient(180deg,rgba(15,31,99,0.98),rgba(29,78,216,0.96))] text-white"
                       : "border-slate-200 bg-white text-[#0F1F63]"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{getDisplayPlanName(plan.code)}</p>
                     {plan.popular ? (
                       <span className="rounded-full bg-[#EC4899] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
@@ -938,11 +938,11 @@ export default function ProfessionalDashboardLayout({
                   <p className={`mt-4 text-sm leading-6 ${plan.code === "pro" ? "text-white/85" : "text-slate-600"}`}>
                     {planTaglines[plan.code as keyof typeof planTaglines] || plan.description}
                   </p>
-                  <div className="mt-5 grid grid-cols-1 gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {plan.features.slice(0, 3).map((feature) => (
                       <div
                         key={feature}
-                        className={`rounded-2xl border px-3 py-2 text-sm font-medium ${
+                        className={`rounded-full border px-3 py-2 text-sm font-medium ${
                           plan.code === "pro"
                             ? "border-white/12 bg-white/10 text-white"
                             : "border-slate-200 bg-slate-50 text-slate-700"
@@ -952,7 +952,7 @@ export default function ProfessionalDashboardLayout({
                       </div>
                     ))}
                   </div>
-                  <p className={`mt-4 text-xs leading-5 ${plan.code === "pro" ? "text-white/70" : "text-slate-500"}`}>
+                  <p className={`mt-3 text-xs leading-5 ${plan.code === "pro" ? "text-white/70" : "text-slate-500"}`}>
                     {plan.features[3]}
                     {plan.features[4] ? ` · ${plan.features[4]}` : ""}
                   </p>
