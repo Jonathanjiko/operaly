@@ -12,15 +12,16 @@ import { Input } from "@/components/ui/input"
 export default function RegisterClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  const initialPlan = (searchParams.get("plan") as OperalyPlanCode | null) || "trial"
-  const [planCode] = useState<OperalyPlanCode>(initialPlan)
+  const requestedPlan = searchParams.get("plan")
+  const normalizedPlanCode = (getPlanByCode(requestedPlan) ? requestedPlan : "trial") as OperalyPlanCode
+  const [planCode] = useState<OperalyPlanCode>(normalizedPlanCode)
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const selectedPlan = useMemo(() => getPlanByCode(planCode), [planCode])
+  const selectedPlan = useMemo(() => getPlanByCode(planCode) ?? getPlanByCode("trial"), [planCode])
+  const highlightedBenefits = useMemo(() => selectedPlan?.features.slice(0, 3) ?? [], [selectedPlan])
 
   const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,6 +114,28 @@ export default function RegisterClient() {
                 ? "Empieza tu prueba gratuita y configura Operaly a tu medida."
                 : `Vas a registrarte con el plan ${selectedPlan?.name}. Primero creamos tu cuenta.`}
             </p>
+          </div>
+
+          <div className="mb-6 rounded-3xl border border-[#BFDBFE] bg-[#EFF6FF] p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#2563EB]">
+              Plan elegido
+            </p>
+            <p className="mt-2 text-xl font-bold text-[#0F1F63]">
+              {selectedPlan?.name ?? "Trial"}
+            </p>
+            <p className="mt-1 text-sm text-[#1D4ED8]">
+              {selectedPlan?.code === "trial"
+                ? "7 días gratis, sin tarjeta"
+                : `S/. ${selectedPlan?.price ?? 0} / mes`}
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-[#1E3A8A]">
+              {highlightedBenefits.map((feature) => (
+                <li key={feature} className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="space-y-4 mb-6">
