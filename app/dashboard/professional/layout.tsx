@@ -55,6 +55,7 @@ import {
   fetchDashboardRuntime,
   isDashboardAccessRestricted,
   resolveDashboardPlanCode,
+  resolveDashboardEffectiveStatus,
   resolveDashboardPlanStatus,
 } from "@/lib/dashboard-runtime"
 import { OPERLAY_PLANS, getDisplayPlanName } from "@/lib/plans"
@@ -84,82 +85,6 @@ type SidebarProfile = {
   initials: string
   email: string
   preferredLanguage: string
-}
-
-function isPastDate(value: string | null | undefined) {
-  if (!value) return false
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return false
-  return parsed.getTime() < Date.now()
-}
-
-function normalizePlanStatus(value: string | null | undefined, fallback = "") {
-  return String(value || fallback).trim().toLowerCase()
-}
-
-function isTrialWindowElapsed(value: string | null | undefined) {
-  if (!value) return false
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return false
-  const trialEndsAt = parsed.getTime() + 7 * 24 * 60 * 60 * 1000
-  return trialEndsAt < Date.now()
-}
-
-function shouldRestrictByFallback(params: {
-  clientPlanCode?: string | null
-  clientPlanStatus?: string | null
-  clientStatus?: string | null
-  clientCreatedAt?: string | null
-  subscriptionPlanCode?: string | null
-  subscriptionStatus?: string | null
-  subscriptionCurrentPeriodEnd?: string | null
-  subscriptionCurrentPeriodStart?: string | null
-  resolvedPlan?: string | null
-  resolvedStatus?: string | null
-  selectedPlan?: string | null
-}) {
-  const fallbackPlan = normalizePlanStatus(
-    String(
-      params.clientPlanCode ||
-        params.subscriptionPlanCode ||
-        params.resolvedPlan ||
-        params.selectedPlan ||
-        "trial"
-    )
-  )
-  const fallbackStatus = normalizePlanStatus(
-    params.subscriptionStatus ||
-      params.clientPlanStatus ||
-      params.clientStatus ||
-      params.resolvedStatus ||
-      "trialing"
-  )
-  const expiredByDate = isPastDate(params.subscriptionCurrentPeriodEnd)
-  const expiredByTrialWindow =
-    fallbackPlan === "trial" &&
-    (isTrialWindowElapsed(params.subscriptionCurrentPeriodStart) ||
-      isTrialWindowElapsed(params.clientCreatedAt))
-  const expiredByStatus = [
-    "expired",
-    "trial_expired",
-    "paid_expired",
-    "inactive",
-    "cancelled",
-    "blocked",
-    "restricted",
-    "recovery_finished",
-  ].includes(fallbackStatus)
-  const restricted =
-    (fallbackPlan === "trial" && (expiredByDate || expiredByTrialWindow)) || expiredByStatus
-
-  return {
-    restricted,
-    plan: fallbackPlan,
-    status:
-      (expiredByDate || expiredByTrialWindow) && fallbackPlan === "trial"
-        ? "trial_expired"
-        : fallbackStatus,
-  }
 }
 
 const restrictedSettingsRoutes = new Set([
@@ -416,49 +341,12 @@ export default function ProfessionalDashboardLayout({
           console.error("Error validando estado del plan en dashboard:", runtimeError)
         }
 
-        let resolvedPlan = resolveDashboardPlanCode(runtime, String(meta.selected_plan || "trial"))
-        let resolvedStatus = resolveDashboardPlanStatus(runtime, "trialing")
-        let restricted = isDashboardAccessRestricted(runtime)
-
-        if (!restricted || !runtime) {
-          const [{ data: clientRow }, { data: latestSubscription }] = await Promise.all([
-            supabase
-              .from("clients")
-              .select("plan_code, plan_status, status, created_at")
-              .eq("id", clientId)
-              .maybeSingle(),
-            supabase
-              .from("subscriptions")
-              .select("plan_code, status, current_period_end, current_period_start, created_at")
-              .eq("client_id", clientId)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle(),
-          ])
-
-          const fallback = shouldRestrictByFallback({
-            clientPlanCode: clientRow?.plan_code,
-            clientPlanStatus: clientRow?.plan_status,
-            clientStatus: clientRow?.status,
-            clientCreatedAt: clientRow?.created_at,
-            subscriptionPlanCode: latestSubscription?.plan_code,
-            subscriptionStatus: latestSubscription?.status,
-            subscriptionCurrentPeriodEnd: latestSubscription?.current_period_end,
-            subscriptionCurrentPeriodStart: latestSubscription?.current_period_start,
-            resolvedPlan,
-            resolvedStatus,
-            selectedPlan: String(meta.selected_plan || "trial"),
-          })
-
-          if (!runtime || fallback.restricted) {
-            restricted = fallback.restricted
-            resolvedPlan = fallback.plan
-            resolvedStatus = fallback.status
-          }
-        }
+        const resolvedPlan = resolveDashboardPlanCode(runtime, String(meta.selected_plan || "trial"))
+        const resolvedStatus = resolveDashboardPlanStatus(runtime, "trialing")
+        const restricted = runtime ? isDashboardAccessRestricted(runtime) : false
 
         setPlanCode(resolvedPlan)
-        setPlanStatus(resolvedStatus)
+        setPlanStatus(resolveDashboardEffectiveStatus(runtime, resolvedStatus))
         setAccessRestricted(restricted)
         setUpgradeOpen(restricted)
 

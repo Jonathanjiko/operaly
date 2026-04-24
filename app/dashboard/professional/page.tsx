@@ -598,7 +598,7 @@ export default function ProfessionalDashboardPage() {
             .from("tasks")
             .select("id, title, due_at, status, priority")
             .eq("client_id", clientId)
-            .in("status", ["pending", "in_progress"])
+            .eq("status", "pending")
             .order("due_at", { ascending: true })
             .limit(5)
 
@@ -1400,7 +1400,7 @@ export default function ProfessionalDashboardPage() {
                 const priorityColor =
                   task.priority === "high"
                     ? "#EF4444"
-                    : task.priority === "medium"
+                    : task.priority === "normal"
                     ? "#F59E0B"
                     : "#34D399"
 
@@ -1418,7 +1418,7 @@ export default function ProfessionalDashboardPage() {
                         {task.title || "Tarea sin título"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {task.status === "in_progress" ? "En progreso" : "Pendiente"}
+                        {task.status === "completed" ? "Completada" : "Pendiente"}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">

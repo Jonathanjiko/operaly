@@ -9,6 +9,15 @@ import { Check, Sparkles, Zap } from "lucide-react"
 import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
+type PublicPlan = {
+  code: string
+  name: string
+  price_pen?: number
+  price_usd?: number
+  per?: string
+  duration_days?: number
+}
+
 export default function PricingPage() {
   const router = useRouter()
   const [plans, setPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
@@ -21,23 +30,64 @@ export default function PricingPage() {
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const response = await fetch("/api/product/catalog", {
-          method: "GET",
-          cache: "no-store",
-        })
-        const payload = await response.json().catch(() => ({}))
+        const [plansResponse, catalogResponse] = await Promise.all([
+          fetch("/api/plans", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/catalog", {
+            method: "GET",
+            cache: "no-store",
+          }),
+        ])
+
+        const publicPlans = (await plansResponse.json().catch(() => ({}))) as { plans?: PublicPlan[] }
+        const payload = await catalogResponse.json().catch(() => ({}))
         const commercialCatalog =
+          payload?.catalog ||
           payload?.user_facing?.catalog ||
-          payload?.user_facing ||
-          payload?.catalog
-        if (response.ok && commercialCatalog?.plans) {
-          setPlans(commercialCatalog.plans as OwnerCatalogPlan[])
+          payload?.user_facing
+
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          const planPricing = new Map(
+            (publicPlans.plans || []).map((plan) => [
+              plan.code,
+              {
+                price: Number(isPeru ? plan.price_pen ?? 0 : plan.price_usd ?? 0),
+                currency: isPeru ? "PEN" : "USD",
+              },
+            ])
+          )
+
+          setPlans(
+            (commercialCatalog.plans as OwnerCatalogPlan[]).map((plan) => {
+              const publicPrice = planPricing.get(plan.code)
+              return publicPrice
+                ? { ...plan, price: publicPrice.price, currency: publicPrice.currency }
+                : plan
+            })
+          )
+          return
+        }
+
+        if (plansResponse.ok && publicPlans.plans) {
+          setPlans((current) =>
+            current.map((plan) => {
+              const publicPlan = publicPlans.plans?.find((entry) => entry.code === plan.code)
+              if (!publicPlan) return plan
+              return {
+                ...plan,
+                price: Number(isPeru ? publicPlan.price_pen ?? 0 : publicPlan.price_usd ?? 0),
+                currency: isPeru ? "PEN" : "USD",
+              }
+            })
+          )
         }
       } catch {}
     }
 
     void loadCatalog()
-  }, [])
+  }, [isPeru])
 
   return (
     <div className="min-h-screen bg-background">

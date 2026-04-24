@@ -122,19 +122,22 @@ export function Footer({ locale = "es" }: { locale?: string }) {
 
             <div className="mt-6 flex items-center gap-3">
               {[
-                { label: "Instagram", short: "ig" },
-                { label: "Facebook", short: "f" },
-                { label: "TikTok", short: "tt" },
-                { label: "LinkedIn", short: "in" },
-                { label: "X", short: "x" },
+                { label: "Instagram", short: "ig", href: "https://www.instagram.com/operaly.app" },
+                { label: "Facebook", short: "f", href: "https://www.facebook.com/operaly.app" },
+                { label: "TikTok", short: "tt", href: "https://www.tiktok.com/@operaly.app" },
+                { label: "LinkedIn", short: "in", href: "https://www.linkedin.com/company/operaly" },
+                { label: "X", short: "x", href: "https://x.com/operaly_app" },
               ].map((social) => (
-                <span
+                <a
                   key={social.label}
+                  href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs font-bold uppercase text-white/84"
                   aria-label={social.label}
                 >
                   {social.short}
-                </span>
+                </a>
               ))}
             </div>
           </div>

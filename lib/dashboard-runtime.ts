@@ -77,6 +77,21 @@ function normalizeStatus(value: unknown, fallback = "") {
     .toLowerCase()
 }
 
+export function resolveDashboardEffectiveStatus(
+  payload: DashboardRuntimePayload | null | undefined,
+  fallback = "trialing"
+) {
+  const resolved = normalizeStatus(
+    payload?.commercial_status?.effective_status ||
+      payload?.plan?.effective_status ||
+      payload?.plan?.status ||
+      payload?.user_facing?.account_status ||
+      fallback
+  )
+
+  return resolved || normalizeStatus(fallback || "trialing") || "trialing"
+}
+
 function normalizeBooleanLike(value: unknown) {
   if (typeof value === "boolean") return value
   if (typeof value === "string") {
@@ -92,12 +107,10 @@ export function resolveDashboardPlanStatus(
   fallback = "trialing"
 ) {
   const resolved = normalizeStatus(
-    payload?.user_facing?.account_status ||
+    resolveDashboardEffectiveStatus(payload, fallback) ||
       payload?.commercial_status?.professional_dashboard_status ||
       payload?.plan?.canonical_status ||
       readDashboardCurrentPlanStatus(payload?.user_facing) ||
-      payload?.plan?.effective_status ||
-      payload?.plan?.status ||
       payload?.limits?.effective_status ||
       payload?.client?.plan_status ||
       fallback
@@ -107,7 +120,7 @@ export function resolveDashboardPlanStatus(
 }
 
 export function isDashboardAccessRestricted(payload: DashboardRuntimePayload | null | undefined) {
-  const status = resolveDashboardPlanStatus(payload)
+  const status = resolveDashboardEffectiveStatus(payload)
   const gateAllowed =
     normalizeBooleanLike(payload?.user_facing?.gate_allowed) ??
     normalizeBooleanLike(payload?.limits?.gate_allowed)
@@ -117,16 +130,11 @@ export function isDashboardAccessRestricted(payload: DashboardRuntimePayload | n
 
   if (gateAllowed === false) return true
   if (blockedReason) return true
-  return [
-    "expired",
-    "trial_expired",
-    "paid_expired",
-    "inactive",
-    "cancelled",
-    "blocked",
-    "restricted",
-    "recovery_finished",
-  ].includes(status)
+  return !["active", "trialing"].includes(status)
+}
+
+export function isDashboardAccountActive(payload: DashboardRuntimePayload | null | undefined) {
+  return !isDashboardAccessRestricted(payload)
 }
 
 const DASHBOARD_FETCH_TIMEOUT_MS = 12000

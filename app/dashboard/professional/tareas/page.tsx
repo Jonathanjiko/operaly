@@ -14,13 +14,24 @@ type Toast = { open: boolean; msg: string; type: "success" | "error" | "info" }
 type TaskStatus = "pending" | "in_progress" | "completed"
 
 const STATUS_LABELS: Record<TaskStatus, string> = { pending: "Pendientes", in_progress: "En progreso", completed: "Completadas" }
-const PRIORITIES = [{ value: "high", label: "Alta" }, { value: "medium", label: "Media" }, { value: "low", label: "Baja" }]
+const PRIORITIES = [{ value: "high", label: "Alta" }, { value: "normal", label: "Media" }, { value: "low", label: "Baja" }]
 
 function normalizeStatus(value: string | null): TaskStatus {
   const normalized = String(value || "").toLowerCase()
   if (["in_progress", "in-progress", "doing", "active", "progress"].includes(normalized)) return "in_progress"
   if (["completed", "done", "closed", "finished"].includes(normalized)) return "completed"
   return "pending"
+}
+
+function toStoredStatus(value: TaskStatus) {
+  return value === "in_progress" ? "pending" : value
+}
+
+function toStoredPriority(value: string | null | undefined) {
+  const normalized = String(value || "").toLowerCase()
+  if (["medium", "media", "default", ""].includes(normalized)) return "normal"
+  if (["high", "low", "normal"].includes(normalized)) return normalized
+  return "normal"
 }
 
 function toLocalDateTime(value: string | null) {
@@ -68,10 +79,10 @@ function TaskForm({ task, onClose, onSave }: { task?: TaskRow; onClose: () => vo
   const [title, setTitle] = useState(task?.title || "")
   const [description, setDescription] = useState(task?.description || "")
   const [dueAt, setDueAt] = useState(toLocalDateTime(task?.due_at || null))
-  const [priority, setPriority] = useState(task?.priority || "medium")
+  const [priority, setPriority] = useState(toStoredPriority(task?.priority))
   const [status, setStatus] = useState<TaskStatus>(normalizeStatus(task?.status || null))
   const [saving, setSaving] = useState(false)
-  async function submit() { if (!title.trim()) return; setSaving(true); await onSave({ title: title.trim(), description: description.trim() || null, due_at: toIso(dueAt), priority, status }); setSaving(false); onClose() }
+  async function submit() { if (!title.trim()) return; setSaving(true); await onSave({ title: title.trim(), description: description.trim() || null, due_at: toIso(dueAt), priority: toStoredPriority(priority), status: toStoredStatus(status) }); setSaving(false); onClose() }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -140,9 +151,9 @@ export default function TareasPage() {
   const filtered = useMemo(() => tasks.filter((task) => (!search || (task.title || "").toLowerCase().includes(search.toLowerCase())) && (!filterPriority || task.priority === filterPriority)), [tasks, search, filterPriority])
   const grouped = useMemo(() => ({ pending: filtered.filter((task) => normalizeStatus(task.status) === "pending"), in_progress: filtered.filter((task) => normalizeStatus(task.status) === "in_progress"), completed: filtered.filter((task) => normalizeStatus(task.status) === "completed") }), [filtered])
 
-  async function createTask(payload: Partial<TaskRow>) { const { error } = await supabase.from("tasks").insert({ client_id: clientId, ...payload, status: "pending", created_at: new Date().toISOString() }); if (error) throw error; showToast("Tarea creada.", "success"); await load() }
-  async function updateTask(payload: Partial<TaskRow> & { status?: TaskStatus }) { if (!editing) return; const { error } = await supabase.from("tasks").update({ ...payload, updated_at: new Date().toISOString() }).eq("id", editing.id); if (error) throw error; showToast("Tarea actualizada.", "success"); await load() }
-  async function moveTask(id: string, status: TaskStatus) { setTasks((prev) => prev.map((task) => task.id === id ? { ...task, status } : task)); const { error } = await supabase.from("tasks").update({ status, updated_at: new Date().toISOString() }).eq("id", id); if (error) await load() }
+  async function createTask(payload: Partial<TaskRow>) { const { error } = await supabase.from("tasks").insert({ client_id: clientId, ...payload, priority: toStoredPriority(payload.priority), status: "pending", created_at: new Date().toISOString() }); if (error) throw error; showToast("Tarea creada.", "success"); await load() }
+  async function updateTask(payload: Partial<TaskRow> & { status?: TaskStatus }) { if (!editing) return; const { error } = await supabase.from("tasks").update({ ...payload, priority: toStoredPriority(payload.priority), status: payload.status ? toStoredStatus(payload.status) : undefined, updated_at: new Date().toISOString() }).eq("id", editing.id); if (error) throw error; showToast("Tarea actualizada.", "success"); await load() }
+  async function moveTask(id: string, status: TaskStatus) { setTasks((prev) => prev.map((task) => task.id === id ? { ...task, status } : task)); const { error } = await supabase.from("tasks").update({ status: toStoredStatus(status), updated_at: new Date().toISOString() }).eq("id", id); if (error) await load() }
   async function deleteTask(id: string) { if (!window.confirm("¿Eliminar esta tarea?")) return; const { error } = await supabase.from("tasks").delete().eq("id", id); if (error) { showToast("Error al eliminar.", "error"); return }; showToast("Tarea eliminada.", "success"); setTasks((prev) => prev.filter((task) => task.id !== id)) }
 
   function onDragEnd(event: DragEndEvent) {

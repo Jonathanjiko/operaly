@@ -1,6 +1,6 @@
-"use client"
+﻿"use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import {
@@ -36,6 +36,12 @@ type FeatureCard = {
   icon: React.ComponentType<{ className?: string }>
 }
 
+type PublicPlan = {
+  code: string
+  price_pen?: number
+  price_usd?: number
+}
+
 type PricingTexts = {
   eyebrow: string
   title: string
@@ -61,30 +67,30 @@ type PricingTexts = {
 
 const pricingCopy: Record<"es" | "en", PricingTexts> = {
   es: {
-    eyebrow: "Tu liberación, tu plan",
+    eyebrow: "Tu liberaciÃ³n, tu plan",
     title: "Empiece gratis. Luego escale solo donde ya sienta valor real.",
     subtitle:
-      "Trial entra fuerte. Pro resalta como el camino más completo. Y al pasar el cursor, abajo se activan los atributos que realmente se desbloquean.",
+      "Trial entra fuerte. Pro resalta como el camino mÃ¡s completo. Y al pasar el cursor, abajo se activan los atributos que realmente se desbloquean.",
     monthly: "por mes",
-    trialSpan: "7 días para sentir el producto",
-    mostChosen: "Más elegido",
-    startHere: "Empiece aquí",
+    trialSpan: "7 dÃ­as para sentir el producto",
+    mostChosen: "MÃ¡s elegido",
+    startHere: "Empiece aquÃ­",
     selectedEyebrow: "Se activa con el plan elegido",
     selectedHint:
-      "Pase el cursor por cada plan. Abajo se activan sus mejores atributos, con más señales visuales, módulos y profundidad para decidir mejor.",
-    proLabel: "El más completo",
+      "Pase el cursor por cada plan. Abajo se activan sus mejores atributos, con mÃ¡s seÃ±ales visuales, mÃ³dulos y profundidad para decidir mejor.",
+    proLabel: "El mÃ¡s completo",
     trialLabel: "La entrada ideal",
-    plusLabel: "Más capacidad",
+    plusLabel: "MÃ¡s capacidad",
     faqEyebrow: "Preguntas frecuentes",
     faqTitle: "Todo lo importante, sin vueltas.",
     faqSubtitle:
-      "Respondimos las dudas básicas y comerciales que más importan antes de registrarse o cambiar de plan.",
+      "Respondimos las dudas bÃ¡sicas y comerciales que mÃ¡s importan antes de registrarse o cambiar de plan.",
     modalEyebrow: "Operaly love mark",
-    modalTitle: "Más claridad, menos peso mental y una mejor sensación de control.",
+    modalTitle: "MÃ¡s claridad, menos peso mental y una mejor sensaciÃ³n de control.",
     modalBodyOne:
-      "Operaly está pensado para quitarle ruido al día: ordena lo importante, ejecuta lo claro y deja visibles los siguientes pasos sin hacerlo perder tiempo.",
+      "Operaly estÃ¡ pensado para quitarle ruido al dÃ­a: ordena lo importante, ejecuta lo claro y deja visibles los siguientes pasos sin hacerlo perder tiempo.",
     modalBodyTwo:
-      "Por eso cada plan no solo suma capacidad. También cambia la forma en que usted vive agenda, correos, contactos, seguimiento y automatización.",
+      "Por eso cada plan no solo suma capacidad. TambiÃ©n cambia la forma en que usted vive agenda, correos, contactos, seguimiento y automatizaciÃ³n.",
     modalCta: "Probar Operaly",
   },
   en: {
@@ -120,7 +126,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
   es: {
     trial: {
       title: "Trial",
-      description: "Prueba gratis de 7 días con Google incluido y todos los módulos base listos para sentir el producto de verdad.",
+      description: "Prueba gratis de 7 dÃ­as con Google incluido y todos los mÃ³dulos base listos para sentir el producto de verdad.",
       cta: "Prueba gratis",
       features: [
         "250 mensajes IA",
@@ -132,37 +138,37 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
     },
     core: {
       title: "Core",
-      description: "La base estable para operar todos los días con más capacidad, más orden y un uso ya serio.",
+      description: "La base estable para operar todos los dÃ­as con mÃ¡s capacidad, mÃ¡s orden y un uso ya serio.",
       cta: "Elegir Core",
       features: [
         "1200 mensajes IA",
         "10 min de voz y llamadas",
         "3 GB de almacenamiento",
         "500 contactos y 10 automatizaciones",
-        "Google incluido desde Pro",
+        "Google Suite incluido",
       ],
     },
     pro: {
       title: "Pro",
-      description: "La ruta más fuerte para vivir agenda, correos, documentos y seguimiento con Google incluido y mejor margen.",
+      description: "La ruta mÃ¡s fuerte para vivir agenda, correos, documentos y seguimiento con Google incluido y mejor margen.",
       cta: "Elegir Pro",
       features: [
         "3000 mensajes IA",
-        "30 min de voz y llamadas",
+        "60 min de voz y llamadas",
         "5 GB de almacenamiento",
-        "1000 contactos y 15 automatizaciones",
+        "1000 contactos y 20 automatizaciones",
         "Google Suite incluido",
       ],
     },
     pro_plus: {
       title: "Pro Plus",
-      description: "La capa más amplia para quien ya quiere usar Operaly con más volumen, más llamadas y más automatizaciones.",
+      description: "La capa mÃ¡s amplia para quien ya quiere usar Operaly con mÃ¡s volumen, mÃ¡s llamadas y mÃ¡s automatizaciones.",
       cta: "Elegir Pro Plus",
       features: [
-        "5000 mensajes IA",
-        "60 min de voz y llamadas",
-        "10 GB de almacenamiento",
-        "2000 contactos y 30 automatizaciones",
+        "8000 mensajes IA",
+        "180 min de voz y llamadas",
+        "20 GB de almacenamiento",
+        "2000 contactos y 50 automatizaciones",
         "Google Suite incluido",
       ],
     },
@@ -189,7 +195,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
         "10 min of voice and calls",
         "3 GB of storage",
         "500 contacts and 10 automations",
-        "Google included from Pro",
+        "Google Suite included",
       ],
     },
     pro: {
@@ -198,9 +204,9 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
       cta: "Choose Pro",
       features: [
         "3000 AI messages",
-        "30 min of voice and calls",
+        "60 min of voice and calls",
         "5 GB of storage",
-        "1000 contacts and 15 automations",
+        "1000 contacts and 20 automations",
         "Google Suite included",
       ],
     },
@@ -209,10 +215,10 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
       description: "The widest layer for people who want more volume, more calls and more automation all day long.",
       cta: "Choose Pro Plus",
       features: [
-        "5000 AI messages",
-        "60 min of voice and calls",
-        "10 GB of storage",
-        "2000 contacts and 30 automations",
+        "8000 AI messages",
+        "180 min of voice and calls",
+        "20 GB of storage",
+        "2000 contacts and 50 automations",
         "Google Suite included",
       ],
     },
@@ -223,31 +229,31 @@ const detailSets: Record<"es" | "en", Record<string, FeatureCard[]>> = {
   es: {
     trial: [
       {
-        title: "Empieza sin fricción",
-        short: "7 días gratis, sin tarjeta para comenzar.",
+        title: "Empieza sin fricciÃ³n",
+        short: "7 dÃ­as gratis, sin tarjeta para comenzar.",
         detail:
-          "Trial deja ver el valor real de Operaly desde el primer audio. Puede usar módulos base, probar Google y decidir con contexto si ya le ordena el día.",
+          "Trial deja ver el valor real de Operaly desde el primer audio. Puede usar mÃ³dulos base, probar Google y decidir con contexto si ya le ordena el dÃ­a.",
         icon: Sparkles,
       },
       {
         title: "Google incluido",
         short: "Gmail, Calendar y Drive listos desde el inicio.",
         detail:
-          "La prueba ya incluye Google para que correos, agenda y documentos se conecten desde el principio sin bloquear la parte más atractiva del producto.",
+          "La prueba ya incluye Google para que correos, agenda y documentos se conecten desde el principio sin bloquear la parte mÃ¡s atractiva del producto.",
         icon: Mail,
       },
       {
         title: "Agenda y recordatorios",
         short: "Salud, pendientes y seguimiento desde el primer uso.",
         detail:
-          "Puede crear agenda, recordatorios, listas y seguimientos desde WhatsApp o desde el panel para sentir un uso real y no una demo vacía.",
+          "Puede crear agenda, recordatorios, listas y seguimientos desde WhatsApp o desde el panel para sentir un uso real y no una demo vacÃ­a.",
         icon: CalendarClock,
       },
       {
-        title: "Audios con acción",
-        short: "Prueba voz, llamadas y ejecución directa.",
+        title: "Audios con acciÃ³n",
+        short: "Prueba voz, llamadas y ejecuciÃ³n directa.",
         detail:
-          "Trial también sirve para validar audios, llamadas y acciones simples sin perder tiempo. La idea es que la primera impresión ya se sienta útil.",
+          "Trial tambiÃ©n sirve para validar audios, llamadas y acciones simples sin perder tiempo. La idea es que la primera impresiÃ³n ya se sienta Ãºtil.",
         icon: Mic,
       },
       {
@@ -261,28 +267,28 @@ const detailSets: Record<"es" | "en", Record<string, FeatureCard[]>> = {
     core: [
       {
         title: "Base estable",
-        short: "Más capacidad para vivir el día con orden.",
+        short: "MÃ¡s capacidad para vivir el dÃ­a con orden.",
         detail:
-          "Core ya sirve para operar cada día con agenda, tareas, listas, documentos, contactos y recordatorios sin dar todavía el salto grande.",
+          "Core ya sirve para operar cada dÃ­a con agenda, tareas, listas, documentos, contactos y recordatorios sin dar todavÃ­a el salto grande.",
         icon: Sparkles,
       },
       {
-        title: "Más voz y mensajes",
-        short: "Más espacio para delegar más seguido.",
+        title: "MÃ¡s voz y mensajes",
+        short: "MÃ¡s espacio para delegar mÃ¡s seguido.",
         detail:
-          "Sube la capacidad de uso diario y deja un margen más cómodo para trabajar con audio, seguimiento y automatizaciones más frecuentes.",
+          "Sube la capacidad de uso diario y deja un margen mÃ¡s cÃ³modo para trabajar con audio, seguimiento y automatizaciones mÃ¡s frecuentes.",
         icon: Mic,
       },
       {
         title: "Listas y agenda",
-        short: "Todo más claro desde el panel y WhatsApp.",
+        short: "Todo mÃ¡s claro desde el panel y WhatsApp.",
         detail:
-          "Core ayuda a ordenar lo pendiente y a reducir el caos diario, incluso sin Google incluido todavía, porque el flujo base ya se siente sólido.",
+          "Core ayuda a ordenar lo pendiente y a reducir el caos diario, incluso sin Google incluido todavÃ­a, porque el flujo base ya se siente sÃ³lido.",
         icon: CalendarClock,
       },
       {
         title: "Documentos y seguimiento",
-        short: "Más estructura sin más ruido.",
+        short: "MÃ¡s estructura sin mÃ¡s ruido.",
         detail:
           "Documentos, casos y contexto siguen conectados para que usted retome asuntos sin perder tiempo navegando entre demasiadas pantallas.",
         icon: FileText,
@@ -291,81 +297,81 @@ const detailSets: Record<"es" | "en", Record<string, FeatureCard[]>> = {
         title: "Camino a Pro",
         short: "Google se desbloquea al subir.",
         detail:
-          "Si ya siente que Core le quedó corto y necesita Gmail, Calendar y Drive dentro del mismo flujo, el salto correcto es Pro.",
+          "Si ya siente que Core le quedÃ³ corto y necesita Gmail, Calendar y Drive dentro del mismo flujo, el salto correcto es Pro.",
         icon: Search,
       },
     ],
     pro: [
       {
-        title: "El punto más atractivo",
-        short: "Google incluido y más espacio para operar de verdad.",
+        title: "El punto mÃ¡s atractivo",
+        short: "Google incluido y mÃ¡s espacio para operar de verdad.",
         detail:
-          "Pro es donde Operaly se siente más completo para la mayoría: correos, agenda, documentos, contactos, llamadas y seguimiento en la misma línea.",
+          "Pro es donde Operaly se siente mÃ¡s completo para la mayorÃ­a: correos, agenda, documentos, contactos, llamadas y seguimiento en la misma lÃ­nea.",
         icon: Sparkles,
       },
       {
-        title: "Correos con acción",
+        title: "Correos con acciÃ³n",
         short: "Busca, resume y ejecuta desde el mismo hilo.",
         detail:
-          "Con Google incluido, Pro permite usar Gmail, Calendar y Drive como parte viva del flujo, no como una promesa futura ni una función aparte.",
+          "Con Google incluido, Pro permite usar Gmail, Calendar y Drive como parte viva del flujo, no como una promesa futura ni una funciÃ³n aparte.",
         icon: Mail,
       },
       {
-        title: "Más automatización",
-        short: "Más minutos, más mensajes y más movimiento diario.",
+        title: "MÃ¡s automatizaciÃ³n",
+        short: "MÃ¡s minutos, mÃ¡s mensajes y mÃ¡s movimiento diario.",
         detail:
           "Si ya usa bastante audio, seguimiento operativo y agenda viva, Pro da margen suficiente para no sentirse frenado a mitad de semana.",
         icon: Zap,
       },
       {
         title: "Agenda clara",
-        short: "Prioridades, salud y próximos pasos conectados.",
+        short: "Prioridades, salud y prÃ³ximos pasos conectados.",
         detail:
-          "El salto a Pro también se siente en agenda y recordatorios porque el flujo completo con Google le da más contexto y más continuidad.",
+          "El salto a Pro tambiÃ©n se siente en agenda y recordatorios porque el flujo completo con Google le da mÃ¡s contexto y mÃ¡s continuidad.",
         icon: CalendarClock,
       },
       {
         title: "Documentos y casos",
-        short: "Más continuidad entre archivos, contactos y envíos.",
+        short: "MÃ¡s continuidad entre archivos, contactos y envÃ­os.",
         detail:
-          "Archivos, contratos, contactos y acciones sensibles quedan más amarrados para que la experiencia se vea más premium y más útil.",
+          "Archivos, contratos, contactos y acciones sensibles quedan mÃ¡s amarrados para que la experiencia se vea mÃ¡s premium y mÃ¡s Ãºtil.",
         icon: FileText,
       },
     ],
     pro_plus: [
       {
-        title: "Operaly a máxima capacidad",
-        short: "Para vivir dentro del producto todo el día.",
+        title: "Operaly a mÃ¡xima capacidad",
+        short: "Para vivir dentro del producto todo el dÃ­a.",
         detail:
-          "Pro Plus abre el techo para agendas más intensas y operaciones donde agenda, correos, documentos, llamadas y seguimiento se mueven de forma continua.",
+          "Pro Plus abre el techo para agendas mÃ¡s intensas y operaciones donde agenda, correos, documentos, llamadas y seguimiento se mueven de forma continua.",
         icon: Sparkles,
       },
       {
-        title: "Más volumen sin romper ritmo",
-        short: "Más voz, más mensajes y más automatizaciones activas.",
+        title: "MÃ¡s volumen sin romper ritmo",
+        short: "MÃ¡s voz, mÃ¡s mensajes y mÃ¡s automatizaciones activas.",
         detail:
-          "Cuando el flujo no para, Pro Plus da más margen para mantener velocidad, seguimiento y contexto sin revisar límites tan seguido.",
+          "Cuando el flujo no para, Pro Plus da mÃ¡s margen para mantener velocidad, seguimiento y contexto sin revisar lÃ­mites tan seguido.",
         icon: Mic,
       },
       {
-        title: "Google incluido y más margen",
-        short: "Todo listo para equipos o agendas más pesadas.",
+        title: "Google incluido y mÃ¡s margen",
+        short: "Todo listo para equipos o agendas mÃ¡s pesadas.",
         detail:
-          "Combina la integración de Google con un techo mucho más amplio para contactos, archivos y acciones recurrentes en el tiempo.",
+          "Combina la integraciÃ³n de Google con un techo mucho mÃ¡s amplio para contactos, archivos y acciones recurrentes en el tiempo.",
         icon: Mail,
       },
       {
-        title: "Seguimiento más fuerte",
-        short: "Más espacio para casos, tareas y continuidad real.",
+        title: "Seguimiento mÃ¡s fuerte",
+        short: "MÃ¡s espacio para casos, tareas y continuidad real.",
         detail:
-          "Sirve mejor cuando ya hay más volumen de contactos, documentos y seguimientos simultáneos en el día a día.",
+          "Sirve mejor cuando ya hay mÃ¡s volumen de contactos, documentos y seguimientos simultÃ¡neos en el dÃ­a a dÃ­a.",
         icon: Users,
       },
       {
-        title: "Más aire para crecer",
-        short: "La capa más holgada para crecer sin fricción.",
+        title: "MÃ¡s aire para crecer",
+        short: "La capa mÃ¡s holgada para crecer sin fricciÃ³n.",
         detail:
-          "Pro Plus no solo suma números. También deja respirar una operación más intensa sin que todo se sienta apretado.",
+          "Pro Plus no solo suma nÃºmeros. TambiÃ©n deja respirar una operaciÃ³n mÃ¡s intensa sin que todo se sienta apretado.",
         icon: Search,
       },
     ],
@@ -525,92 +531,92 @@ const detailSets: Record<"es" | "en", Record<string, FeatureCard[]>> = {
 const faqByLocale: Record<"es" | "en", { question: string; answer: string }[]> = {
   es: [
     {
-      question: "¿Necesito aprender otra app para usar Operaly?",
+      question: "¿Necesito aprender otra aplicación para usar Operaly?",
       answer:
-        "No. Operaly vive primero en WhatsApp y se apoya en el panel solo cuando conviene ver más claro, revisar el uso, cambiar de plan o mover configuraciones importantes.",
+        "No. Operaly funciona directamente desde WhatsApp. Solo necesitas enviar un mensaje de texto o audio, como lo harías con cualquier persona. El dashboard web es opcional y complementa la experiencia.",
     },
     {
-      question: "¿Qué pasa cuando el trial termina?",
+      question: "¿Qué pasa cuando termina el trial?",
       answer:
-        "Puede pasar a un plan superior si ya sintió el valor real. El trial está pensado para que use Operaly de verdad y tome la decisión con contexto, no a ciegas.",
+        "Cuando terminan los 7 días de prueba, tu cuenta queda en pausa. Tus datos se conservan. Puedes elegir un plan y continuar en cualquier momento desde tu dashboard en operaly.app/dashboard.",
     },
     {
-      question: "¿Google viene incluido en todos los planes?",
+      question: "¿Google está incluido en todos los planes?",
       answer:
-        "Google viene incluido durante el trial y desde Pro en adelante. En Core, la forma correcta de activarlo es subir a Pro.",
+        "Google Suite (Gmail, Calendar, Drive, Contacts) está incluido durante el trial y desde el plan Core en adelante. No requiere configuración adicional — solo conecta tu cuenta en el dashboard.",
     },
     {
       question: "¿Cómo me registro?",
       answer:
-        "Puede entrar por el botón de prueba gratis, crear su cuenta en minutos y empezar a usar Operaly sin tarjeta durante el trial.",
+        "Ve a operaly.app/register, ingresa tu nombre, email y número de WhatsApp. En menos de 2 minutos Operaly te envía un mensaje de bienvenida y tu trial de 7 días comienza automáticamente.",
     },
     {
       question: "¿Necesito tarjeta para empezar?",
       answer:
-        "No para iniciar el trial. La idea es que primero use Operaly y sienta el valor real antes de tomar una decisión de pago.",
+        "No. El trial de 7 días es completamente gratis y no requiere tarjeta de crédito. Solo necesitas un número de WhatsApp activo.",
     },
     {
-      question: "¿Los extras de voz y mensajes se renuevan solos?",
+      question: "¿Los extras de voz y mensajes se renuevan automáticamente?",
       answer:
-        "No. Los extras de voz y mensajes son pagos únicos con vigencia de 30 días. El almacenamiento adicional sí se suma como cargo mensual aparte del plan.",
+        "No. Los paquetes adicionales de voz y mensajes son compras puntuales por el mes en curso. No se renuevan automáticamente — tú decides cuándo agregarlos.",
     },
     {
       question: "¿Puedo usar Operaly solo desde WhatsApp?",
       answer:
-        "Sí, y esa es una de sus fortalezas. El panel está para darle más claridad y control cuando haga falta, pero el uso puede empezar perfectamente desde WhatsApp.",
+        "Sí. WhatsApp es el canal principal de Operaly. El dashboard web complementa la experiencia con vistas visuales de tu agenda, contactos, documentos y automatizaciones, pero no es obligatorio.",
     },
     {
-      question: "¿Cuál es el plan más recomendable?",
+      question: "¿Cuál es el plan más inteligente?",
       answer:
-        "Para la mayoría, Trial es la mejor entrada y Pro es la ruta más potente cuando ya quieren vivir el producto con Google incluido y más capacidad.",
+        "Depende de tu uso. Para empezar, el Trial te da 7 días completos. Si ya sabes que Operaly es para ti, Pro es el punto donde el producto se siente más completo: Google incluido, 60 minutos de voz, 3000 mensajes y todas las funciones activas.",
     },
   ],
   en: [
     {
       question: "Do I need to learn another app to use Operaly?",
       answer:
-        "No. Operaly lives first in WhatsApp and only leans on the panel when it helps to see things more clearly, review usage, change plan or adjust important settings.",
+        "No. Operaly works directly from WhatsApp. You only need to send a text or audio message as if you were talking to any person. The web dashboard is optional and complements the experience.",
     },
     {
       question: "What happens when the trial ends?",
       answer:
-        "You can move to a higher plan if you already felt real value. The trial is built so you use Operaly for real and decide with context, not blindly.",
+        "When the 7-day trial ends, your account is paused. Your data is preserved. You can choose a plan and continue anytime from operaly.app/dashboard.",
     },
     {
       question: "Is Google included in every plan?",
       answer:
-        "Google is included during the trial and from Pro onward. In Core, the right way to unlock it is by upgrading to Pro.",
+        "Google Suite (Gmail, Calendar, Drive, Contacts) is included during the trial and from the Core plan onward. It does not require extra setup — just connect your account in the dashboard.",
     },
     {
       question: "How do I sign up?",
       answer:
-        "You can tap the free trial button, create your account in minutes and begin using Operaly without a card during the trial period.",
+        "Go to operaly.app/register, enter your name, email and WhatsApp number. In under 2 minutes Operaly sends your welcome message and your 7-day trial starts automatically.",
     },
     {
       question: "Do I need a card to begin?",
       answer:
-        "Not to start the trial. The point is to let people feel real value first before making a payment decision.",
+        "No. The 7-day trial is completely free and does not require a credit card. You only need an active WhatsApp number.",
     },
     {
       question: "Do voice and message extras renew automatically?",
       answer:
-        "No. Voice and message extras are one-time purchases with a 30-day validity. Additional storage is the part that is added as a monthly charge on top of the plan.",
+        "No. Additional voice and message packages are one-time purchases for the current month. They do not renew automatically — you decide when to add them.",
     },
     {
       question: "Can I use Operaly only from WhatsApp?",
       answer:
-        "Yes, and that is one of its strengths. The panel is there to add clarity and control when needed, but the experience can begin perfectly from WhatsApp.",
+        "Yes. WhatsApp is the main Operaly channel. The web dashboard complements the experience with visual views of your agenda, contacts, documents and automations, but it is not required.",
     },
     {
       question: "Which plan is the smartest choice?",
       answer:
-        "For most people, Trial is the best entry and Pro is the strongest path once they want to live inside the product with Google included and more room.",
+        "It depends on your usage. To start, Trial gives you 7 full days. If you already know Operaly is for you, Pro is the point where the product feels most complete: Google included, 60 voice minutes, 3000 messages and every key function active.",
     },
   ],
 }
-
 export function Pricing({ locale = "es" }: { locale?: string }) {
-  const { pricing, loading, isPeru } = usePricingCurrency()
+  const { pricing, isPeru } = usePricingCurrency()
+  const [publicPlans, setPublicPlans] = useState<Record<string, PublicPlan>>({})
   const [selectedPlan, setSelectedPlan] = useState("pro")
   const [selectedFeature, setSelectedFeature] = useState<FeatureCard | null>(null)
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
@@ -620,9 +626,54 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
   const detailGroups = isSpanish ? detailSets.es : detailSets.en
   const faqItems = isSpanish ? faqByLocale.es : faqByLocale.en
 
+  useEffect(() => {
+    const loadPublicPlans = async () => {
+      try {
+        const response = await fetch("/api/plans", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const payload = (await response.json().catch(() => ({}))) as { plans?: PublicPlan[] }
+        if (!response.ok || !payload.plans) return
+        setPublicPlans(
+          payload.plans.reduce<Record<string, PublicPlan>>((accumulator, plan) => {
+            accumulator[plan.code] = plan
+            return accumulator
+          }, {})
+        )
+      } catch {
+        setPublicPlans({})
+      }
+    }
+
+    void loadPublicPlans()
+  }, [])
+
+  const displayPlans = useMemo(
+    () =>
+      OPERLAY_PLANS.map((plan) => {
+        const publicPlan = publicPlans[plan.code]
+        if (!publicPlan) return plan
+        if (plan.code === "trial") {
+          return {
+            ...plan,
+            price: 0,
+            currency: isPeru ? "PEN" : "USD",
+          }
+        }
+
+        return {
+          ...plan,
+          price: Number(isPeru ? publicPlan.price_pen ?? plan.price : publicPlan.price_usd ?? plan.price),
+          currency: isPeru ? "PEN" : "USD",
+        }
+      }),
+    [isPeru, publicPlans]
+  )
+
   const activePlan = useMemo(
-    () => OPERLAY_PLANS.find((plan) => plan.code === selectedPlan) ?? OPERLAY_PLANS[0],
-    [selectedPlan]
+    () => displayPlans.find((plan) => plan.code === selectedPlan) ?? displayPlans[0],
+    [displayPlans, selectedPlan]
   )
 
   const activeDetails = detailGroups[activePlan.code] ?? []
@@ -655,17 +706,15 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
         </div>
 
         <div className="mt-14 grid gap-6 lg:grid-cols-4">
-          {OPERLAY_PLANS.map((plan) => {
+          {displayPlans.map((plan) => {
             const isActive = activePlan.code === plan.code
             const isPopular = plan.code === "pro"
             const isTrial = plan.code === "trial"
             const localized = localizedPlans[plan.code]
             const formattedPrice =
               plan.price === 0
-                ? "Gratis"
-                : loading
-                  ? "..."
-                  : pricing.formatCatalogMoney(plan.price, plan.currency)
+                ? pricing.formatCatalogMoney(plan.price, plan.currency)
+                : pricing.formatCatalogMoney(plan.price, plan.currency)
 
             return (
               <div
@@ -734,7 +783,7 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
                     <p className={`mt-2 text-sm ${isActive ? "text-white/70" : "text-slate-500"}`}>
                       {plan.price === 0 ? t.trialSpan : t.monthly}
                     </p>
-                    {!loading && !isPeru && plan.price > 0 ? (
+                    {!isPeru && plan.price > 0 ? (
                       <p className={`mt-2 text-xs ${isActive ? "text-white/60" : "text-[#0369A1]"}`}>
                         Cobro real en soles: {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
                       </p>
@@ -953,7 +1002,7 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
                 <p>{t.modalBodyTwo}</p>
                 <p>
                   {isSpanish
-                    ? "Cada plan empuja un uso distinto: entrada más amable, base estable o una experiencia más completa con Google y mejor margen."
+                    ? "Cada plan empuja un uso distinto: entrada mÃ¡s amable, base estable o una experiencia mÃ¡s completa con Google y mejor margen."
                     : "Each plan pushes a different feeling: gentler entry, more stable base or a fuller experience with Google and more room."}
                 </p>
               </div>
@@ -970,3 +1019,4 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
     </section>
   )
 }
+
