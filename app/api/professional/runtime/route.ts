@@ -89,12 +89,12 @@ export async function GET(request: Request) {
     ] = await Promise.all([
       admin
         .from("clients")
-        .select("*")
+        .select("id,name,full_name,email,phone,preferred_language,default_language,phone_verification_status,plan_code,plan_status,status")
         .eq("id", clientId)
         .maybeSingle(),
       admin
         .from("user_voice_settings")
-        .select("*")
+        .select("client_id,voice_provider,voice_id,voice_name,voice_language,tone_style,call_style,prefer_audio_over_call,updated_at")
         .eq("client_id", clientId)
         .maybeSingle(),
       admin
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
         ]),
       admin
         .from("scheduled_messages")
-        .select("*")
+        .select("id,message_kind,status,message_status,created_at,updated_at,scheduled_for,sent_at,delivery_status,failure_reason")
         .eq("client_id", clientId)
         .eq("message_kind", "welcome_initial")
         .order("created_at", { ascending: false })
@@ -122,20 +122,20 @@ export async function GET(request: Request) {
         .maybeSingle(),
       admin
         .from("operational_context_states")
-        .select("*")
+        .select("id,client_id,module_context,current_module,pending_confirmation,pending_plan,payload,updated_at")
         .eq("client_id", clientId)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
       admin
         .from("operational_events")
-        .select("*")
+        .select("id,client_id,event_type,action,payload,created_at")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false })
         .limit(6),
       admin
         .from("operational_understanding_runs")
-        .select("*")
+        .select("id,client_id,intent,decision,status,confidence,confirmation_decision,created_at,inserted_at,semantic_turn_contract")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false })
         .limit(3),

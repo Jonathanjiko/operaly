@@ -51,6 +51,8 @@ type RemoteDocumentRow = {
   source: string | null
 }
 
+const DOCUMENTS_PAGE_SIZE = 20
+
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: { title: "Documentos", subtitle: "Vea sus archivos, traigalos cuando haga falta y trabaje con Operaly sin perder el orden.", sync: "Todo lo importante deberia sentirse aqui y tambien en WhatsApp", reminder: "Un archivo puede quedarse solo visible o entrar de lleno al analisis cuando usted lo pida.", upload: "Subir archivo", uploading: "Subiendo...", search: "Buscar documentos...", drag: "Arrastra archivos o haga clic para seleccionar", dragActive: "Suelte para subir", dragHint: "PDF, Word, Excel, imagenes y comprimidos · max. 50 MB", empty: "Sin documentos", emptyHint: "Suba su primer archivo o envieselo a Operaly por WhatsApp.", processed: "Procesado", processing: "Procesando", error: "Error", close: "Cerrar", delete: "Eliminar", deleteConfirm: "¿Eliminar este documento?", size: "Tamano", type: "Tipo", pages: "Paginas", chunks: "Chunks IA", source: "Fuente", uploaded: "Subido", readyHint: "Operaly ya puede analizar y responder sobre este archivo.", total: "archivos", processedCount: "procesados", mb: "MB" },
   en: { title: "Documents", subtitle: "Your operational file base to query, associate, and reuse from WhatsApp.", sync: "Synced with Supabase and WhatsApp", reminder: "Processed files stay ready for analysis, case continuity, and later sending.", upload: "Upload file", uploading: "Uploading...", search: "Search documents...", drag: "Drag files here or click to select", dragActive: "Drop to upload", dragHint: "PDF, Word, Excel, images, archives · max 50 MB", empty: "No documents", emptyHint: "Upload your first file or send it to Operaly through WhatsApp.", processed: "Processed", processing: "Processing", error: "Error", close: "Close", delete: "Delete", deleteConfirm: "Delete this document?", size: "Size", type: "Type", pages: "Pages", chunks: "AI chunks", source: "Source", uploaded: "Uploaded", readyHint: "Operaly can already analyze and answer questions about this file.", total: "files", processedCount: "processed", mb: "MB" },
@@ -276,6 +278,8 @@ export default function DocumentosPage() {
   const [timezone, setTimezone] = useState("America/Lima")
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
 
   const copy = COPY[language]
 
@@ -283,11 +287,13 @@ export default function DocumentosPage() {
     setLoading(true)
     try {
       const clientId = await getCurrentClientId()
+      const from = page * DOCUMENTS_PAGE_SIZE
+      const to = from + DOCUMENTS_PAGE_SIZE
       const session = await supabase.auth.getSession()
       const accessToken = session.data.session?.access_token || ""
       const [{ data: client }, { data, error }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", clientId).maybeSingle(),
-        supabase.from("documents").select("id,client_id,title,file_name,mime_type,file_size_bytes,page_count,chunk_count,status,source,channel,storage_path,created_at").eq("client_id", clientId).order("created_at", { ascending: false }),
+        supabase.from("documents").select("id,client_id,title,file_name,mime_type,file_size_bytes,page_count,chunk_count,status,source,channel,storage_path,created_at,embedding_status,embedding_provider,embedding_model,indexed_at,vision_status,extraction_source,contact_id,case_id").eq("client_id", clientId).order("created_at", { ascending: false }).range(from, to),
       ])
       if (error) throw error
       const resolvedLanguage = resolveLanguageCode(client?.preferred_language || client?.language || "es")
@@ -351,7 +357,9 @@ export default function DocumentosPage() {
       }
 
       if (!usedDashboardDocuments) {
-        setDocuments((data || []) as DocumentRow[])
+        const nextDocuments = (data || []).slice(0, DOCUMENTS_PAGE_SIZE)
+        setHasMore((data || []).length > DOCUMENTS_PAGE_SIZE)
+        setDocuments(nextDocuments as DocumentRow[])
       }
       try {
         setRuntimeSnapshot(await fetchProfessionalRuntime())
@@ -365,7 +373,7 @@ export default function DocumentosPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [page])
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase()
@@ -438,8 +446,11 @@ export default function DocumentosPage() {
           <p className="text-sm text-muted-foreground mt-0.5">{documents.length} {copy.total} · {totalMb.toFixed(2)} {copy.mb} · {processed} {copy.processedCount}</p>
           <p className="text-xs text-muted-foreground mt-1">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
           <p className="text-xs text-[#5F6B7A] mt-1">{copy.reminder}</p>
+          <p className="text-xs text-muted-foreground mt-1">Página {page + 1} · máximo {DOCUMENTS_PAGE_SIZE} documentos por carga</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0 || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
           <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary"><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={() => inputRef.current?.click()} disabled={uploading} className="h-9 px-4 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white text-sm font-bold hover:opacity-90 disabled:opacity-60 flex items-center gap-1.5">
             {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
@@ -707,6 +718,13 @@ export default function DocumentosPage() {
           })}
         </div>
       )}
+
+      {!loading ? (
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
+        </div>
+      ) : null}
 
       {detail && <DetailModal doc={detail} locale={locale} copy={copy} onClose={() => setDetail(null)} onDelete={() => handleDelete(detail.id)} />}
     </div>

@@ -320,12 +320,13 @@ export default function ProfessionalAnalyticsPage() {
         }
       }
 
-      const { data: addonsData } = await supabase
-        .from("add_on_purchases")
-        .select("*")
-        .eq("client_id", cid)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
+        const { data: addonsData } = await supabase
+          .from("add_on_purchases")
+          .select("id,code,addon_type,status,calls_minutes_extra,storage_gb_extra,enables_voice,enables_google,expires_at,created_at")
+          .eq("client_id", cid)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(50)
       setAddons((addonsData || []) as AddOnRow[])
 
       try {

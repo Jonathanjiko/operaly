@@ -12,6 +12,14 @@ export type ProfessionalRuntimeSnapshot = {
 }
 
 const PROFESSIONAL_RUNTIME_TIMEOUT_MS = 12000
+const PROFESSIONAL_RUNTIME_CACHE_TTL_MS = 60_000
+
+type ProfessionalRuntimeCacheEntry = {
+  data: ProfessionalRuntimeSnapshot | null
+  ts: number
+}
+
+let professionalRuntimeCache: ProfessionalRuntimeCacheEntry | null = null
 
 async function fetchWithProfessionalTimeout(input: string, init: RequestInit) {
   const controller = new AbortController()
@@ -33,6 +41,11 @@ async function fetchWithProfessionalTimeout(input: string, init: RequestInit) {
 }
 
 export async function fetchProfessionalRuntime(): Promise<ProfessionalRuntimeSnapshot | null> {
+  const now = Date.now()
+  if (professionalRuntimeCache && now - professionalRuntimeCache.ts < PROFESSIONAL_RUNTIME_CACHE_TTL_MS) {
+    return professionalRuntimeCache.data
+  }
+
   const session = await supabase.auth.getSession()
   const accessToken = session.data.session?.access_token || ""
   if (!accessToken) return null
@@ -48,6 +61,11 @@ export async function fetchProfessionalRuntime(): Promise<ProfessionalRuntimeSna
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta información por ahora."))
+  }
+
+  professionalRuntimeCache = {
+    data: payload as ProfessionalRuntimeSnapshot,
+    ts: now,
   }
 
   return payload as ProfessionalRuntimeSnapshot

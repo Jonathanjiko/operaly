@@ -55,6 +55,9 @@ type GoogleStatusPayload = {
   } | null
 }
 
+const CASES_PAGE_SIZE = 30
+const CASE_CONTACTS_PAGE_SIZE = 50
+
 const STATUS = [
   { value: "open", label: "Abierto", color: "#3B82F6", bg: "bg-blue-50", border: "border-blue-200", icon: FolderOpen },
   { value: "pending", label: "Pendiente", color: "#F59E0B", bg: "bg-amber-50", border: "border-amber-200", icon: Clock },
@@ -250,6 +253,8 @@ export default function CasosPage() {
     contactsSyncStatus: "",
   })
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([])
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
 
   const copy = COPY[language]
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
@@ -265,18 +270,22 @@ export default function CasosPage() {
     setLoading(true)
     try {
       const currentClientId = await getCurrentClientId()
+      const from = page * CASES_PAGE_SIZE
+      const to = from + CASES_PAGE_SIZE
       setClientId(currentClientId)
       const [{ data: client }, { data, error }, { data: contacts }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", currentClientId).maybeSingle(),
-        supabase.from("cases").select("*").eq("client_id", currentClientId).order("created_at", { ascending: false }),
-        supabase.from("contacts").select("*").eq("client_id", currentClientId),
+        supabase.from("cases").select("id,client_id,title,person_key,status,person_name,person_type,case_title,summary,continuity_summary,last_activity_at,created_at,updated_at,event_count,document_count,contact_count,last_event_type").eq("client_id", currentClientId).order("created_at", { ascending: false }).range(from, to),
+        supabase.from("contacts").select("id,name,display_name,full_name,contact_name,email,source").eq("client_id", currentClientId).order("updated_at", { ascending: false }).limit(CASE_CONTACTS_PAGE_SIZE),
       ])
       if (error) throw error
       const resolvedLanguage = resolveLanguageCode(client?.preferred_language || client?.language || "es")
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(client?.timezone_auto || client?.timezone || "America/Lima")
-      setCases((data || []) as CaseRow[])
+      const nextCases = (data || []).slice(0, CASES_PAGE_SIZE)
+      setHasMore((data || []).length > CASES_PAGE_SIZE)
+      setCases(nextCases as CaseRow[])
       const contactRows = contacts || []
       setContactOptions(
         contactRows
@@ -344,7 +353,7 @@ export default function CasosPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [page])
 
   const filtered = useMemo(() => cases.filter((cas) => {
     const query = search.toLowerCase()
@@ -394,8 +403,11 @@ export default function CasosPage() {
           <p className="text-sm text-muted-foreground mt-0.5">{cases.length} {copy.total} · {counts.open || 0} {copy.open}</p>
           <p className="text-xs text-muted-foreground mt-1">{copy.sync} · {labelForLanguage(language)} · {locale} · {timezone}</p>
           <p className="text-xs text-[#5F6B7A] mt-1">{copy.reminder}</p>
+          <p className="text-xs text-muted-foreground mt-1">Página {page + 1} · máximo {CASES_PAGE_SIZE} casos por carga</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0 || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
           <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary"><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={() => setCreating(true)} className="h-9 px-4 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white text-sm font-bold hover:opacity-90 flex items-center gap-1.5"><Plus className="w-4 h-4" />{copy.newCase}</button>
         </div>
@@ -564,6 +576,13 @@ export default function CasosPage() {
           })}
         </div>
       )}
+
+      {!loading ? (
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
+        </div>
+      ) : null}
 
       {creating && <FormModal copy={copy} contactOptions={contactOptions} googleContactsActive={googleSignals.contactsConnected} onClose={() => setCreating(false)} onSave={createCase} />}
       {detail && !editing && <DetailModal cas={detail} locale={locale} copy={copy} onClose={() => setDetail(null)} onEdit={() => { setEditing(detail); setDetail(null) }} onDelete={() => { deleteCase(detail.id); setDetail(null) }} />}

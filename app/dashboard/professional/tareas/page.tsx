@@ -15,6 +15,7 @@ type TaskStatus = "pending" | "in_progress" | "completed"
 
 const STATUS_LABELS: Record<TaskStatus, string> = { pending: "Pendientes", in_progress: "En progreso", completed: "Completadas" }
 const PRIORITIES = [{ value: "high", label: "Alta" }, { value: "normal", label: "Media" }, { value: "low", label: "Baja" }]
+const TASKS_PAGE_SIZE = 30
 
 function normalizeStatus(value: string | null): TaskStatus {
   const normalized = String(value || "").toLowerCase()
@@ -116,6 +117,8 @@ export default function TareasPage() {
   const [language, setLanguage] = useState<SupportedLanguage>("es")
   const [locale, setLocale] = useState("es-PE")
   const [timezone, setTimezone] = useState("America/Lima")
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
 
   const showToast = (msg: string, type: Toast["type"] = "info") => setToast({ open: true, msg, type })
 
@@ -123,17 +126,21 @@ export default function TareasPage() {
     setLoading(true)
     try {
       const currentClientId = await getCurrentClientId()
+      const from = page * TASKS_PAGE_SIZE
+      const to = from + TASKS_PAGE_SIZE
       setClientId(currentClientId)
       const [{ data: profile }, { data, error }] = await Promise.all([
         supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", currentClientId).maybeSingle(),
-        supabase.from("tasks").select("id,client_id,title,description,due_at,status,priority,created_at").eq("client_id", currentClientId).order("created_at", { ascending: false }),
+        supabase.from("tasks").select("id,client_id,title,description,due_at,status,priority,task_type,created_at").eq("client_id", currentClientId).order("created_at", { ascending: false }).range(from, to),
       ])
       if (error) throw error
       const resolvedLanguage = resolveLanguageCode(profile?.preferred_language || profile?.language || "es")
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
       setTimezone(profile?.timezone_auto || profile?.timezone || "America/Lima")
-      setTasks((data || []).map((task) => ({ ...task, status: normalizeStatus(task.status) })))
+      const nextTasks = (data || []).slice(0, TASKS_PAGE_SIZE)
+      setHasMore((data || []).length > TASKS_PAGE_SIZE)
+      setTasks(nextTasks.map((task) => ({ ...task, status: normalizeStatus(task.status) })))
     } catch {
       showToast("Error al cargar.", "error")
     } finally {
@@ -141,12 +148,12 @@ export default function TareasPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [page])
   useEffect(() => {
     if (!clientId) return
     const ch = supabase.channel(`tasks-rt-${clientId}`).on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` }, () => load()).subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [clientId])
+  }, [clientId, page])
 
   const filtered = useMemo(() => tasks.filter((task) => (!search || (task.title || "").toLowerCase().includes(search.toLowerCase())) && (!filterPriority || task.priority === filterPriority)), [tasks, search, filterPriority])
   const grouped = useMemo(() => ({ pending: filtered.filter((task) => normalizeStatus(task.status) === "pending"), in_progress: filtered.filter((task) => normalizeStatus(task.status) === "in_progress"), completed: filtered.filter((task) => normalizeStatus(task.status) === "completed") }), [filtered])
@@ -170,8 +177,11 @@ export default function TareasPage() {
           <p className="text-sm text-muted-foreground mt-0.5">{grouped.pending.length} pendientes · {tasks.length} en total</p>
           <p className="text-xs text-muted-foreground mt-1">{labelForLanguage(language)} · {timezone}</p>
           <p className="text-xs text-[#5F6B7A] mt-1">Cree, ordene y cierre pendientes sin perder lo importante del día.</p>
+          <p className="text-xs text-muted-foreground mt-1">Página {page + 1} · máximo {TASKS_PAGE_SIZE} tareas por carga</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0 || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore || loading} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
           <button onClick={load} className="w-9 h-9 rounded-xl border border-border flex items-center justify-center hover:bg-secondary"><RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /></button>
           <button onClick={() => setShowCreate(true)} className="h-9 px-4 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#7C3AED] text-white text-sm font-bold hover:opacity-90 flex items-center gap-1.5"><Plus className="w-4 h-4" />Nueva tarea</button>
         </div>
@@ -193,6 +203,13 @@ export default function TareasPage() {
           </div>
         </DndContext>
       )}
+
+      {!loading ? (
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Anterior</button>
+          <button onClick={() => setPage((current) => current + 1)} disabled={!hasMore} className="h-9 px-3 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-secondary disabled:opacity-40">Siguiente</button>
+        </div>
+      ) : null}
 
       {showCreate && <TaskForm onClose={() => setShowCreate(false)} onSave={createTask} />}
       {editing && <TaskForm task={editing} onClose={() => setEditing(null)} onSave={updateTask} />}

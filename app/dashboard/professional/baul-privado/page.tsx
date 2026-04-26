@@ -210,11 +210,12 @@ export default function BaulPrivadoPage() {
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
 
-      const { data, error } = await supabase
-        .from("private_vault_items")
-        .select("*")
-        .eq("client_id", currentClientId)
-        .order("created_at", { ascending: false })
+        const { data, error } = await supabase
+          .from("private_vault_items")
+          .select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,category,group_name,group,item_type,type,kind,source,status,created_at,updated_at")
+          .eq("client_id", currentClientId)
+          .order("created_at", { ascending: false })
+          .limit(50)
 
       if (error) throw error
       setItems((data || []) as VaultRow[])
@@ -281,7 +282,7 @@ export default function BaulPrivadoPage() {
 
     let lastError: any = null
     for (const payload of attempts) {
-      const result = await supabase.from("private_vault_items").insert(payload).select("*").single()
+        const result = await supabase.from("private_vault_items").insert(payload).select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,category,group_name,group,item_type,type,kind,source,status,created_at,updated_at").single()
       if (!result.error) {
         setItems((prev) => [result.data as VaultRow, ...prev])
         setDraft({ title: "", category: "Otros", kind: "note", detail: "" })

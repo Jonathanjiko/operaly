@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const { data, error } = await admin
       .from("user_voice_settings")
       .upsert(payload, { onConflict: "client_id" })
-      .select("*")
+      .select("client_id,voice_provider,voice_id,voice_name,voice_language,tone_style,call_style,prefer_audio_over_call,updated_at")
       .single()
 
     if (error) {

@@ -189,12 +189,12 @@ export default function VozPage() {
         setOperationalWarning((current) => current || "Algunos detalles de voz todavía se están actualizando.")
       }
 
-      if (!voiceSnapshotLoaded) {
-        const { data: vs } = await supabase
-          .from("user_voice_settings")
-          .select("*")
-          .eq("client_id", cid)
-          .maybeSingle()
+        if (!voiceSnapshotLoaded) {
+          const { data: vs } = await supabase
+            .from("user_voice_settings")
+            .select("client_id,voice_provider,voice_id,voice_name,voice_language,tone_style,call_style,prefer_audio_over_call,updated_at")
+            .eq("client_id", cid)
+            .maybeSingle()
 
         if (vs) {
           const savedVoiceId = String(vs.voice_id || "")

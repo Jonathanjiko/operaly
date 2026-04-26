@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await admin
       .from("user_voice_settings")
-      .select("*")
+      .select("client_id,voice_provider,voice_id,voice_name,voice_language,tone_style,call_style,prefer_audio_over_call,updated_at")
       .eq("client_id", clientId)
       .maybeSingle()
 

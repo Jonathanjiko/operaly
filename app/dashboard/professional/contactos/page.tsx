@@ -55,6 +55,8 @@ type GoogleContactsStatusPayload = {
   contacts?: GoogleContactsProductState
 }
 
+const CONTACTS_PAGE_SIZE = 50
+
 const BLANK_FORM: ContactForm = { name: "", phone: "", relationship: "", notes: "", birthday: "" }
 
 function toBirthdayInput(value?: string | null) {
@@ -142,6 +144,8 @@ export default function ContactosPage() {
   const [googleContactsAction, setGoogleContactsAction] = useState<string | null>(null)
   const [googleContactsMessage, setGoogleContactsMessage] = useState("")
   const [googleContactsError, setGoogleContactsError] = useState("")
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
 
   const getAuthHeaders = useCallback(async () => {
     const { data } = await supabase.auth.getSession()
@@ -175,14 +179,18 @@ export default function ContactosPage() {
     const resolvedClientId = nextClientId || clientId
     if (!resolvedClientId) return
     setLoading(true)
+    const from = page * CONTACTS_PAGE_SIZE
+    const to = from + CONTACTS_PAGE_SIZE
     const extendedResponse = await supabase
       .from("contacts")
       .select("id,name,phone,email,phone_normalized,phone_validation_status,relationship,notes,birthday,company,job_title,source,sync_status,external_source,last_synced_at,created_at")
       .eq("client_id", resolvedClientId)
       .order("name", { ascending: true })
+      .range(from, to)
     if (!extendedResponse.error) {
-      const rows = (extendedResponse.data || []) as ContactRow[]
+      const rows = ((extendedResponse.data || []) as ContactRow[]).slice(0, CONTACTS_PAGE_SIZE)
       setContacts(rows)
+      setHasMore(((extendedResponse.data || []) as ContactRow[]).length > CONTACTS_PAGE_SIZE)
       setContactsBridgeStatus(rows.some((contact) => String(contact.source || "").toLowerCase().includes("google") || String(contact.source || "").toLowerCase().includes("merge")) ? "active" : "pending")
       setLoading(false)
       return
@@ -193,8 +201,11 @@ export default function ContactosPage() {
       .select("id,name,phone,phone_normalized,phone_validation_status,relationship,notes,birthday,created_at")
       .eq("client_id", resolvedClientId)
       .order("name", { ascending: true })
+      .range(from, to)
 
-    setContacts(((baseResponse.data || []) as ContactRow[]).map((contact) => ({
+    const baseRows = ((baseResponse.data || []) as ContactRow[]).slice(0, CONTACTS_PAGE_SIZE)
+    setHasMore(((baseResponse.data || []) as ContactRow[]).length > CONTACTS_PAGE_SIZE)
+    setContacts(baseRows.map((contact) => ({
       ...contact,
       email: null,
       company: null,
@@ -206,7 +217,7 @@ export default function ContactosPage() {
     })))
     setContactsBridgeStatus("base_only")
     setLoading(false)
-  }, [clientId])
+  }, [clientId, page])
 
   useEffect(() => {
     getCurrentClientId()
@@ -219,10 +230,16 @@ export default function ContactosPage() {
           .maybeSingle()
         setCountryCode(String(client?.country_code || "PE").toUpperCase())
         setPreferredLanguage(String(client?.preferred_language || client?.language || "es"))
+        setPage(0)
         await Promise.all([loadContacts(currentClientId), loadGoogleContactsStatus()])
       })
       .catch(console.error)
   }, [loadContacts, loadGoogleContactsStatus])
+
+  useEffect(() => {
+    if (!clientId) return
+    void loadContacts()
+  }, [clientId, loadContacts, page])
 
   useEffect(() => {
     if (!clientId) return
@@ -254,6 +271,8 @@ export default function ContactosPage() {
     const normalized = String(contact.sync_status || "").toLowerCase()
     return normalized.includes("ok") || normalized.includes("sync")
   }).length
+
+  const pageLabel = `${page + 1}`
 
   async function connectGoogleContacts() {
     setGoogleContactsAction("connect")
@@ -377,6 +396,23 @@ export default function ContactosPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <div className="hidden items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 text-xs text-slate-500 md:flex">
+            <button
+              onClick={() => setPage((current) => Math.max(0, current - 1))}
+              disabled={page === 0}
+              className="py-2 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <span>Página {pageLabel}</span>
+            <button
+              onClick={() => setPage((current) => current + 1)}
+              disabled={!hasMore}
+              className="py-2 disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
           <button onClick={() => loadContacts()} className="rounded-xl border border-[#E2E8F0] bg-white p-2 hover:bg-[#F1F5F9]">
             <RefreshCw className="h-4 w-4 text-muted-foreground" />
           </button>
@@ -692,6 +728,26 @@ export default function ContactosPage() {
               </div>
             </div>
           ))}
+          <div className="flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 text-xs text-slate-500">
+            <span>Mostrando hasta {CONTACTS_PAGE_SIZE} contactos por página.</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                disabled={page === 0}
+                className="rounded-lg border border-[#E2E8F0] px-2.5 py-1 disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <span>Página {pageLabel}</span>
+              <button
+                onClick={() => setPage((current) => current + 1)}
+                disabled={!hasMore}
+                className="rounded-lg border border-[#E2E8F0] px-2.5 py-1 disabled:opacity-40"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

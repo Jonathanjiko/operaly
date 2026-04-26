@@ -138,6 +138,15 @@ export function isDashboardAccountActive(payload: DashboardRuntimePayload | null
 }
 
 const DASHBOARD_FETCH_TIMEOUT_MS = 12000
+const RUNTIME_CACHE_TTL_MS = 60_000
+
+type RuntimeCacheEntry<T> = {
+  data: T | null
+  ts: number
+}
+
+let dashboardRuntimeCache: RuntimeCacheEntry<DashboardRuntimePayload> | null = null
+const dashboardJsonCache = new Map<string, RuntimeCacheEntry<any>>()
 
 async function fetchWithDashboardTimeout(input: string, init: RequestInit) {
   const controller = new AbortController()
@@ -159,6 +168,11 @@ async function fetchWithDashboardTimeout(input: string, init: RequestInit) {
 }
 
 export async function fetchDashboardRuntime(): Promise<DashboardRuntimePayload | null> {
+  const now = Date.now()
+  if (dashboardRuntimeCache && now - dashboardRuntimeCache.ts < RUNTIME_CACHE_TTL_MS) {
+    return dashboardRuntimeCache.data
+  }
+
   const session = await supabase.auth.getSession()
   const accessToken = session.data.session?.access_token || ""
   if (!accessToken) return null
@@ -176,10 +190,17 @@ export async function fetchDashboardRuntime(): Promise<DashboardRuntimePayload |
     throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta sección por ahora."))
   }
 
+  dashboardRuntimeCache = { data: payload, ts: now }
   return payload
 }
 
 export async function fetchDashboardJson<T = Record<string, any>>(path: string): Promise<T | null> {
+  const now = Date.now()
+  const cached = dashboardJsonCache.get(path)
+  if (cached && now - cached.ts < RUNTIME_CACHE_TTL_MS) {
+    return cached.data as T | null
+  }
+
   const session = await supabase.auth.getSession()
   const accessToken = session.data.session?.access_token || ""
   if (!accessToken) return null
@@ -197,5 +218,6 @@ export async function fetchDashboardJson<T = Record<string, any>>(path: string):
     throw new Error(String(payload?.detail || payload?.error || "No se pudo cargar esta vista por ahora."))
   }
 
+  dashboardJsonCache.set(path, { data: payload, ts: now })
   return payload as T
 }

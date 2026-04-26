@@ -176,12 +176,13 @@ export default function AutomatizacionesPage() {
     void init()
   }, [])
 
-  const load = async (cid: string) => {
-    const { data, error } = await supabase
-      .from("recurring_tasks")
-      .select("*")
-      .eq("client_id", cid)
-      .order("created_at", { ascending: false })
+    const load = async (cid: string) => {
+      const { data, error } = await supabase
+        .from("recurring_tasks")
+        .select("id,client_id,title,repeat_type,repeat_interval,status,start_at,next_run")
+        .eq("client_id", cid)
+        .order("created_at", { ascending: false })
+        .limit(50)
 
     if (error) throw error
     setItems((data || []) as RecurringTaskRow[])
