@@ -29,6 +29,8 @@ type VaultRow = Record<string, any> & {
   updated_at?: string | null
 }
 
+const VAULT_PAGE_SIZE = 10
+
 const COPY: Record<SupportedLanguage, Record<string, string>> = {
   es: {
     title: "Baúl privado",
@@ -148,8 +150,12 @@ function inferVaultDetail(item: VaultRow) {
   )
 }
 
-function inferVaultCategory(item: VaultRow) {
-  return String(item.category || item.group_name || item.group || "Otros")
+function inferVaultItemType(item: VaultRow) {
+  return String(item.item_type || item.type || item.kind || "note")
+}
+
+function inferVaultSensitivity(item: VaultRow) {
+  return String(item.sensitivity_level || "standard")
 }
 
 function formatDate(value: string | null | undefined, locale: string) {
@@ -184,6 +190,8 @@ export default function BaulPrivadoPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState("")
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [draft, setDraft] = useState({
     title: "",
     category: "Otros",
@@ -210,18 +218,22 @@ export default function BaulPrivadoPage() {
       setLanguage(resolvedLanguage)
       setLocale(localeFromLanguage(resolvedLanguage))
 
-        const { data, error } = await supabase
-          .from("private_vault_items")
-          .select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,category,group_name,group,item_type,type,kind,source,status,created_at,updated_at")
-          .eq("client_id", currentClientId)
-          .order("created_at", { ascending: false })
-          .limit(50)
+      const from = page * VAULT_PAGE_SIZE
+      const to = from + VAULT_PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from("private_vault_items")
+        .select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,item_type,type,kind,source,status,sensitivity_level,created_at,updated_at")
+        .eq("client_id", currentClientId)
+        .order("created_at", { ascending: false })
+        .range(from, to)
 
       if (error) throw error
-      setItems((data || []) as VaultRow[])
+      const nextRows = (data || []) as VaultRow[]
+      setHasMore(nextRows.length === VAULT_PAGE_SIZE)
+      setItems((prev) => (page === 0 ? nextRows : [...prev, ...nextRows]))
     } catch (error: any) {
       console.error(error)
-      setItems([])
+      if (page === 0) setItems([])
       setErrorMessage(error.message || "No se pudo cargar el baúl privado.")
     } finally {
       setLoading(false)
@@ -230,13 +242,13 @@ export default function BaulPrivadoPage() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [page])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return items
     return items.filter((item) =>
-      [inferVaultTitle(item), inferVaultType(item), inferVaultCategory(item), inferVaultDetail(item)]
+      [inferVaultTitle(item), inferVaultType(item), inferVaultItemType(item), inferVaultDetail(item)]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -282,7 +294,7 @@ export default function BaulPrivadoPage() {
 
     let lastError: any = null
     for (const payload of attempts) {
-        const result = await supabase.from("private_vault_items").insert(payload).select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,category,group_name,group,item_type,type,kind,source,status,created_at,updated_at").single()
+        const result = await supabase.from("private_vault_items").insert(payload).select("id,client_id,title,name,label,reference_name,reference,key,url,link_url,username,notes,description,summary,storage_path,item_type,type,kind,source,status,sensitivity_level,created_at,updated_at").single()
       if (!result.error) {
         setItems((prev) => [result.data as VaultRow, ...prev])
         setDraft({ title: "", category: "Otros", kind: "note", detail: "" })
@@ -464,7 +476,8 @@ export default function BaulPrivadoPage() {
             const type = inferVaultType(item)
             const title = inferVaultTitle(item)
             const detail = inferVaultDetail(item)
-            const category = inferVaultCategory(item)
+            const itemType = inferVaultItemType(item)
+            const sensitivity = inferVaultSensitivity(item)
 
             return (
               <div key={item.id} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -489,21 +502,31 @@ export default function BaulPrivadoPage() {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Categoría</p>
-                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{category}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Item type</p>
+                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{itemType}</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-secondary/20 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Sensibilidad</p>
+                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{sensitivity}</p>
                   </div>
                   <div className="rounded-xl border border-border bg-secondary/20 p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tipo de guardado</p>
                     <p className="mt-2 text-sm font-medium text-[#0F1F63]">{type}</p>
                   </div>
-                  <div className="rounded-xl border border-border bg-secondary/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Guardado</p>
-                    <p className="mt-2 text-sm font-medium text-[#0F1F63]">{formatDate(item.created_at, locale)}</p>
-                  </div>
                 </div>
               </div>
             )
           })}
+          {hasMore ? (
+            <div className="flex justify-center">
+              <button
+                onClick={() => setPage((current) => current + 1)}
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary"
+              >
+                Ver más
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
