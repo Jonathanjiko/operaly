@@ -181,6 +181,75 @@ function normalizeGoogleError(payload: any, fallback: string) {
   return fallback
 }
 
+function normalizeGoogleSignal(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+}
+
+function signalMentionsReconnect(value: unknown) {
+  const normalized = normalizeGoogleSignal(value)
+  if (!normalized) return false
+
+  return [
+    "expired",
+    "expir",
+    "revoked",
+    "revoke",
+    "reauth",
+    "re-auth",
+    "reconnect",
+    "disconnected",
+    "not_connected",
+    "token",
+    "invalid_grant",
+    "scope_required",
+    "permission",
+    "oauth",
+    "consent",
+  ].some((fragment) => normalized.includes(fragment))
+}
+
+function getGoogleIntegrationHealth(params: {
+  product: GoogleProduct
+  productState: GoogleProductState | null
+  googleStatus: GoogleStatusPayload | null
+  contactsSyncStatus?: ContactsSnapshot["bridgeStatus"] | "" | "not_connected" | "scope_required" | "syncing" | "ok" | "partial" | "error"
+}) {
+  const { product, productState, googleStatus, contactsSyncStatus } = params
+  const authorizedProducts = googleStatus?.connection?.authorized_products || []
+  const connectionStatus = normalizeGoogleSignal(
+    googleStatus?.connection?.connection_status || googleStatus?.connection?.status
+  )
+  const productSyncStatus = normalizeGoogleSignal(productState?.sync_status)
+  const lastError = normalizeGoogleSignal(productState?.last_error)
+
+  const hasLegacyCalendarConnection =
+    product === "calendar" && !googleStatus?.products && connectionStatus === "connected"
+
+  const appearsAuthorized =
+    Boolean(productState?.enabled) || authorizedProducts.includes(product) || hasLegacyCalendarConnection
+
+  const syncRequiresReconnect =
+    signalMentionsReconnect(productSyncStatus) ||
+    signalMentionsReconnect(lastError) ||
+    (product === "contacts" && ["scope_required", "error", "not_connected"].includes(String(contactsSyncStatus || "")))
+
+  const connectionRequiresReconnect =
+    connectionStatus.length > 0 &&
+    connectionStatus !== "connected" &&
+    signalMentionsReconnect(connectionStatus)
+
+  const needsReconnect = syncRequiresReconnect || (appearsAuthorized && connectionRequiresReconnect)
+
+  return {
+    appearsAuthorized,
+    needsReconnect,
+    connectionStatus,
+    productSyncStatus,
+  }
+}
+
 function StatusPill({ status }: { status: IntegrationRuntimeStatus }) {
   if (status === "blocked") {
     return (
@@ -418,26 +487,24 @@ export default function IntegracionesPage() {
   const integrationStatuses = useMemo(() => {
     return INTEGRATIONS.map((integration) => {
       const productState = getProductState(googleStatus, integration.product)
-      const authorizedProducts = googleStatus?.connection?.authorized_products || []
-      const hasLegacyCalendarConnection =
-        integration.product === "calendar" &&
-        !googleStatus?.products &&
-        (googleStatus?.connection?.connection_status === "connected" || googleStatus?.connection?.status === "connected")
-
-      const isProductConnected =
-        Boolean(productState?.enabled) || authorizedProducts.includes(integration.product) || hasLegacyCalendarConnection
+      const health = getGoogleIntegrationHealth({
+        product: integration.product,
+        productState,
+        googleStatus,
+        contactsSyncStatus: integration.product === "contacts" ? contactsSyncState.status : "",
+      })
 
       const runtimeStatus: IntegrationRuntimeStatus = !googleEnabled
         ? "blocked"
-        : isProductConnected
+        : health.needsReconnect
+          ? "error"
+          : health.appearsAuthorized
           ? "connected"
-          : productState?.sync_status === "error"
-            ? "error"
-            : "ready_to_connect"
+          : "ready_to_connect"
 
       return { ...integration, runtimeStatus }
     })
-  }, [googleEnabled, googleStatus])
+  }, [contactsSyncState.status, googleEnabled, googleStatus])
 
   const connectedProductsCount = useMemo(
     () => integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length,
@@ -446,6 +513,11 @@ export default function IntegracionesPage() {
 
   const contactsProductConnected =
     integrationStatuses.find((integration) => integration.product === "contacts")?.runtimeStatus === "connected"
+
+  const reconnectRequiredIntegrations = useMemo(
+    () => integrationStatuses.filter((integration) => integration.runtimeStatus === "error"),
+    [integrationStatuses]
+  )
 
   const handleSyncContacts = async () => {
     setActionLoading("sync:contacts")
@@ -647,6 +719,14 @@ export default function IntegracionesPage() {
         </div>
       ) : null}
 
+      {reconnectRequiredIntegrations.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Google desconecto {reconnectRequiredIntegrations.length > 1 ? "algunas integraciones" : "una integracion"} de su cuenta.
+          {` `}
+          Vuelva a conectarla{reconnectRequiredIntegrations.length > 1 ? "s" : ""} para seguir usando agenda, correo, archivos o contactos sin cortes.
+        </div>
+      ) : null}
+
       {false ? (
       <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
         <div className="grid gap-3 md:grid-cols-3">
@@ -732,6 +812,13 @@ export default function IntegracionesPage() {
           const runtimeStatus = integration.runtimeStatus
           const productState = getProductState(googleStatus, integration.product)
           const productLabel = getProductLabel(integration.product)
+          const health = getGoogleIntegrationHealth({
+            product: integration.product,
+            productState,
+            googleStatus,
+            contactsSyncStatus: integration.product === "contacts" ? contactsSyncState.status : "",
+          })
+          const connectionEmail = googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`
 
           return (
             <div key={integration.id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
@@ -760,7 +847,7 @@ export default function IntegracionesPage() {
                   <div className="space-y-2">
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
                       <p className="font-semibold">Cuenta conectada</p>
-                      <p className="mt-1">{googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`}</p>
+                      <p className="mt-1">{connectionEmail}</p>
                       <p className="mt-1">Estado: {integration.product === "contacts" ? contactsStatusLabel : productState?.sync_status || "listo"}</p>
                       {integration.product === "contacts" && (
                         <p className="mt-1">
@@ -807,6 +894,38 @@ export default function IntegracionesPage() {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </Link>
+                ) : runtimeStatus === "error" ? (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                      <p className="font-semibold">Reconectar Google {productLabel}</p>
+                      <p className="mt-1">
+                        {connectionEmail}
+                      </p>
+                      <p className="mt-1">
+                        Google corto esta conexion o ya no tiene permisos vigentes. Vuelva a conectarla para evitar fallas silenciosas.
+                      </p>
+                      {productState?.last_error ? <p className="mt-1 text-amber-900">Ultimo error: {productState.last_error}</p> : null}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        onClick={() => handleConnectProduct(integration.product)}
+                        disabled={Boolean(actionLoading) || !googleServerConfigured}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
+                      >
+                        {actionLoading === `connect:${integration.product}`
+                          ? "Abriendo Google..."
+                          : `Volver a conectar ${productLabel}`}
+                        {integration.product === "contacts" ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleValidateProduct(integration.product)}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {actionLoading === `validate:${integration.product}` ? "Validando..." : "Revisar estado"}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <button
                     onClick={() => handleConnectProduct(integration.product)}
@@ -833,6 +952,10 @@ export default function IntegracionesPage() {
                           : integration.product === "drive"
                             ? "Sus archivos remotos ya pueden quedar visibles aqui y traerse solo cuando hagan falta."
                             : "Esta herramienta ya puede empezar a ayudarle desde Operaly segun el uso que necesite."
+                        : runtimeStatus === "error"
+                          ? health.connectionStatus
+                            ? `La ultima senal de Google fue "${health.connectionStatus}". Revise la conexion y vuelva a autorizarla.`
+                            : "Google ya no confirma esta conexion como vigente. Vuelva a conectarla para continuar."
                         : "El siguiente paso es conectar este producto para empezar a usarlo desde Operaly."}
                 </div>
               </div>
