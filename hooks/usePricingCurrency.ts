@@ -1,78 +1,99 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import {
+  USD_TO_PEN_RATE,
+  formatCatalogMoney,
+  formatMoney,
+  formatRegionalMoneyFromPen,
+  getRegionalDisplayCurrency,
+  toPenAmount,
+  toRegionalDisplayAmount,
+  type SupportedCurrency,
+} from "@/lib/pricing"
 
-export type PricingCurrency = "PEN" | "USD"
-
-export type PlanPrices = {
-  core: number
-  pro: number
-  pro_plus: number
-  addon_voice: number
-  addon_storage: number
-  addon_google: number
-}
+export type PricingCurrency = SupportedCurrency
 
 export type PricingConfig = {
   currency: PricingCurrency
-  symbol: string
-  display: PlanPrices
-  charge_pen: PlanPrices
-  fmt: (n: number) => string
-  fmtPEN: (n: number) => string
+  exchangeRatePenPerUsd: number
+  formatCatalogMoney: (
+    amount: number | string | null | undefined,
+    storedCurrency?: string | null | undefined
+  ) => string
+  formatDisplayFromPen: (amountPen: number | string | null | undefined) => string
+  formatPen: (amountPen: number | string | null | undefined) => string
+  toDisplayAmountFromPen: (amountPen: number | string | null | undefined) => number
+  toPenAmount: (
+    amount: number | string | null | undefined,
+    storedCurrency?: string | null | undefined
+  ) => number
 }
 
-const PERU: PricingConfig = {
-  currency: "PEN", symbol: "S/",
-  display:    { core: 49,  pro: 99,  pro_plus: 199, addon_voice: 50, addon_storage: 25, addon_google: 40 },
-  charge_pen: { core: 49,  pro: 99,  pro_plus: 199, addon_voice: 50, addon_storage: 25, addon_google: 40 },
-  fmt:    (n) => `S/${n}`,
-  fmtPEN: (n) => `S/${n}`,
-}
+function createPricingConfig(isPeru: boolean): PricingConfig {
+  const currency = getRegionalDisplayCurrency(isPeru)
 
-const INTL: PricingConfig = {
-  currency: "USD", symbol: "$",
-  display:    { core: 12,  pro: 24,  pro_plus: 48,  addon_voice: 10, addon_storage: 5,  addon_google: 8  },
-  charge_pen: { core: 60,  pro: 120, pro_plus: 240, addon_voice: 50, addon_storage: 25, addon_google: 40 },
-  fmt:    (n) => `$${n}`,
-  fmtPEN: (n) => `S/${n}`,
+  return {
+    currency,
+    exchangeRatePenPerUsd: USD_TO_PEN_RATE,
+    formatCatalogMoney: (amount, storedCurrency) =>
+      formatCatalogMoney(amount, storedCurrency, isPeru),
+    formatDisplayFromPen: (amountPen) => formatRegionalMoneyFromPen(amountPen, isPeru),
+    formatPen: (amountPen) => formatMoney("PEN", amountPen, "es-PE"),
+    toDisplayAmountFromPen: (amountPen) => toRegionalDisplayAmount(amountPen, isPeru),
+    toPenAmount: (amount, storedCurrency) => toPenAmount(amount, storedCurrency),
+  }
 }
 
 export function usePricingCurrency(): { pricing: PricingConfig; loading: boolean; isPeru: boolean } {
-  const [pricing, setPricing] = useState<PricingConfig>(INTL)
+  const [isPeru, setIsPeru] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [isPeru, setIsPeru]   = useState(false)
 
   useEffect(() => {
     const detect = async () => {
       try {
         const cached = localStorage.getItem("operaly_country_code")
         if (cached) {
-          const peru = cached === "PE"
-          setPricing(peru ? PERU : INTL); setIsPeru(peru); setLoading(false); return
+          setIsPeru(cached === "PE")
+          setLoading(false)
+          return
         }
+
         const profile = localStorage.getItem("operaly_assistant_profile")
         if (profile) {
-          const p = JSON.parse(profile)
-          if (p?.countryCode) {
-            const peru = p.countryCode === "PE"
-            localStorage.setItem("operaly_country_code", p.countryCode)
-            setPricing(peru ? PERU : INTL); setIsPeru(peru); setLoading(false); return
+          const parsed = JSON.parse(profile)
+          if (parsed?.countryCode) {
+            const countryCode = String(parsed.countryCode).toUpperCase()
+            localStorage.setItem("operaly_country_code", countryCode)
+            setIsPeru(countryCode === "PE")
+            setLoading(false)
+            return
           }
         }
-        const res = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(3000) })
-        if (res.ok) {
-          const data = await res.json()
-          const code = (data?.country_code || "").toUpperCase()
-          localStorage.setItem("operaly_country_code", code)
-          const peru = code === "PE"
-          setPricing(peru ? PERU : INTL); setIsPeru(peru)
+
+        const response = await fetch("https://ipapi.co/json/", {
+          signal: AbortSignal.timeout(3000),
+        })
+
+        if (response.ok) {
+          const payload = await response.json()
+          const countryCode = String(payload?.country_code || "").toUpperCase()
+          localStorage.setItem("operaly_country_code", countryCode)
+          setIsPeru(countryCode === "PE")
         }
-      } catch {}
+      } catch {
+        setIsPeru(false)
+      }
+
       setLoading(false)
     }
-    detect()
+
+    void detect()
   }, [])
 
-  return { pricing, loading, isPeru }
+  return {
+    pricing: createPricingConfig(isPeru),
+    loading,
+    isPeru,
+  }
 }

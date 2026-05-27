@@ -26,8 +26,15 @@ import {
   Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
+import { fetchDashboardJson, fetchDashboardRuntime, resolveDashboardPlanCode } from "@/lib/dashboard-runtime"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
 import { getDisplayPlanName } from "@/lib/plans"
 
 const PROFESSIONS = [
@@ -68,6 +75,19 @@ const TREATMENTS = [
   { code: "Arq.", label: "Arq." },
 ]
 
+function formatRuntimeDate(value: unknown) {
+  if (!value) return "Sin marca visible"
+  const parsed = new Date(String(value))
+  if (Number.isNaN(parsed.getTime())) return "Sin marca visible"
+  return parsed.toLocaleString("es-PE")
+}
+
+function confidenceLabel(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return "Sin confianza visible"
+  return `${Math.round(numeric * 100)}%`
+}
+
 export default function AsistentePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -81,84 +101,174 @@ export default function AsistentePage() {
   const [style, setStyle] = useState("balanceado")
   const [customContext, setCustomContext] = useState("")
   const [saved, setSaved] = useState(false)
+  const [loadError, setLoadError] = useState("")
+  const [saveError, setSaveError] = useState("")
+  const [lastSavedAt, setLastSavedAt] = useState("")
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [operationalWarning, setOperationalWarning] = useState("")
 
   useEffect(() => {
     loadConfig()
   }, [])
 
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesión activa.")
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }
+  }
+
   const loadConfig = async () => {
     setLoading(true)
+    setLoadError("")
+    setOperationalWarning("")
     try {
       const cid = await getCurrentClientId()
       setClientId(cid)
 
-      const { data: client } = await supabase
-        .from("clients")
-        .select("profession_code, preferred_name, treatment, preferred_style, plan_code")
-        .eq("id", cid)
-        .single()
+      let client:
+        | {
+            profession_code?: string | null
+            preferred_name?: string | null
+            treatment?: string | null
+            preferred_style?: string | null
+            plan_code?: string | null
+          }
+        | null = null
 
-      if (client) {
-        setProfessionCode(client.profession_code || "consultor")
-        setPreferredName(client.preferred_name || "")
-        setTreatment(client.treatment || "")
-        setStyle(client.preferred_style || "balanceado")
-        setPlanCode(client.plan_code || "trial")
+      try {
+        const assistantPayload = await fetchDashboardJson<{
+          client?: {
+            profession_code?: string | null
+            preferred_name?: string | null
+            treatment?: string | null
+            preferred_style?: string | null
+            plan_code?: string | null
+          } | null
+          preferences?: Record<string, string>
+        }>("/api/dashboard/assistant")
+
+        client = assistantPayload?.client || null
+        if (client) {
+          setProfessionCode(client.profession_code || "consultor")
+          setPreferredName(client.preferred_name || "")
+          setTreatment(client.treatment || "")
+          setStyle(client.preferred_style || "balanceado")
+        }
+
+        const prefs = assistantPayload?.preferences || {}
+        setTone(prefs.assistant_tone || "profesional")
+        setCustomContext(prefs.assistant_context || "")
+        if (!client?.profession_code) setProfessionCode(prefs.assistant_profession || "consultor")
+        if (!client?.preferred_style) setStyle(prefs.assistant_style || "balanceado")
+      } catch (assistantError) {
+        console.error("No se pudo cargar snapshot auth-bound del asistente:", assistantError)
+        setOperationalWarning("La configuración del asistente tardó más de lo normal. Le mostramos lo último disponible.")
       }
 
-      const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
-      if (limitsError) throw limitsError
+      if (!client) {
+        const clientResponse = await supabase
+          .from("clients")
+          .select("profession_code, preferred_name, treatment, preferred_style, plan_code")
+          .eq("id", cid)
+          .maybeSingle()
+        client = clientResponse.data || null
 
-      setCustomAgentEnabled(Boolean(limits?.custom_agent_enabled ?? false))
+        if (client) {
+          setProfessionCode(client.profession_code || "consultor")
+          setPreferredName(client.preferred_name || "")
+          setTreatment(client.treatment || "")
+          setStyle(client.preferred_style || "balanceado")
+        }
+      }
 
-      const { data: prefs } = await supabase
-        .from("client_preferences")
-        .select("pref_key, pref_value")
-        .eq("client_id", cid)
-        .in("pref_key", ["assistant_tone", "assistant_context"])
+      let dashboardRuntimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        const featureAccess = runtime?.feature_access || runtime?.limits || {}
+        const resolvedPlanCode = resolveDashboardPlanCode(runtime, String(client?.plan_code || "trial"))
 
-      prefs?.forEach((pref: any) => {
-        if (pref.pref_key === "assistant_tone") setTone(pref.pref_value || "profesional")
-        if (pref.pref_key === "assistant_context") setCustomContext(pref.pref_value || "")
-      })
+        setPlanCode(resolvedPlanCode)
+        setCustomAgentEnabled(Boolean(featureAccess?.custom_agent_enabled ?? false))
+        setRuntimeSource("auth_bound")
+        dashboardRuntimeLoaded = true
+      } catch (dashboardError) {
+        console.error("No se pudo cargar dashboard runtime del asistente:", dashboardError)
+        setOperationalWarning((current) => current || "Todavía no pudimos actualizar algunos detalles del asistente.")
+      }
+
+      if (!dashboardRuntimeLoaded) {
+        const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
+        if (limitsError) throw limitsError
+
+        const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+        setPlanCode(getEffectivePlanCode(effectiveLimits))
+        setCustomAgentEnabled(Boolean(limits?.custom_agent_enabled ?? false))
+        setRuntimeSource("legacy")
+      }
+
+      if (!customContext) {
+        const { data: prefs } = await supabase
+          .from("client_preferences")
+          .select("pref_key, pref_value")
+          .eq("client_id", cid)
+          .in("pref_key", ["assistant_tone", "assistant_context", "assistant_profession", "assistant_style"])
+
+        prefs?.forEach((pref: any) => {
+          if (pref.pref_key === "assistant_tone") setTone(pref.pref_value || "profesional")
+          if (pref.pref_key === "assistant_context") setCustomContext(pref.pref_value || "")
+          if (pref.pref_key === "assistant_profession" && !client?.profession_code) setProfessionCode(pref.pref_value || "consultor")
+          if (pref.pref_key === "assistant_style" && !client?.preferred_style) setStyle(pref.pref_value || "balanceado")
+        })
+      }
+
+      try {
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.error("No se pudo cargar runtime del asistente:", runtimeError)
+        setOperationalWarning((current) => current || "Algunos cambios del asistente pueden tardar un poco más en reflejarse.")
+      }
     } catch (err) {
       console.error(err)
+      setLoadError("No se pudo cargar la configuracion del asistente.")
     } finally {
       setLoading(false)
     }
   }
 
-  const upsertPref = async (key: string, value: string) => {
-    await supabase.from("client_preferences").upsert(
-      { client_id: clientId, pref_key: key, pref_value: value, source: "dashboard" },
-      { onConflict: "client_id,pref_key" },
-    )
-  }
-
   const handleSave = async () => {
     if (!clientId) return
     setSaving(true)
+    setSaveError("")
     try {
-      await supabase
-        .from("clients")
-        .update({
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/professional/assistant", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
           profession_code: professionCode,
           preferred_name: preferredName.trim() || null,
           treatment: treatment || null,
-          preferred_style: style,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", clientId)
+          tone,
+          style,
+          assistant_context: customContext.trim(),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(String(payload?.error || payload?.detail || "No se pudo guardar el asistente."))
+      }
 
-      await upsertPref("assistant_tone", tone)
-      await upsertPref("assistant_context", customContext.trim())
-      await upsertPref("assistant_profession", professionCode)
-      await upsertPref("assistant_style", style)
-
+      await loadConfig()
+      setLastSavedAt(new Date().toISOString())
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
-      alert(err.message || "No se pudo guardar.")
+      setSaveError(err.message || "No se pudo guardar.")
     } finally {
       setSaving(false)
     }
@@ -225,6 +335,19 @@ export default function AsistentePage() {
     )
   }
 
+  const runtimePreferences = runtimeSnapshot?.preferences || {}
+  const recentUnderstanding = runtimeSnapshot?.recentUnderstandingRuns?.[0] || null
+  const recentEvent = runtimeSnapshot?.recentEvents?.[0] || null
+  const visibleTone = String(runtimePreferences.assistant_tone || tone)
+  const visibleStyle = String(runtimePreferences.assistant_style || style)
+  const visibleProfession = String(runtimePreferences.assistant_profession || professionCode)
+  const visibleName = String(runtimePreferences.preferred_name || preferredName || "")
+  const runtimeAligned =
+    visibleTone === tone &&
+    visibleStyle === style &&
+    visibleProfession === professionCode
+  const selectedProfession = PROFESSIONS.find((item) => item.code === professionCode)
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
@@ -236,6 +359,172 @@ export default function AsistentePage() {
           <Bot className="h-5 w-5 text-white" />
         </div>
       </div>
+
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      ) : null}
+
+      {false ? (
+      <>
+      <div className="rounded-2xl border border-[#7C3AED]/15 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Qué define aquí</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Aquí decide cómo debe representarlo Operaly: desde qué profesión lo acompaña, qué tono usa, qué tan breve o detallado responde y qué contexto debe tener siempre presente.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Lo que ajusta aquí</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          El nombre con el que lo trata, el tono que usa y la forma en que responde en su día a día.
+        </p>
+      </div>
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-[#3B82F6]/20 bg-gradient-to-r from-[#7C3AED]/5 via-white to-[#3B82F6]/5 p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Así debería sentirse</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Más claro, más personal y más alineado con su forma de trabajar, sin respuestas genéricas.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">asistente visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeSnapshot?.preferences?.assistant_tone || tone}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.preferences?.assistant_style || style} · {runtimeSnapshot?.preferences?.assistant_profession || professionCode}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">último entendimiento</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {normalizeRuntimeStatus(
+              String(
+                runtimeSnapshot?.recentUnderstandingRuns?.[0]?.decision ||
+                  runtimeSnapshot?.recentUnderstandingRuns?.[0]?.status ||
+                  ""
+              )
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.recentUnderstandingRuns?.[0]?.confidence != null
+              ? `Confianza ${(Number(runtimeSnapshot.recentUnderstandingRuns[0].confidence) * 100).toFixed(0)}%`
+              : "Todavía no hay corrida visible"}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">en conversación</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">Debe sentirse como suyo</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Si WhatsApp sigue respondiendo genérico o fuera de tono, backend todavía no está aplicando bien esta configuración.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estado del estilo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {runtimeAligned ? "Aplicado" : "Por actualizar"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {runtimeSnapshot?.preferences
+              ? "Ya hay una personalidad visible para contrastar con su configuración."
+              : "Todavía no aparece una personalidad visible en esta cuenta."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">comprension reciente</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{confidenceLabel(recentUnderstanding?.confidence)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {recentUnderstanding
+              ? `Decision visible: ${normalizeRuntimeStatus(String(recentUnderstanding?.decision || recentUnderstanding?.status || ""))}`
+              : "Todavia no hay una corrida reciente visible del entendimiento."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">trato esperado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {treatment || "Sin tratamiento"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {visibleName
+              ? `Debe dirigirse a ${visibleName} con tono ${visibleTone}.`
+              : "Debe sostener el tono elegido aunque no haya un nombre visible."}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">plan actual</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">tono activo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{tone}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">estilo activo</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{style}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#0F1F63]">Última actividad visible</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Revise lo último que ya se alcanzó a reflejar en su asistente.
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+            {formatRuntimeDate(
+              recentUnderstanding?.created_at ||
+                recentUnderstanding?.inserted_at ||
+                recentEvent?.created_at ||
+                recentEvent?.inserted_at
+            )}
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">profesion visible</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+              {PROFESSIONS.find((item) => item.code === visibleProfession)?.label || visibleProfession || "Pendiente"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {selectedProfession?.sublabel || "Configuracion profesional actual"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">tono visible</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">{visibleTone}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Estilo: {visibleStyle}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">ultimo evento</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F1F63]">
+              {normalizeRuntimeStatus(String(recentEvent?.event_type || recentEvent?.action || recentEvent?.type || ""))}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Sirve para contrastar si la conversacion viva ya se siente como su configuracion.
+            </p>
+          </div>
+        </div>
+      </div>
+      </>
+      ) : null}
 
       <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center gap-2">
@@ -280,6 +569,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Profesion</h2>
             <p className="text-xs text-muted-foreground">Operaly ajusta su lenguaje y criterio segun tu area</p>
+            <p className="text-xs text-muted-foreground">Esto debería cambiar cómo analiza, propone y responde.</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
@@ -319,6 +609,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Tono de comunicacion</h2>
             <p className="text-xs text-muted-foreground">La personalidad con la que Operaly te responde por WhatsApp</p>
+            <p className="text-xs text-muted-foreground">Debe reflejarse también en llamadas, notas de voz y mensajes proactivos.</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
@@ -346,6 +637,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Estilo de respuesta</h2>
             <p className="text-xs text-muted-foreground">Que tan breve o profundo quieres a Operaly</p>
+            <p className="text-xs text-muted-foreground">Sirve para que no se sienta demasiado seco ni demasiado largo.</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -373,6 +665,7 @@ export default function AsistentePage() {
           <div>
             <h2 className="font-semibold text-[#0F1F63]">Contexto permanente</h2>
             <p className="text-xs text-muted-foreground">Informacion que Operaly debe recordar siempre sobre tu trabajo</p>
+            <p className="text-xs text-muted-foreground">Aquí puede dejar criterios, contexto o forma de trabajo que no quiere repetir todo el tiempo.</p>
           </div>
         </div>
         <textarea
@@ -409,9 +702,45 @@ export default function AsistentePage() {
         </Button>
         {saved && (
           <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-            <Check className="h-4 w-4" /> Guardado: Operaly ya usa esta configuracion
+            <Check className="h-4 w-4" /> Cambios guardados
           </div>
         )}
+        {lastSavedAt ? (
+          <div className="text-xs text-muted-foreground">
+            Última actualización: {new Date(lastSavedAt).toLocaleString("es-PE")}
+          </div>
+        ) : null}
+      </div>
+
+      {saveError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {saveError}
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Cómo debe tratarlo</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            Su nombre, tratamiento y profesión deberían cambiar la forma en que Operaly le habla a usted.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Cómo debe pensar</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            El tono y el estilo ayudan a que responda con el nivel de detalle y formalidad que usted espera.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Qué no debería perder</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600">
+            El contexto permanente debería servir para que no tenga que volver a explicarle siempre lo mismo.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Si todavía nota respuestas genéricas o fuera de tono, vuelva a revisar estos ajustes y pruébelos otra vez en WhatsApp.
       </div>
     </div>
   )

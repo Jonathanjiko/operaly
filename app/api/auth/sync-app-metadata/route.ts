@@ -17,7 +17,7 @@ function getAdminClient() {
 
 export async function POST(request: Request) {
   try {
-    const { clientId, authUserId } = await request.json()
+    const { clientId, authUserId, preferredLanguage, webLocale, timezone } = await request.json()
 
     if (!clientId || !authUserId) {
       return NextResponse.json(
@@ -61,13 +61,55 @@ export async function POST(request: Request) {
     const { error: prefError } = await supabaseAdmin
       .from("client_preferences")
       .upsert(
-        {
-          client_id: clientId,
-          pref_key: "pending_welcome_message",
-          pref_value: "true",
-          source: "registration",
-          updated_at: new Date().toISOString(),
-        },
+        [
+          {
+            client_id: clientId,
+            pref_key: "pending_welcome_message",
+            pref_value: "true",
+            source: "registration",
+            updated_at: new Date().toISOString(),
+          },
+          ...(preferredLanguage
+            ? [
+                {
+                  client_id: clientId,
+                  pref_key: "preferred_language",
+                  pref_value: String(preferredLanguage).toLowerCase(),
+                  source: "registration",
+                  updated_at: new Date().toISOString(),
+                },
+                {
+                  client_id: clientId,
+                  pref_key: "language_source",
+                  pref_value: "registration",
+                  source: "registration",
+                  updated_at: new Date().toISOString(),
+                },
+              ]
+            : []),
+          ...(webLocale
+            ? [
+                {
+                  client_id: clientId,
+                  pref_key: "web_locale",
+                  pref_value: String(webLocale).toLowerCase(),
+                  source: "geoip_fallback",
+                  updated_at: new Date().toISOString(),
+                },
+              ]
+            : []),
+          ...(timezone
+            ? [
+                {
+                  client_id: clientId,
+                  pref_key: "timezone",
+                  pref_value: String(timezone),
+                  source: "registration",
+                  updated_at: new Date().toISOString(),
+                },
+              ]
+            : []),
+        ],
         { onConflict: "client_id,pref_key" }
       )
     if (prefError) {

@@ -8,7 +8,8 @@ import {
   Check, Lock, ShieldCheck, Sparkles, ArrowRight,
   RefreshCw, AlertCircle, CreditCard, CheckCircle2, Star,
 } from "lucide-react"
-import { getPlanByCode, type OperalyPlanCode, OPERLAY_PLANS } from "@/lib/plans"
+import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
+import { getPlanByCode, type OperalyPlanCode } from "@/lib/plans"
 import { usePricingCurrency } from "@/hooks/usePricingCurrency"
 
 type PaymentProvider = "mercadopago" | "stripe"
@@ -55,22 +56,36 @@ export default function IniciarPagoClient() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]         = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
+  const [catalogPlans, setCatalogPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
 
   const { pricing, loading: pricingLoading, isPeru } = usePricingCurrency()
-  const selectedPlan = useMemo(() => getPlanByCode(plan), [plan])
+  const selectedPlan = useMemo(
+    () => catalogPlans.find((entry) => entry.code === plan) || getPlanByCode(plan),
+    [catalogPlans, plan]
+  )
 
-  // Display price for selected plan
-  const displayPrice = selectedPlan
-    ? pricing.display[selectedPlan.code as keyof typeof pricing.display] ?? selectedPlan.price
-    : 0
-
-  // Internal charge in PEN (what MP actually charges)
   const chargePEN = selectedPlan
-    ? pricing.charge_pen[selectedPlan.code as keyof typeof pricing.charge_pen] ?? displayPrice * 5
+    ? pricing.toPenAmount(selectedPlan.price, selectedPlan.currency)
     : 0
+  const displayPrice = pricing.toDisplayAmountFromPen(chargePEN)
 
   useEffect(() => {
     const load = async () => {
+      try {
+        const catalogResponse = await fetch("/api/product/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const catalogPayload = await catalogResponse.json().catch(() => ({}))
+        const commercialCatalog =
+          catalogPayload?.user_facing?.catalog ||
+          catalogPayload?.user_facing ||
+          catalogPayload?.catalog
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          setCatalogPlans(commercialCatalog.plans as OwnerCatalogPlan[])
+        }
+      } catch {}
+
       // Try to get email from multiple localStorage sources
       const keys = ["operaly_pending_signup", "operaly_assistant_profile", "operaly_register_auth"]
       let email = ""
@@ -192,10 +207,10 @@ export default function IniciarPagoClient() {
             {/* Plan cards */}
             <div className="space-y-3">
               {PAID_PLANS.map(code => {
-                const p = getPlanByCode(code)
+                const p = catalogPlans.find((entry) => entry.code === code) || getPlanByCode(code)
                 if (!p) return null
                 const isSelected = plan === code
-                const price = pricing.display[code as keyof typeof pricing.display] ?? p.price
+                const displayPriceForPlan = pricing.formatCatalogMoney(p.price, p.currency)
                 const features = PLAN_FEATURES[code] || p.features
 
                 return (
@@ -225,8 +240,13 @@ export default function IniciarPagoClient() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-2xl font-bold text-[#0F1F63]">{pricing.fmt(price)}</p>
+                        <p className="text-2xl font-bold text-[#0F1F63]">{displayPriceForPlan}</p>
                         <p className="text-xs text-muted-foreground">{pricing.currency}/mes</p>
+                        {!isPeru && (
+                          <p className="text-[11px] text-[#0369A1] mt-1">
+                            Cobro real {pricing.formatPen(pricing.toPenAmount(p.price, p.currency))}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -271,7 +291,7 @@ export default function IniciarPagoClient() {
                     <p className="text-sm text-white/70 mt-0.5">Suscripción mensual</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-white">{pricing.fmt(displayPrice)}</p>
+                    <p className="text-3xl font-bold text-white">{pricing.formatDisplayFromPen(chargePEN)}</p>
                     <p className="text-xs text-white/60">por mes</p>
                   </div>
                 </div>
@@ -281,7 +301,7 @@ export default function IniciarPagoClient() {
               <div className="px-6 py-5 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Plan {selectedPlan?.name}</span>
-                  <span className="font-semibold text-[#0F1F63]">{pricing.fmt(displayPrice)}/mes</span>
+                  <span className="font-semibold text-[#0F1F63]">{pricing.formatDisplayFromPen(chargePEN)}/mes</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Facturación</span>
@@ -291,17 +311,17 @@ export default function IniciarPagoClient() {
                 {!isPeru && (
                   <div className="flex items-center justify-between text-xs bg-[#F0F9FF] rounded-lg px-3 py-2">
                     <span className="text-[#0369A1]">Cobro en MercadoPago</span>
-                    <span className="font-semibold text-[#0369A1]">S/{chargePEN} PEN</span>
+                    <span className="font-semibold text-[#0369A1]">{pricing.formatPen(chargePEN)}</span>
                   </div>
                 )}
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#0F1F63]">Total a pagar</span>
-                  <span className="font-bold text-2xl text-[#0F1F63]">{pricing.fmt(displayPrice)}</span>
+                  <span className="font-bold text-2xl text-[#0F1F63]">{pricing.formatDisplayFromPen(chargePEN)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Se cobra {pricing.fmt(displayPrice)} {pricing.currency}/mes.
-                  {!isPeru && " El cargo se procesa en soles peruanos (S/{chargePEN}) a través de Mercado Pago."}
+                  Se cobra {pricing.formatDisplayFromPen(chargePEN)} {pricing.currency}/mes.
+                  {!isPeru && ` El cargo se procesa en soles peruanos (${pricing.formatPen(chargePEN)}) a través de Mercado Pago.`}
                   {" "}Cancela cuando quieras desde tu dashboard.
                 </p>
               </div>

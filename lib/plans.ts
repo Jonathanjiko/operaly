@@ -18,14 +18,15 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     name: "Trial",
     price: 0,
     currency: "PEN",
-    description: "Prueba gratuita para empezar con Operaly.",
-    cta: "Empezar gratis",
-    billingPeriodLabel: "7 días",
+    description: "Prueba gratis de 7 dias con Google Suite incluido y todos los modulos base habilitados.",
+    cta: "Prueba gratis",
+    billingPeriodLabel: "7 dias",
     features: [
-      "Acceso de prueba",
-      "Configuración inicial",
-      "Onboarding guiado",
-      "Sin pago inmediato",
+      "250 mensajes IA",
+      "5 min de voz y llamadas",
+      "0.5 GB de almacenamiento",
+      "20 contactos y 2 automatizaciones",
+      "Google Suite incluido durante trial",
     ],
   },
   {
@@ -33,14 +34,15 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     name: "Core",
     price: 49,
     currency: "PEN",
-    description: "Plan base para empezar a operar con Operaly.",
+    description: "Plan base para usar Operaly todos los dias con mas capacidad y una operacion ya estable.",
     cta: "Elegir Core",
     billingPeriodLabel: "mensual",
     features: [
-      "Agente IA en WhatsApp",
-      "Contactos habilitados",
-      "Uso mensual base",
-      "Dashboard y métricas",
+      "1200 mensajes IA",
+      "10 min de voz y llamadas",
+      "3 GB de almacenamiento",
+      "500 contactos y 10 automatizaciones",
+      "Google Suite incluido",
     ],
   },
   {
@@ -48,16 +50,16 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     name: "Pro",
     price: 99,
     currency: "PEN",
-    description: "Más capacidad, automatizaciones y funciones avanzadas.",
+    description: "Mas capacidad para seguimiento continuo, audio frecuente y operacion profesional.",
     cta: "Elegir Pro",
     billingPeriodLabel: "mensual",
     popular: true,
     features: [
-      "Todo lo de Core",
-      "Más capacidad mensual",
-      "Automatizaciones",
-      "Drive habilitado",
-      "Llamadas habilitadas",
+      "3000 mensajes IA",
+      "20 min de voz y llamadas",
+      "5 GB de almacenamiento",
+      "1000 contactos y 20 automatizaciones",
+      "Google Suite incluido",
     ],
   },
   {
@@ -65,14 +67,15 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     name: "Pro Plus",
     price: 199,
     currency: "PEN",
-    description: "Plan más potente para una operación más completa.",
+    description: "La capa mas amplia para vivir dentro de Operaly con automatizacion y capacidad extendida.",
     cta: "Elegir Pro Plus",
     billingPeriodLabel: "mensual",
     features: [
-      "Todo lo de Pro",
-      "Mayor capacidad",
-      "Funciones avanzadas IA",
-      "Mayor escalabilidad operativa",
+      "8000 mensajes IA",
+      "180 min de voz y llamadas",
+      "20 GB de almacenamiento",
+      "2000 contactos y 50 automatizaciones",
+      "Google Suite incluido",
     ],
   },
 ]
@@ -90,7 +93,10 @@ export function getDisplayPlanPeriodicity(planCode: string | null | undefined) {
 }
 
 export function getDisplayPlanName(planCode: string | null | undefined) {
-  return getPlanByCode(planCode)?.name ?? String(planCode || "Trial")
+  const normalized = String(planCode || "").trim().toLowerCase()
+  if (normalized === "owner") return "Owner"
+  if (normalized === "owner_unlimited") return "Owner Unlimited"
+  return getPlanByCode(normalized)?.name ?? String(planCode || "Trial")
 }
 
 export function hasIncludedLimit(limit: number | null | undefined, enabled = true) {

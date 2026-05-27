@@ -1,48 +1,18 @@
 "use client"
 
-/**
- * voice-settings-section.tsx — Operaly
- * ========================================
- * Sección de configuración de voz para el dashboard Professional.
- * Se agrega dentro de /app/dashboard/professional/configuracion/page.tsx
- *
- * INSTRUCCIONES DE INTEGRACIÓN:
- * ==============================
- * 1. Copiar este archivo completo al proyecto
- * 2. En configuracion/page.tsx agregar el import al inicio:
- *    import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
- *
- * 3. Agregar el estado de voz en ProfessionalSettingsPage():
- *    const [voiceSettings, setVoiceSettings] = useState<VoiceSettings | null>(null)
- *    const [voiceUsage, setVoiceUsage] = useState({ used: 0, limit: 0 })
- *
- * 4. En loadData(), después de cargar el cliente, agregar:
- *    // Cargar configuración de voz
- *    const vsResult = await supabase.rpc("get_voice_settings", { p_client_id: resolvedClientId })
- *    if (vsResult.data) setVoiceSettings(vsResult.data)
- *    // Cargar uso de minutos
- *    const period = new Date().toISOString().slice(0,7).replace("-","")
- *    const usageResult = await supabase.from("usage_monthly")
- *      .select("audio_minutes_used").eq("client_id", resolvedClientId).eq("period_yyyymm", period).limit(1)
- *    if (usageResult.data?.[0]) setVoiceUsage({ used: usageResult.data[0].audio_minutes_used || 0, limit: voiceSettings?.calls_minutes || 0 })
- *
- * 5. En el JSX, ANTES del cierre </div> final, agregar:
- *    <VoiceSettingsSection
- *      clientId={clientId}
- *      planCode={effectivePlanCode}
- *      voiceSettings={voiceSettings}
- *      minutesUsed={voiceUsage.used}
- *      minutesLimit={voiceUsage.limit}
- *      onSaved={loadData}
- *    />
- */
-
-import { useEffect, useState } from "react"
-import { Mic, Phone, Sparkles, Volume2, Check, Lock } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  Check,
+  Lock,
+  Mic,
+  Phone,
+  Sparkles,
+  Volume2,
+  Wand2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type VoiceSettings = {
   id?: string
@@ -59,93 +29,117 @@ type VoiceSettings = {
 type VoiceSettingsSectionProps = {
   clientId: string
   planCode: string
+  voiceEnabled: boolean
   voiceSettings: VoiceSettings | null
   minutesUsed: number
   minutesLimit: number
   onSaved?: () => void
 }
 
-// ─── Voces disponibles (ElevenLabs) ──────────────────────────────────────────
+type VoicePreset = {
+  id: string
+  name: string
+  lang: string
+  description: string
+}
 
-const ELEVENLABS_VOICES = [
-  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",   lang: "en", description: "Inglés · Neutral · Clara" },
-  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",    lang: "en", description: "Inglés · Cálida · Suave" },
-  { id: "29vD33N1CtxCmqQRPOHJ", name: "Drew",     lang: "en", description: "Inglés · Masculina · Directa" },
-  { id: "D38z5RcWu1voky8WS1ja", name: "Fin",      lang: "en", description: "Inglés · Masculina · Amigable" },
-  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", lang: "en", description: "Inglés · Formal · Profesional" },
-  // Voces en español (las mejores para LATAM con eleven_multilingual_v2)
-  { id: "pqHfZKP75CvOlQylNhV4", name: "Bill",     lang: "es", description: "Español · Masculina · Cálida" },
-  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel",   lang: "es", description: "Español · Masculina · Profunda" },
-  { id: "ThT5KcBeYPX3keUQqHPh", name: "Dorothy",  lang: "es", description: "Español · Femenina · Amigable" },
+const ELEVENLABS_VOICES: VoicePreset[] = [
+  { id: "pqHfZKP75CvOlQylNhV4", name: "Bill", lang: "es", description: "Masculina · Clara · Cercana" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", lang: "es", description: "Masculina · Profunda · Sobria" },
+  { id: "ThT5KcBeYPX3keUQqHPh", name: "Dorothy", lang: "es", description: "Femenina · Natural · Amable" },
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", lang: "en", description: "Neutral · Clara · Profesional" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", lang: "en", description: "Suave · Cálida · Cercana" },
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", lang: "en", description: "Formal · Seria · Ejecutiva" },
 ]
 
 const TONE_STYLES = [
-  { value: "profesional", label: "Profesional",   desc: "Formal y directo" },
-  { value: "cálido",      label: "Cálido",        desc: "Empático y cercano" },
-  { value: "directo",     label: "Directo",        desc: "Conciso, sin rodeos" },
-  { value: "formal",      label: "Formal",         desc: "Muy estructurado" },
-  { value: "amigable",    label: "Amigable",       desc: "Natural y casual" },
+  { value: "profesional", label: "Profesional", desc: "Formal, clara y ordenada" },
+  { value: "cálido", label: "Cálido", desc: "Más humano y cercano" },
+  { value: "directo", label: "Directo", desc: "Va al punto" },
+  { value: "formal", label: "Formal", desc: "Más sobrio y protocolar" },
+  { value: "amigable", label: "Amigable", desc: "Más natural y liviano" },
 ]
 
 const CALL_STYLES = [
-  { value: "breve",         label: "Breve",          desc: "Máximo 2-3 frases" },
-  { value: "conversacional", label: "Conversacional", desc: "Fluido y natural" },
-  { value: "formal",        label: "Formal",          desc: "Estructurado" },
+  { value: "breve", label: "Breve", desc: "Respuestas cortas y prácticas" },
+  { value: "conversacional", label: "Conversacional", desc: "Más fluido y acompañante" },
+  { value: "formal", label: "Formal", desc: "Más estructurado y serio" },
 ]
-
-// Plan gate
-const VOICE_PLANS: Record<string, { audio: boolean; calls: boolean; ai_calls: boolean; minutes: number }> = {
-  trial:    { audio: false, calls: false, ai_calls: false, minutes: 0 },
-  core:     { audio: false, calls: false, ai_calls: false, minutes: 0 },
-  pro:      { audio: true,  calls: true,  ai_calls: false, minutes: 20 },
-  pro_plus: { audio: true,  calls: true,  ai_calls: true,  minutes: 60 },
-}
-
-// ─── Componente principal ─────────────────────────────────────────────────────
 
 export function VoiceSettingsSection({
   clientId,
   planCode,
+  voiceEnabled,
   voiceSettings,
   minutesUsed,
   minutesLimit,
   onSaved,
 }: VoiceSettingsSectionProps) {
-  const plan = VOICE_PLANS[planCode] || VOICE_PLANS.trial
-  const hasVoice = plan.audio
+  const hasVoice = voiceEnabled
+  const hasAiCalls = ["pro_plus", "owner", "owner_unlimited", "internal"].includes(
+    String(planCode || "").toLowerCase()
+  )
   const minutesPercent = minutesLimit > 0 ? Math.min(100, (minutesUsed / minutesLimit) * 100) : 0
 
-  const [saving, setSaving]         = useState(false)
-  const [voiceId, setVoiceId]       = useState(voiceSettings?.voice_id || "")
-  const [toneStyle, setToneStyle]   = useState(voiceSettings?.tone_style || "profesional")
-  const [callStyle, setCallStyle]   = useState(voiceSettings?.call_style || "breve")
+  const initialVoiceId = voiceSettings?.voice_id || ""
+  const initialPreset = ELEVENLABS_VOICES.find((voice) => voice.id === initialVoiceId)
+  const [saving, setSaving] = useState(false)
+  const [voiceMode, setVoiceMode] = useState<"preset" | "custom">(
+    initialVoiceId && !initialPreset ? "custom" : "preset"
+  )
+  const [voiceId, setVoiceId] = useState(initialVoiceId)
+  const [customVoiceName, setCustomVoiceName] = useState(
+    initialPreset ? "" : voiceSettings?.voice_name || ""
+  )
+  const [toneStyle, setToneStyle] = useState(voiceSettings?.tone_style || "profesional")
+  const [callStyle, setCallStyle] = useState(voiceSettings?.call_style || "breve")
   const [preferAudio, setPreferAudio] = useState(voiceSettings?.prefer_audio_over_call ?? true)
 
   useEffect(() => {
-    if (voiceSettings) {
-      setVoiceId(voiceSettings.voice_id || "")
-      setToneStyle(voiceSettings.tone_style || "profesional")
-      setCallStyle(voiceSettings.call_style || "breve")
-      setPreferAudio(voiceSettings.prefer_audio_over_call ?? true)
-    }
+    const currentVoiceId = voiceSettings?.voice_id || ""
+    const matchedPreset = ELEVENLABS_VOICES.find((voice) => voice.id === currentVoiceId)
+    setVoiceMode(currentVoiceId && !matchedPreset ? "custom" : "preset")
+    setVoiceId(currentVoiceId)
+    setCustomVoiceName(matchedPreset ? "" : voiceSettings?.voice_name || "")
+    setToneStyle(voiceSettings?.tone_style || "profesional")
+    setCallStyle(voiceSettings?.call_style || "breve")
+    setPreferAudio(voiceSettings?.prefer_audio_over_call ?? true)
   }, [voiceSettings])
 
-  const selectedVoice = ELEVENLABS_VOICES.find(v => v.id === voiceId)
+  const selectedPreset = useMemo(
+    () => ELEVENLABS_VOICES.find((voice) => voice.id === voiceId) || null,
+    [voiceId]
+  )
+
+  const effectiveVoiceLabel =
+    voiceMode === "custom"
+      ? customVoiceName.trim() || "Voz propia"
+      : selectedPreset?.name || "Voz por defecto"
+
+  const effectiveLanguage =
+    voiceMode === "custom"
+      ? voiceSettings?.voice_language || "es"
+      : selectedPreset?.lang || voiceSettings?.voice_language || "es"
 
   const handleSave = async () => {
     if (!clientId) return
+    if (voiceMode === "custom" && !voiceId.trim()) {
+      alert("Pegue primero el Voice ID de ElevenLabs para guardar una voz propia.")
+      return
+    }
+
     setSaving(true)
     try {
       const row = {
-        client_id:              clientId,
-        voice_provider:         "elevenlabs",
-        voice_id:               voiceId || null,
-        voice_name:             selectedVoice?.name || null,
-        voice_language:         selectedVoice?.lang || "es",
-        tone_style:             toneStyle,
-        call_style:             callStyle,
+        client_id: clientId,
+        voice_provider: "elevenlabs",
+        voice_id: voiceId.trim() || null,
+        voice_name: effectiveVoiceLabel,
+        voice_language: effectiveLanguage,
+        tone_style: toneStyle,
+        call_style: callStyle,
         prefer_audio_over_call: preferAudio,
-        updated_at:             new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }
 
       const { error } = await supabase
@@ -154,221 +148,257 @@ export function VoiceSettingsSection({
 
       if (error) throw error
       onSaved?.()
-      alert("Configuración de voz guardada correctamente.")
-    } catch (e: any) {
-      alert(e.message || "No se pudo guardar la configuración de voz.")
+      alert("La configuración de voz quedó guardada.")
+    } catch (error: any) {
+      alert(error.message || "No se pudo guardar la configuración de voz.")
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="bg-card rounded-2xl border border-border p-6 space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <Mic className="w-5 h-5 text-[#7C3AED]" />
-          <h2 className="text-xl font-semibold text-[#0F1F63]">Voz del asistente</h2>
+          <Mic className="h-5 w-5 text-[#7C3AED]" />
+          <h2 className="text-xl font-semibold text-[#0F1F63]">Voz y llamadas</h2>
         </div>
         {!hasVoice && (
-          <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
-            <Lock className="w-3 h-3" />
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+            <Lock className="h-3 w-3" />
             Disponible desde Pro
           </span>
         )}
       </div>
 
-      {/* Descripción */}
       <p className="text-sm text-muted-foreground">
-        Configura la voz con la que Operaly te enviará audios y realizará llamadas.
-        Elige el estilo que mejor represente tu forma de comunicarte.
+        Aquí define cómo quiere que Operaly le hable por audio y en llamadas. La ruta real usa
+        ElevenLabs para la voz, Vapi para la conversación y Telnyx para el número.
       </p>
 
-      {/* Uso de minutos */}
       {hasVoice && minutesLimit > 0 && (
-        <div className="bg-secondary/40 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
+        <div className="rounded-xl bg-secondary/40 p-4">
+          <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-[#3B82F6]" />
+              <Phone className="h-4 w-4 text-[#3B82F6]" />
               <span className="text-sm font-medium text-[#0F1F63]">Minutos de voz este mes</span>
             </div>
             <span className="text-sm text-muted-foreground">
               {minutesUsed.toFixed(1)} / {minutesLimit} min
             </span>
           </div>
-          <div className="h-2 bg-border rounded-full overflow-hidden">
+          <div className="h-2 overflow-hidden rounded-full bg-border">
             <div
               className={`h-full rounded-full transition-all ${
-                minutesPercent >= 90 ? "bg-red-500" :
-                minutesPercent >= 70 ? "bg-amber-500" :
-                "bg-[#7C3AED]"
+                minutesPercent >= 90 ? "bg-red-500" : minutesPercent >= 70 ? "bg-amber-500" : "bg-[#7C3AED]"
               }`}
               style={{ width: `${minutesPercent}%` }}
             />
           </div>
-          {minutesPercent >= 80 && (
-            <p className="text-xs text-amber-600 mt-2">
-              Vas por el {Math.round(minutesPercent)}% de tus minutos. Considera un pack extra si necesitas más.
-            </p>
-          )}
         </div>
       )}
 
-      {/* Sin acceso */}
       {!hasVoice && (
-        <div className="rounded-xl border border-dashed border-border p-6 text-center space-y-3">
-          <div className="w-12 h-12 rounded-full bg-[#7C3AED]/10 flex items-center justify-center mx-auto">
-            <Volume2 className="w-6 h-6 text-[#7C3AED]" />
+        <div className="space-y-3 rounded-xl border border-dashed border-border p-6 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#7C3AED]/10">
+            <Volume2 className="h-6 w-6 text-[#7C3AED]" />
           </div>
           <p className="font-medium text-[#0F1F63]">Voz disponible desde Pro</p>
           <p className="text-sm text-muted-foreground">
-            Con el plan Pro puedes recibir audios y llamadas desde tu asistente Operaly.
-            Pro Plus incluye llamadas conversacionales inteligentes con IA.
+            Con Pro puede recibir audios y llamadas simples. Con Pro Plus u Owner puede avanzar a
+            llamadas conversacionales más ricas.
           </p>
-          <div className="flex gap-3 justify-center flex-wrap mt-2">
-            <div className="text-xs px-3 py-1.5 rounded-lg bg-secondary border border-border text-[#0F1F63]">
-              🎙️ Pro — 20 min/mes · Audio + Llamadas simples
-            </div>
-            <div className="text-xs px-3 py-1.5 rounded-lg bg-[#7C3AED]/5 border border-[#7C3AED]/20 text-[#7C3AED]">
-              🤖 Pro Plus — 60 min/mes · Llamadas conversacionales IA
-            </div>
-          </div>
         </div>
       )}
 
-      {/* Configuración (solo si tiene acceso) */}
       {hasVoice && (
         <div className="space-y-6">
-
-          {/* Selección de voz */}
-          <div>
-            <label className="block text-sm font-medium text-[#0F1F63] mb-3">
-              Voz del asistente
-            </label>
-            <div className="grid gap-2">
-              {ELEVENLABS_VOICES.map((voice) => (
-                <button
-                  key={voice.id}
-                  type="button"
-                  onClick={() => setVoiceId(voice.id)}
-                  className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-                    voiceId === voice.id
-                      ? "border-[#7C3AED] bg-[#7C3AED]/5"
-                      : "border-border bg-background hover:border-[#7C3AED]/40"
-                  }`}
-                >
-                  <div>
-                    <p className="font-medium text-[#0F1F63] text-sm">{voice.name}</p>
-                    <p className="text-xs text-muted-foreground">{voice.description}</p>
-                  </div>
-                  {voiceId === voice.id && (
-                    <Check className="w-4 h-4 text-[#7C3AED] flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Powered by ElevenLabs · Puedes clonar tu propia voz desde{" "}
-              <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer"
-                className="text-[#7C3AED] underline">
-                elevenlabs.io
-              </a>{" "}
-              y pegar el Voice ID aquí.
-            </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setVoiceMode("preset")}
+              className={`rounded-2xl border p-4 text-left transition-all ${
+                voiceMode === "preset"
+                  ? "border-[#7C3AED] bg-[#7C3AED]/5"
+                  : "border-border bg-background hover:border-[#7C3AED]/30"
+              }`}
+            >
+              <p className="text-sm font-semibold text-[#0F1F63]">Usar una voz recomendada</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                La forma más rápida. Elija una voz lista y úsela de inmediato.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoiceMode("custom")}
+              className={`rounded-2xl border p-4 text-left transition-all ${
+                voiceMode === "custom"
+                  ? "border-[#7C3AED] bg-[#7C3AED]/5"
+                  : "border-border bg-background hover:border-[#7C3AED]/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Wand2 className="h-4 w-4 text-[#7C3AED]" />
+                <p className="text-sm font-semibold text-[#0F1F63]">Usar mi propia voz</p>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Si ya creó o clonó una voz en ElevenLabs, pegue aquí su Voice ID.
+              </p>
+            </button>
           </div>
 
-          {/* Estilo de tono */}
+          {voiceMode === "preset" ? (
+            <div>
+              <label className="mb-3 block text-sm font-medium text-[#0F1F63]">Voces sugeridas</label>
+              <div className="grid gap-2">
+                {ELEVENLABS_VOICES.map((voice) => (
+                  <button
+                    key={voice.id}
+                    type="button"
+                    onClick={() => setVoiceId(voice.id)}
+                    className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all ${
+                      voiceId === voice.id
+                        ? "border-[#7C3AED] bg-[#7C3AED]/5"
+                        : "border-border bg-background hover:border-[#7C3AED]/30"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-[#0F1F63]">{voice.name}</p>
+                      <p className="text-xs text-muted-foreground">{voice.description}</p>
+                    </div>
+                    {voiceId === voice.id && <Check className="h-4 w-4 text-[#7C3AED]" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 rounded-2xl border border-[#7C3AED]/15 bg-[#7C3AED]/5 p-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#0F1F63]">Voice ID de ElevenLabs</label>
+                <Input
+                  value={voiceId}
+                  onChange={(event) => setVoiceId(event.target.value)}
+                  placeholder="Pegue aquí su Voice ID"
+                  className="rounded-xl bg-white"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[#0F1F63]">Nombre visible</label>
+                <Input
+                  value={customVoiceName}
+                  onChange={(event) => setCustomVoiceName(event.target.value)}
+                  placeholder="Ejemplo: Voz propia de Jonathan"
+                  className="rounded-xl bg-white"
+                />
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/70 p-4">
+                <p className="text-sm font-semibold text-[#0F1F63]">Si quiere clonar su voz</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                  1. Entre a ElevenLabs. 2. Cree o clone la voz con audios limpios. 3. Copie el
+                  Voice ID. 4. Péguelo aquí y guarde. Después backend debe usarlo en llamadas y
+                  audios para su cuenta.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-[#0F1F63] mb-3">
-              Estilo de comunicación
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            <label className="mb-3 block text-sm font-medium text-[#0F1F63]">Forma de hablar</label>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               {TONE_STYLES.map((style) => (
                 <button
                   key={style.value}
                   type="button"
                   onClick={() => setToneStyle(style.value)}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`rounded-xl border p-3 text-left transition-all ${
                     toneStyle === style.value
                       ? "border-[#3B82F6] bg-[#3B82F6]/5"
-                      : "border-border bg-background hover:border-[#3B82F6]/40"
+                      : "border-border bg-background hover:border-[#3B82F6]/30"
                   }`}
                 >
-                  <p className="font-medium text-[#0F1F63] text-sm">{style.label}</p>
-                  <p className="text-xs text-muted-foreground">{style.desc}</p>
+                  <p className="text-sm font-medium text-[#0F1F63]">{style.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{style.desc}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Estilo de llamada */}
           <div>
-            <label className="block text-sm font-medium text-[#0F1F63] mb-3">
-              Estilo de llamada
-            </label>
-            <div className="grid grid-cols-3 gap-2">
+            <label className="mb-3 block text-sm font-medium text-[#0F1F63]">Estilo de llamada</label>
+            <div className="grid gap-2 sm:grid-cols-3">
               {CALL_STYLES.map((style) => (
                 <button
                   key={style.value}
                   type="button"
                   onClick={() => setCallStyle(style.value)}
-                  className={`p-3 rounded-xl border text-left transition-all ${
+                  className={`rounded-xl border p-3 text-left transition-all ${
                     callStyle === style.value
                       ? "border-[#06B6D4] bg-[#06B6D4]/5"
-                      : "border-border bg-background hover:border-[#06B6D4]/40"
+                      : "border-border bg-background hover:border-[#06B6D4]/30"
                   }`}
                 >
-                  <p className="font-medium text-[#0F1F63] text-sm">{style.label}</p>
-                  <p className="text-xs text-muted-foreground">{style.desc}</p>
+                  <p className="text-sm font-medium text-[#0F1F63]">{style.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{style.desc}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Preferencia audio vs llamada */}
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-secondary/30">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-secondary/30 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-[#0F1F63]">Preferir audio sobre llamada</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Cuando sea posible, enviar audio por WhatsApp en lugar de llamar
+              <p className="text-sm font-medium text-[#0F1F63]">Preferir audio antes que llamada</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Cuando sea razonable, Operaly intentará responder por audio antes de llamar.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setPreferAudio(!preferAudio)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                preferAudio ? "bg-[#7C3AED]" : "bg-border"
-              }`}
+              className={`relative h-6 w-11 rounded-full transition-colors ${preferAudio ? "bg-[#7C3AED]" : "bg-border"}`}
             >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                preferAudio ? "translate-x-5" : "translate-x-0"
-              }`} />
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  preferAudio ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
             </button>
           </div>
 
-          {/* Pro Plus badge */}
-          {plan.ai_calls && (
-            <div className="flex items-center gap-2 p-3 rounded-xl border border-[#7C3AED]/20 bg-[#7C3AED]/5">
-              <Sparkles className="w-4 h-4 text-[#7C3AED]" />
-              <p className="text-sm text-[#7C3AED] font-medium">
-                Tu plan incluye llamadas conversacionales con IA — di "llama a [nombre] y habla con él sobre X" por WhatsApp
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Cómo está quedando hoy</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Voz: {effectiveVoiceLabel}. Tono: {toneStyle}. Llamadas: {callStyle}.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Qué debe hacer backend</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                Debe leer esta configuración por usuario y aplicarla de verdad en ElevenLabs, Vapi
+                y Telnyx, sin quedarse solo en el dashboard.
+              </p>
+            </div>
+          </div>
+
+          {hasAiCalls && (
+            <div className="flex items-center gap-2 rounded-xl border border-[#7C3AED]/20 bg-[#7C3AED]/5 p-3">
+              <Sparkles className="h-4 w-4 text-[#7C3AED]" />
+              <p className="text-sm font-medium text-[#7C3AED]">
+                Su plan ya permite llamadas conversacionales. Lo que falta es que backend termine
+                de aplicar bien la voz, el assistant y el resumen de llamada por usuario.
               </p>
             </div>
           )}
 
-          {/* Guardar */}
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="w-full h-12 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-medium"
+            className="h-12 w-full rounded-xl bg-[#7C3AED] font-medium text-white hover:bg-[#6D28D9]"
           >
-            {saving ? "Guardando..." : "Guardar configuración de voz"}
+            {saving ? "Guardando..." : "Guardar voz y llamadas"}
           </Button>
-
         </div>
       )}
-
     </div>
   )
 }

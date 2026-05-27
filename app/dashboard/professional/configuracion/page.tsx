@@ -3,25 +3,37 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   CreditCard,
-  Globe,
-  Lock,
-  MapPin,
-  Mic,
-  Phone,
+  Layers3,
   RefreshCcw,
-  ShieldCheck,
+  Sparkles,
   User,
   Wallet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
+import {
+  getCurrentPeriodMonth,
+  getEffectivePlanCode,
+  getEffectivePlanStatus,
+  type EffectiveLimitsRuntime,
+} from "@/lib/effective-limits"
+import {
+  getDefaultOwnerCatalog,
+  type OwnerCatalog,
+  type OwnerCatalogPlan,
+} from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
-import { VoiceSettingsSection } from "@/components/dashboard/VoiceSettingsSection"
+import { fetchDashboardRuntime, resolveDashboardPlanCode, resolveDashboardPlanLimits, toNumber } from "@/lib/dashboard-runtime"
+import {
+  fetchProfessionalRuntime,
+  normalizeRuntimeStatus,
+  type ProfessionalRuntimeSnapshot,
+} from "@/lib/professional-runtime"
 import {
   getDisplayPlanName,
   getDisplayPlanPeriodicity,
-  getDisplayPlanPrice,
 } from "@/lib/plans"
 
 type ClientRow = {
@@ -45,11 +57,6 @@ type ClientRow = {
   phone_verification_requested_at: string | null
   plan_code: string | null
   plan_status: string | null
-}
-
-type PreferenceRow = {
-  pref_key: string
-  pref_value: string | null
 }
 
 type SubscriptionRow = {
@@ -78,10 +85,26 @@ type PaymentRow = {
   provider_ref: string | null
   transaction_id: string | null
   status: string
+  amount_pen: number | null
+  display_amount: number | null
+  display_currency: string | null
   amount_usd: number
   currency: string
   paid_at: string | null
   created_at: string
+}
+
+type AddOnPurchaseRow = {
+  id: string
+  code: string | null
+  item_code: string | null
+  status: string
+  expires_at: string | null
+  created_at: string
+  calls_minutes_extra: number | null
+  storage_gb_extra: number | null
+  enables_voice: boolean | null
+  enables_google: boolean | null
 }
 
 type AuthMetadata = {
@@ -99,13 +122,6 @@ type AuthMetadata = {
 
 const BILLING_CURRENCY_CODE = "PEN"
 
-const PLAN_LABELS: Record<string, string> = {
-  trial: "Trial",
-  core: "Core",
-  pro: "Pro",
-  pro_plus: "Pro Plus",
-}
-
 const LANGUAGE_OPTIONS = [
   { code: "es", label: "Español" },
   { code: "en", label: "English" },
@@ -115,13 +131,8 @@ const LANGUAGE_OPTIONS = [
   { code: "it", label: "Italiano" },
 ]
 
-const PAID_PLANS = [
-  { code: "core", label: "Core" },
-  { code: "pro", label: "Pro" },
-  { code: "pro_plus", label: "Pro Plus" },
-]
-
 export default function ProfessionalSettingsPage() {
+  const { pricing, isPeru } = usePricingCurrency()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -145,14 +156,24 @@ export default function ProfessionalSettingsPage() {
   const [phoneVerificationRequestedAt, setPhoneVerificationRequestedAt] = useState<string | null>(null)
   const [clientPlanCode, setClientPlanCode] = useState("trial")
   const [clientPlanStatus, setClientPlanStatus] = useState("trialing")
+  const [effectiveLimits, setEffectiveLimits] = useState<EffectiveLimitsRuntime | null>(null)
 
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [activeAddons, setActiveAddons] = useState<AddOnPurchaseRow[]>([])
+  const [catalog, setCatalog] = useState<OwnerCatalog>(getDefaultOwnerCatalog())
 
   // Voice settings state
   const [voiceSettings, setVoiceSettings] = useState<any>(null)
   const [voiceMinutesUsed, setVoiceMinutesUsed] = useState(0)
   const [voiceMinutesLimit, setVoiceMinutesLimit] = useState(0)
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<ProfessionalRuntimeSnapshot | null>(null)
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [operationalWarning, setOperationalWarning] = useState("")
+  const [saveFeedback, setSaveFeedback] = useState<{
+    tone: "success" | "error"
+    message: string
+  } | null>(null)
 
   const initials = useMemo(() => {
     if (!fullName.trim()) {
@@ -167,9 +188,71 @@ export default function ProfessionalSettingsPage() {
       .join("")
   }, [fullName])
 
-  const effectivePlanCode = subscription?.plan_code || clientPlanCode || "trial"
-  const effectivePlanStatus = subscription?.status || clientPlanStatus || "trialing"
-  const currentPlanLabel = getDisplayPlanName(effectivePlanCode) || PLAN_LABELS[effectivePlanCode] || effectivePlanCode
+  const recentRuntimeEvent = runtimeSnapshot?.recentEvents?.[0] || null
+  const recentUnderstanding = runtimeSnapshot?.recentUnderstandingRuns?.[0] || null
+  const runtimeVoiceVisible = String(runtimeSnapshot?.voice?.voice_name || runtimeSnapshot?.voice?.voice_id || "")
+  const runtimeAssistantTone = String(runtimeSnapshot?.preferences?.assistant_tone || "")
+  const runtimeAssistantStyle = String(runtimeSnapshot?.preferences?.assistant_style || "")
+  const runtimeLanguageVisible = String(runtimeSnapshot?.preferences?.preferred_language || "")
+
+  const effectivePlanCode =
+    getEffectivePlanCode(effectiveLimits) || subscription?.plan_code || clientPlanCode || "trial"
+  const effectivePlanStatus =
+    getEffectivePlanStatus(effectiveLimits) || subscription?.status || clientPlanStatus || "trialing"
+  const effectivePlanCatalog = useMemo(
+    () => catalog.plans.find((plan) => plan.code === effectivePlanCode) || null,
+    [catalog, effectivePlanCode]
+  )
+  const paidPlans = useMemo(
+    () => catalog.plans.filter((plan) => plan.code !== "trial"),
+    [catalog]
+  )
+  const currentPlanLabel =
+    effectivePlanCatalog?.name || getDisplayPlanName(effectivePlanCode) || effectivePlanCode
+  const catalogAddonsMap = useMemo(
+    () => new Map(catalog.addons.map((addon) => [addon.code, addon])),
+    [catalog]
+  )
+  const availableAddons = useMemo(
+    () => catalog.addons.filter((addon) => addon.active !== false),
+    [catalog]
+  )
+  const availableUsageBoosters = useMemo(
+    () => availableAddons.filter((addon) => addon.category !== "storage"),
+    [availableAddons]
+  )
+  const availableStorageSubscriptions = useMemo(
+    () => availableAddons.filter((addon) => addon.category === "storage"),
+    [availableAddons]
+  )
+  const activeUsageAddons = useMemo(
+    () =>
+      activeAddons.filter((addon) => {
+        const addonCode = addon.code || addon.item_code || ""
+        return catalogAddonsMap.get(addonCode)?.category !== "storage"
+      }),
+    [activeAddons, catalogAddonsMap]
+  )
+  const activeStorageSubscriptions = useMemo(
+    () =>
+      activeAddons.filter((addon) => {
+        const addonCode = addon.code || addon.item_code || ""
+        return catalogAddonsMap.get(addonCode)?.category === "storage"
+      }),
+    [activeAddons, catalogAddonsMap]
+  )
+  const paymentSummary = useMemo(() => {
+    return payments.reduce(
+      (acc, payment) => {
+        const normalized = String(payment.status || "").toLowerCase()
+        if (["approved", "paid", "succeeded"].includes(normalized)) acc.approved += 1
+        else if (normalized === "pending") acc.pending += 1
+        else if (["failed", "declined"].includes(normalized)) acc.failed += 1
+        return acc
+      },
+      { approved: 0, pending: 0, failed: 0 }
+    )
+  }, [payments])
 
   const formatDateTime = (value: string | null) => {
     if (!value) {
@@ -198,6 +281,21 @@ export default function ProfessionalSettingsPage() {
     } catch {
       return `${safeCode} ${numericAmount}`
     }
+  }
+
+  const formatPlanDisplayPrice = (plan: OwnerCatalogPlan | null) => {
+    if (!plan) return pricing.formatPen(0)
+    return pricing.formatCatalogMoney(plan.price, plan.currency)
+  }
+  const getCommercialPriceHint = (billingPeriodLabel: string | null | undefined) => {
+    const normalized = String(billingPeriodLabel || "").toLowerCase()
+    if (normalized.includes("mensual")) {
+      return "Se suma a su plan cada mes"
+    }
+    if (normalized.includes("vigencia") || normalized.includes("mes")) {
+      return "Pago único con uso por 30 días"
+    }
+    return "Pago único"
   }
 
   const getPlanStatusBadgeClass = (status: string | null | undefined) => {
@@ -262,6 +360,24 @@ export default function ProfessionalSettingsPage() {
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
+  const getAddonStatusBadgeClass = (status: string | null | undefined) => {
+    const normalized = String(status || "").toLowerCase()
+
+    if (normalized === "active") {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    }
+
+    if (normalized === "pending") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
+    }
+
+    if (["expired", "cancelled", "inactive"].includes(normalized)) {
+      return "border-slate-200 bg-slate-100 text-slate-700"
+    }
+
+    return "border-slate-200 bg-slate-100 text-slate-700"
+  }
+
   const normalizePhoneForStorage = (value: string) => {
     return value.replace(/[^\d+]/g, "").trim()
   }
@@ -272,6 +388,7 @@ export default function ProfessionalSettingsPage() {
 
   const loadData = async () => {
     setLoading(true)
+    setOperationalWarning("")
 
     try {
       const { data: authResponse, error: authError } = await supabase.auth.getUser()
@@ -402,6 +519,9 @@ export default function ProfessionalSettingsPage() {
             provider_ref,
             transaction_id,
             status,
+            amount_pen,
+            display_amount,
+            display_currency,
             amount_usd,
             currency,
             paid_at,
@@ -419,6 +539,117 @@ export default function ProfessionalSettingsPage() {
 
       setPayments((paymentsData || []) as PaymentRow[])
 
+      const { data: addOnPurchasesData, error: addOnPurchasesError } = await supabase
+        .from("add_on_purchases")
+        .select(
+          `
+            id,
+            code,
+            item_code,
+            status,
+            expires_at,
+            created_at,
+            calls_minutes_extra,
+            storage_gb_extra,
+            enables_voice,
+            enables_google
+          `
+        )
+        .eq("client_id", resolvedClientId)
+        .order("created_at", { ascending: false })
+        .limit(20)
+
+      if (addOnPurchasesError) {
+        console.warn("add_on_purchases query error:", addOnPurchasesError.message)
+      }
+
+      setActiveAddons(
+        ((addOnPurchasesData || []) as AddOnPurchaseRow[]).filter(
+          (addon) => String(addon.status || "").toLowerCase() === "active"
+        )
+      )
+
+      try {
+        const catalogResponse = await fetch("/api/product/catalog", {
+          method: "GET",
+          cache: "no-store",
+        })
+        const catalogPayload = await catalogResponse.json().catch(() => ({}))
+        const commercialCatalog =
+          catalogPayload?.user_facing?.catalog ||
+          catalogPayload?.user_facing ||
+          catalogPayload?.catalog
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          setCatalog(commercialCatalog as OwnerCatalog)
+        }
+      } catch (catalogError) {
+        console.warn("catalog query error:", catalogError)
+      }
+
+      let dashboardRuntimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        if (runtime) {
+          const limits = resolveDashboardPlanLimits(runtime)
+          const featureAccess = runtime.feature_access || limits || {}
+          const usage = runtime.usage || {}
+          const resolvedPlanCode = resolveDashboardPlanCode(
+            runtime,
+            String(client.plan_code || metadata.selected_plan || "trial")
+          )
+
+          setEffectiveLimits({
+            effective_plan_code: resolvedPlanCode,
+            max_audio_minutes: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.audio_minutes ?? limits?.max_audio_minutes
+            ),
+            max_messages_month: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.messages ?? limits?.max_messages_month
+            ),
+            max_storage_mb: toNumber(
+              runtime.user_facing?.plan_limits_numeric?.storage_gb ?? limits?.storage_gb
+            )
+              ? toNumber(runtime.user_facing?.plan_limits_numeric?.storage_gb ?? limits?.storage_gb) * 1024
+              : toNumber(limits?.max_storage_mb),
+            voice_enabled: Boolean(featureAccess?.voice_enabled ?? false),
+            google_enabled: Boolean(featureAccess?.google_enabled ?? false),
+            custom_agent_enabled: Boolean(featureAccess?.custom_agent_enabled ?? false),
+          } as EffectiveLimitsRuntime)
+          setClientPlanCode(resolvedPlanCode)
+          setClientPlanStatus(String(runtime.plan?.effective_status || client.plan_status || "active"))
+          setVoiceMinutesLimit(toNumber(limits?.max_audio_minutes))
+          setVoiceMinutesUsed(
+            toNumber(
+              usage?.audio_minutes_used ??
+                usage?.audio?.used ??
+                usage?.voice_minutes?.used ??
+                usage?.audio
+            )
+          )
+          setRuntimeSource("auth_bound")
+          dashboardRuntimeLoaded = true
+        }
+      } catch (dashboardRuntimeError) {
+        console.warn("dashboard runtime query error:", dashboardRuntimeError)
+        setOperationalWarning(
+          "Esta pantalla tardó más de lo normal. Le mostramos los últimos datos disponibles mientras termina de actualizarse."
+        )
+      }
+
+      if (!dashboardRuntimeLoaded) {
+        const { data: myLimits, error: myLimitsError } = await supabase.rpc("get_my_effective_limits")
+        if (myLimitsError) {
+          console.warn("get_my_effective_limits query error:", myLimitsError.message)
+        } else {
+          const resolvedLimits = (myLimits || {}) as EffectiveLimitsRuntime
+          setEffectiveLimits(resolvedLimits)
+          setClientPlanCode(getEffectivePlanCode(resolvedLimits))
+          setClientPlanStatus(getEffectivePlanStatus(resolvedLimits))
+          setVoiceMinutesLimit(Number(resolvedLimits.max_audio_minutes ?? 0))
+          setRuntimeSource("legacy")
+        }
+      }
+
       // Load voice settings
       try {
         const { data: vsData } = await supabase
@@ -426,24 +657,34 @@ export default function ProfessionalSettingsPage() {
         if (vsData) setVoiceSettings(vsData)
       } catch (_) {}
 
-      // Load voice minutes usage
       try {
-        const period = new Date().toISOString().slice(0, 7).replace("-", "")
-        const { data: usageData } = await supabase
-          .from("usage_monthly")
-          .select("audio_minutes_used")
-          .eq("client_id", resolvedClientId)
-          .eq("period_yyyymm", period)
-          .limit(1)
-        if (usageData?.[0]) {
-          setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
-        }
-        const { data: myLimits } = await supabase.rpc("get_my_effective_limits")
-        setVoiceMinutesLimit(Number(myLimits?.max_audio_minutes ?? 0))
-      } catch (_) {}
+        setRuntimeSnapshot(await fetchProfessionalRuntime())
+      } catch (runtimeError) {
+        console.warn("professional runtime query error:", runtimeError)
+        setOperationalWarning((current) =>
+          current ||
+          "Puede seguir revisando y guardando cambios. Algunos datos pueden tardar un poco más en reflejarse."
+        )
+      }
+
+      // Load voice minutes usage only when runtime auth-bound did not already hydrate it.
+      if (!dashboardRuntimeLoaded) {
+        try {
+          const periodMonth = getCurrentPeriodMonth()
+          const { data: usageData } = await supabase
+            .from("usage_monthly")
+            .select("audio_minutes_used")
+            .eq("client_id", resolvedClientId)
+            .eq("period_month", periodMonth)
+            .limit(1)
+          if (usageData?.[0]) {
+            setVoiceMinutesUsed(Number(usageData[0].audio_minutes_used) || 0)
+          }
+        } catch (_) {}
+      }
 
     } catch (error: any) {
-      alert(error.message || "No se pudo cargar la configuración.")
+      setOperationalWarning(error.message || "No se pudo cargar esta sección completa por ahora.")
     } finally {
       setLoading(false)
     }
@@ -474,18 +715,22 @@ export default function ProfessionalSettingsPage() {
 
   const handleSave = async () => {
     if (!clientId) {
-      alert("No encontramos el cliente de esta cuenta.")
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
       return
     }
 
     const normalizedPhone = normalizePhoneForStorage(phone)
 
     if (!validateNormalizedPhone(normalizedPhone)) {
-      alert("El teléfono debe estar en formato internacional. Ejemplo: +51987654321")
+      setSaveFeedback({
+        tone: "error",
+        message: "El teléfono debe estar en formato internacional. Ejemplo: +51987654321.",
+      })
       return
     }
 
     setSaving(true)
+    setSaveFeedback(null)
 
     try {
       const normalizedName = fullName.trim()
@@ -536,11 +781,22 @@ export default function ProfessionalSettingsPage() {
         throw authUpdateError
       }
 
+      await Promise.all([
+        upsertPreference("preferred_language", normalizedPreferredLanguage),
+        upsertPreference("language_source", "dashboard"),
+        upsertPreference("timezone", normalizedTimezone),
+      ])
 
-      alert("Configuración guardada correctamente.")
+      setSaveFeedback({
+        tone: "success",
+        message: "La configuración base se guardó correctamente.",
+      })
       await loadData()
     } catch (error: any) {
-      alert(error.message || "No se pudo guardar la configuración.")
+      setSaveFeedback({
+        tone: "error",
+        message: error.message || "No se pudo guardar la configuración.",
+      })
     } finally {
       setSaving(false)
     }
@@ -548,11 +804,43 @@ export default function ProfessionalSettingsPage() {
 
   const handleChangePlan = (planCode: string) => {
     if (!clientId) {
-      alert("No encontramos el cliente de esta cuenta.")
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
       return
     }
 
     window.location.href = `/iniciar-pago?plan=${planCode}&cid=${clientId}`
+  }
+
+  const handleAddonCheckout = async (addonCode: string) => {
+    if (!clientId) {
+      setSaveFeedback({ tone: "error", message: "No encontramos el cliente seguro de esta cuenta." })
+      return
+    }
+
+    try {
+      setSaveFeedback(null)
+      const response = await fetch("/api/payments/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planCode: addonCode, provider: "mercadopago" }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || payload?.detail || "No se pudo iniciar el pago.")
+      }
+
+      const checkoutUrl = payload.checkout_url || payload.init_point || ""
+      if (!checkoutUrl) {
+        throw new Error("No se pudo generar el enlace de cobro.")
+      }
+
+      window.location.href = checkoutUrl
+    } catch (error: any) {
+      setSaveFeedback({
+        tone: "error",
+        message: error.message || "No se pudo iniciar el pago del add-on.",
+      })
+    }
   }
 
   if (loading) {
@@ -568,11 +856,55 @@ export default function ProfessionalSettingsPage() {
       <div>
         <h1 className="text-3xl font-bold text-[#0F1F63]">Configuración y facturación</h1>
         <p className="text-muted-foreground mt-1">
-          Administra tu perfil, idioma base, timezone, seguridad y suscripción.
+          Revise su perfil, su plan y lo que tiene activo hoy, sin perder tiempo en datos técnicos.
         </p>
       </div>
 
-      <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Su cuenta hoy</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {runtimeSource === "auth_bound"
+                ? "Ya estamos mostrando su plan y la configuración más reciente de su cuenta."
+                : runtimeSource === "legacy"
+                  ? "Le mostramos sus últimos datos disponibles mientras terminamos de actualizar la cuenta."
+                  : "Estamos preparando la lectura completa de su cuenta."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué puede revisar aquí</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Su perfil, su plan y la forma en que quiere usar Operaly cada día, sin entrar en detalles técnicos.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Puede guardar igual. Si algún cambio tarda un poco más en reflejarse, esta vista se actualizará con la información más reciente.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {saveFeedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            saveFeedback.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {saveFeedback.message}
+        </div>
+      ) : null}
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
@@ -580,21 +912,21 @@ export default function ProfessionalSettingsPage() {
               <h2 className="text-xl font-semibold text-[#0F1F63]">Perfil</h2>
             </div>
 
-            <div className="flex items-center gap-6 mb-6">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] flex items-center justify-center text-white font-bold text-3xl">
+            <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-border bg-secondary/20 p-4 sm:flex-row sm:items-center">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#3B82F6] to-[#06B6D4] text-2xl font-bold text-white sm:h-20 sm:w-20 sm:text-3xl">
                 {initials}
               </div>
 
-              <div>
-                <p className="text-sm text-muted-foreground">Cuenta conectada</p>
-                <p className="font-medium text-[#0F1F63]">{email}</p>
-                <p className="text-sm text-muted-foreground mt-1">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cuenta conectada</p>
+                <p className="mt-2 break-all text-base font-semibold text-[#0F1F63] sm:text-lg">{email}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Cliente: {clientId}
                 </p>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-[#0F1F63] mb-2">
                   Nombre completo
@@ -743,37 +1075,6 @@ export default function ProfessionalSettingsPage() {
                 />
               </div>
             </div>
-
-            <div className="grid md:grid-cols-2 gap-4 mt-4">
-              <div className="rounded-2xl border border-border p-4 bg-secondary/20">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                  Fuente de timezone
-                </p>
-                <p className="text-sm font-medium text-[#0F1F63]">
-                  {timezoneSource || "—"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4 bg-secondary/20">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-                  Estado del teléfono
-                </p>
-                <span
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getPhoneStatusBadgeClass(
-                    phoneVerificationStatus
-                  )}`}
-                >
-                  {phoneVerificationStatus || "pending"}
-                </span>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Verificado: {formatDateTime(phoneVerifiedAt)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Solicitud: {formatDateTime(phoneVerificationRequestedAt)}
-                </p>
-              </div>
-            </div>
-
             <Button
               className="mt-6 rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#06B6D4] text-white hover:opacity-90"
               onClick={handleSave}
@@ -783,59 +1084,9 @@ export default function ProfessionalSettingsPage() {
             </Button>
           </div>
 
-          <div className="bg-card rounded-2xl border border-border p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <ShieldCheck className="w-5 h-5 text-[#10B981]" />
-              <h2 className="text-xl font-semibold text-[#0F1F63]">
-                Resumen operativo
-              </h2>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Phone className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Teléfono activo</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {phone || "No configurado"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <MapPin className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Ubicación base</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {city || "—"} {countryCode ? `(${countryCode})` : ""}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Globe className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Idioma y zona horaria</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {preferredLanguage || language || "es"} · {timezone || "America/Lima"}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Lock className="w-4 h-4 text-[#3B82F6]" />
-                  <p className="text-sm font-medium text-[#0F1F63]">Moneda de cobro</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {BILLING_CURRENCY_CODE}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="space-y-8">
+          <div className="space-y-8">
           <div className="bg-card rounded-2xl border border-border p-6">
             <div className="flex items-center gap-2 mb-6">
               <Wallet className="w-5 h-5 text-[#0EA5E9]" />
@@ -845,7 +1096,7 @@ export default function ProfessionalSettingsPage() {
             </div>
 
             <div className="rounded-2xl border border-border bg-secondary/20 p-5">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Plan actual</p>
                   <p className="text-2xl font-semibold text-[#0F1F63]">
@@ -865,14 +1116,19 @@ export default function ProfessionalSettingsPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
                     Importe
                   </p>
                   <p className="text-sm font-medium text-[#0F1F63] mt-1">
-                    {formatMoney(BILLING_CURRENCY_CODE, getDisplayPlanPrice(effectivePlanCode))}
+                    {formatPlanDisplayPrice(effectivePlanCatalog)}
                   </p>
+                  {!isPeru && effectivePlanCatalog && (
+                    <p className="text-xs text-[#0369A1] mt-1">
+                      Cobro real {pricing.formatPen(pricing.toPenAmount(effectivePlanCatalog.price, effectivePlanCatalog.currency))}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -914,6 +1170,260 @@ export default function ProfessionalSettingsPage() {
                 </Button>
               </div>
             </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">pagos aprobados</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{paymentSummary.approved}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">pagos pendientes</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{paymentSummary.pending}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">add-ons activos</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeUsageAddons.length}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">storage mensual</p>
+                <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{activeStorageSubscriptions.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+              Operaly te muestra precios en la moneda más clara para tu región, pero el cobro operativo se procesa con Mercado Pago en soles y queda trazado en tu historial.
+            </div>
+          </div>
+
+          <div className="bg-card rounded-2xl border border-border p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <Layers3 className="w-5 h-5 text-[#8B5CF6]" />
+              <h2 className="text-xl font-semibold text-[#0F1F63]">
+                Capacidad y refuerzos
+              </h2>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#0F1F63]">Refuerzos consumibles activos</p>
+                    <p className="text-sm text-muted-foreground">
+                      Minutos o mensajes extra que siguen vivos por consumo y vencen al mes si no se usan.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-border bg-secondary/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                    {activeUsageAddons.length} activo{activeUsageAddons.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {activeUsageAddons.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    Aún no tienes refuerzos consumibles activos en esta cuenta.
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {activeUsageAddons.map((addon) => {
+                      const addonCode = addon.code || addon.item_code || ""
+                      const catalogAddon = catalogAddonsMap.get(addonCode)
+                      return (
+                        <div
+                          key={addon.id}
+                          className="rounded-2xl border border-border p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-[#0F1F63]">
+                                  {catalogAddon?.name || addonCode || "Add-on activo"}
+                                </p>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${getAddonStatusBadgeClass(
+                                    addon.status
+                                  )}`}
+                                >
+                                  {addon.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {catalogAddon?.description || "Capacidad adicional activa sobre tu plan base."}
+                              </p>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                {addon.calls_minutes_extra ? <span>+{addon.calls_minutes_extra} min voz</span> : null}
+                                {addon.enables_voice ? <span>voz habilitada</span> : null}
+                                <span>vence al mes si no se consume</span>
+                              </div>
+                            </div>
+
+                            <div className="text-right text-xs text-muted-foreground">
+                              <p>Activado {formatDateTime(addon.created_at)}</p>
+                              <p>Vence {formatDateTime(addon.expires_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-[#0F1F63]">Capacidad mensual adicional</p>
+                    <p className="text-sm text-muted-foreground">
+                      Almacenamiento extra que se suma a su plan mensual y sigue mientras la suscripción esté activa.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full border border-border bg-secondary/30 px-3 py-1 text-xs font-medium text-muted-foreground">
+                    {activeStorageSubscriptions.length} activa{activeStorageSubscriptions.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {activeStorageSubscriptions.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    Aún no tiene almacenamiento mensual adicional activo.
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {activeStorageSubscriptions.map((addon) => {
+                      const addonCode = addon.code || addon.item_code || ""
+                      const catalogAddon = catalogAddonsMap.get(addonCode)
+                      return (
+                        <div key={addon.id} className="rounded-2xl border border-border p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-[#0F1F63]">
+                                  {catalogAddon?.name || addonCode || "Storage adicional"}
+                                </p>
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${getAddonStatusBadgeClass(
+                                    addon.status
+                                  )}`}
+                                >
+                                  {addon.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {catalogAddon?.description || "Capacidad mensual adicional sobre su plan base."}
+                              </p>
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                {addon.storage_gb_extra ? <span>+{addon.storage_gb_extra} GB mensuales</span> : null}
+                                <span>se suma a su cobro mensual</span>
+                              </div>
+                            </div>
+
+                            <div className="text-right text-xs text-muted-foreground">
+                              <p>Activado {formatDateTime(addon.created_at)}</p>
+                              <p>Revisión {formatDateTime(addon.expires_at)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#06B6D4]" />
+                  <p className="text-sm font-medium text-[#0F1F63]">Comprar refuerzos o ampliar plan</p>
+                </div>
+                <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                  Google Suite ya no se compra por separado. En Trial va incluido, y desde Pro en adelante viene dentro del plan.
+                </div>
+                <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Los paquetes de audio y mensajes vencen al mes si no se usan. El almacenamiento se cobra como capacidad mensual adicional.
+                </div>
+                <div className="grid gap-4">
+                  {availableUsageBoosters.map((addon) => (
+                    <div
+                      key={addon.code}
+                      className="rounded-2xl border border-border bg-background p-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <p className="font-semibold text-[#0F1F63]">{addon.name}</p>
+                          <p className="text-sm text-muted-foreground">{addon.description}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {addon.extra_minutes > 0 ? <span>+{addon.extra_minutes} min</span> : null}
+                            {addon.extra_messages > 0 ? <span>+{addon.extra_messages} mensajes</span> : null}
+                            {addon.extra_automations > 0 ? <span>+{addon.extra_automations} automatizaciones</span> : null}
+                            {addon.enables_voice ? <span>voz</span> : null}
+                            <span>{getCommercialPriceHint(addon.billingPeriodLabel)}</span>
+                          </div>
+                          <p className="text-sm font-medium text-[#0F1F63]">
+                            {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                          </p>
+                          <p className="text-xs font-semibold text-[#0F1F63]">
+                            Pago único
+                          </p>
+                          {!isPeru && (
+                            <p className="text-xs text-[#0369A1]">
+                              Cobro real {pricing.formatPen(pricing.toPenAmount(addon.price, addon.currency))}
+                            </p>
+                          )}
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          className="rounded-xl"
+                          onClick={() => handleAddonCheckout(addon.code)}
+                        >
+                          Comprar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#8B5CF6]" />
+                    <p className="text-sm font-medium text-[#0F1F63]">Ampliaciones mensuales de almacenamiento</p>
+                  </div>
+                  <div className="grid gap-4">
+                    {availableStorageSubscriptions.map((addon) => (
+                      <div
+                        key={addon.code}
+                        className="rounded-2xl border border-border bg-background p-4"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2">
+                            <p className="font-semibold text-[#0F1F63]">{addon.name}</p>
+                            <p className="text-sm text-muted-foreground">{addon.description}</p>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {addon.extra_storage_gb > 0 ? <span>+{addon.extra_storage_gb} GB mensuales</span> : null}
+                              <span>{getCommercialPriceHint(addon.billingPeriodLabel)}</span>
+                            </div>
+                            <p className="text-sm font-medium text-[#0F1F63]">
+                              {pricing.formatCatalogMoney(addon.price, addon.currency)}
+                            </p>
+                            <p className="text-xs font-semibold text-[#0F1F63]">
+                              Cargo mensual adicional
+                            </p>
+                            {!isPeru && (
+                              <p className="text-xs text-[#0369A1]">
+                                Cobro real {pricing.formatPen(pricing.toPenAmount(addon.price, addon.currency))}
+                              </p>
+                            )}
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={() => handleAddonCheckout(addon.code)}
+                          >
+                            Activar mensual
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-card rounded-2xl border border-border p-6">
@@ -935,11 +1445,18 @@ export default function ProfessionalSettingsPage() {
                     key={payment.id}
                     className="rounded-2xl border border-border p-4"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="font-medium text-[#0F1F63]">
-                          {formatMoney(BILLING_CURRENCY_CODE, payment.amount_usd)}
+                          {formatMoney(
+                            payment.currency || payment.display_currency || BILLING_CURRENCY_CODE,
+                            (payment.amount_pen ?? payment.display_amount ?? payment.amount_usd) || 0
+                          )}
                         </p>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>{payment.item_code ? "Compra extra" : "Plan / suscripción"}</span>
+                          {payment.item_code ? <span>• {catalogAddonsMap.get(payment.item_code)?.name || payment.item_code}</span> : null}
+                        </div>
                         <p className="text-sm text-muted-foreground mt-1">
                           {payment.provider || "MercadoPago"}
                         </p>
@@ -974,7 +1491,7 @@ export default function ProfessionalSettingsPage() {
             </div>
 
             <div className="grid gap-4">
-              {PAID_PLANS.map((plan) => {
+              {paidPlans.map((plan) => {
                 const isCurrent = effectivePlanCode === plan.code
 
                 return (
@@ -988,13 +1505,28 @@ export default function ProfessionalSettingsPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="font-semibold text-[#0F1F63]">{plan.label}</p>
+                        <p className="font-semibold text-[#0F1F63]">{plan.name}</p>
                         <p className="text-sm text-muted-foreground mt-1">
                           Código del plan: {plan.code}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Cobro {getDisplayPlanPeriodicity(plan.code)} en {BILLING_CURRENCY_CODE}
+                          {formatPlanDisplayPrice(plan)} · Cobro {getDisplayPlanPeriodicity(plan.code)}
                         </p>
+                        {plan.code === "core" ? (
+                          <p className="text-xs text-[#0F1F63] mt-2">
+                            Google Suite se habilita al subir a Pro.
+                          </p>
+                        ) : null}
+                        {plan.code === "pro" || plan.code === "pro_plus" ? (
+                          <p className="text-xs text-emerald-700 mt-2">
+                            Incluye Google Suite dentro del plan.
+                          </p>
+                        ) : null}
+                        {!isPeru && (
+                          <p className="text-xs text-[#0369A1] mt-1">
+                            Mercado Pago debita {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                          </p>
+                        )}
                       </div>
 
                       <Button
@@ -1012,16 +1544,6 @@ export default function ProfessionalSettingsPage() {
             </div>
           </div>
         </div>
-
-        {/* Voice Settings Section */}
-        <VoiceSettingsSection
-          clientId={clientId}
-          planCode={effectivePlanCode}
-          voiceSettings={voiceSettings}
-          minutesUsed={voiceMinutesUsed}
-          minutesLimit={voiceMinutesLimit}
-          onSaved={loadData}
-        />
 
       </div>
     </div>

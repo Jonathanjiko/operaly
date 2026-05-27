@@ -19,14 +19,18 @@ import {
   Settings,
   ArrowRight,
   Lock,
+  LogOut,
   X,
   CalendarDays,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import type { OwnerCatalog, OwnerTargets } from "@/lib/owner-catalog"
 import { supabase } from "@/lib/supabase"
 import { getDisplayPlanName } from "@/lib/plans"
+import OwnerCatalogManager from "./_components/OwnerCatalogManager"
 import OwnerPaymentsMetricsPanel from "./_components/OwnerPaymentsMetricsPanel"
+import OwnerTargetsManager from "./_components/OwnerTargetsManager"
 
 type SummaryRow = {
   total_clients: number
@@ -77,6 +81,9 @@ type SubscriptionRow = {
   current_period_start: string | null
   current_period_end: string | null
   created_at: string
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  recovery_status?: string | null
 }
 
 type ClientRow = {
@@ -99,11 +106,22 @@ type ClientRow = {
   automations_used: number
   storage_used_mb: number
   docs_count: number
+  canonical_status?: string | null
+  owner_dashboard_status?: string | null
+  professional_dashboard_status?: string | null
+  recovery_status?: string | null
+  recovery_started_at?: string | null
+  recovery_ends_at?: string | null
+  recovery_last_message_at?: string | null
+  recovery_messages_sent?: number
+  converted_after_recovery?: boolean
+  blocked_reason?: string | null
+  gate_allowed?: boolean
 }
 
 type OwnerActivityEntry = {
   id: string
-  action: "plan_change" | "status_change"
+  action: "plan_change" | "status_change" | "client_delete"
   clientId: string
   clientName: string
   previousValue: string | null
@@ -167,6 +185,61 @@ type TimeFilter = (typeof TIME_FILTERS)[number]["id"]
 
 function clampPercentage(value: number) {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
+}
+
+function isPastDate(value: string | null | undefined) {
+  if (!value) return false
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return false
+  return parsed.getTime() < Date.now()
+}
+
+function getResolvedSubscriptionStatus(subscription: SubscriptionRow) {
+  const ownerStatus = String(subscription.owner_dashboard_status || "").toLowerCase()
+  if (ownerStatus) return ownerStatus
+  const canonicalStatus = String(subscription.canonical_status || "").toLowerCase()
+  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
+  if (canonicalStatus === "paid_expired") return "expired"
+  if (canonicalStatus) return canonicalStatus
+  const rawStatus = String(subscription.status || "").toLowerCase()
+  const planCode = String(subscription.plan_code || "").toLowerCase()
+  const expired = isPastDate(subscription.current_period_end)
+
+  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && rawStatus === "active") return "expired"
+  return rawStatus || "inactive"
+}
+
+function getResolvedClientStatus(client: ClientRow) {
+  const ownerStatus = String(client.owner_dashboard_status || "").toLowerCase()
+  if (ownerStatus) return ownerStatus
+  const canonicalStatus = String(client.canonical_status || "").toLowerCase()
+  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
+  if (canonicalStatus === "paid_expired") return "expired"
+  if (canonicalStatus) return canonicalStatus
+  const rawStatus = String(client.status || "").toLowerCase()
+  const planCode = String(client.plan_code || "").toLowerCase()
+  const expired = isPastDate(client.current_period_end)
+
+  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && rawStatus === "active") return "expired"
+  return rawStatus || "inactive"
+}
+
+function getResolvedStatusLabel(status: string) {
+  if (status === "trial_recovery_active") return "trial expirado en recuperación"
+  if (status === "trial_expired") return "trial expirado"
+  if (status === "expired") return "expirado"
+  if (status === "inactive") return "inactivo"
+  if (status === "blocked") return "bloqueado"
+  if (status === "active") return "activo"
+  if (status === "paid_expired") return "expirado"
+  if (status === "trial_active") return "trial activo"
+  if (status === "paid_active") return "activo"
+  if (status === "pending") return "pendiente"
+  if (status === "cancelled") return "cancelado"
+  if (status === "converted") return "convertido"
+  return status || "sin estado"
 }
 
 function getOwnerPlanLabel(planCode: string | null | undefined) {
@@ -302,7 +375,13 @@ export default function OwnerDashboardPage() {
   const [notifications, setNotifications] = useState<Array<{id:string;title:string;body:string;amount_pen?:number;created_at:string;read:boolean}>>([])
   const [showNotifs, setShowNotifs] = useState(false)
   const [activityLog, setActivityLog] = useState<OwnerActivityEntry[]>([])
-  const [profitTargetPen, setProfitTargetPen] = useState(4000)
+  const [catalog, setCatalog] = useState<OwnerCatalog | null>(null)
+  const [targets, setTargets] = useState<OwnerTargets | null>(null)
+  const [catalogSaving, setCatalogSaving] = useState(false)
+  const [targetsSaving, setTargetsSaving] = useState(false)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [catalogNotice, setCatalogNotice] = useState("")
+  const [targetsNotice, setTargetsNotice] = useState("")
 
   // Revenue always shown in PEN (what MP deposits)
   const formatMoney = (amount: number | null | undefined, currency = "PEN") => {
@@ -410,6 +489,14 @@ export default function OwnerDashboardPage() {
       return "border-slate-200 bg-slate-100 text-slate-700"
     }
 
+    if (normalized === "trial_expired" || normalized === "expired") {
+      return "border-red-200 bg-red-50 text-red-700"
+    }
+
+    if (normalized === "trial_recovery_active") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
+    }
+
     return "border-slate-200 bg-slate-100 text-slate-700"
   }
 
@@ -426,6 +513,14 @@ export default function OwnerDashboardPage() {
 
     if (normalized === "inactive") {
       return "border-slate-200 bg-slate-100 text-slate-700"
+    }
+
+    if (normalized === "trial_expired" || normalized === "expired") {
+      return "border-red-200 bg-red-50 text-red-700"
+    }
+
+    if (normalized === "trial_recovery_active") {
+      return "border-amber-200 bg-amber-50 text-amber-700"
     }
 
     return "border-slate-200 bg-slate-100 text-slate-700"
@@ -476,16 +571,36 @@ export default function OwnerDashboardPage() {
       })
 
       const headers = await getAuthHeaders()
-      const response = await fetch("/api/owner/dashboard", {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      })
+      const [dashboardResponse, catalogResponse, targetsResponse] = await Promise.all([
+        fetch("/api/owner/dashboard", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+        fetch("/api/owner/catalog", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+        fetch("/api/owner/targets", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+      ])
 
-      const payload = await response.json().catch(() => ({}))
+      const payload = await dashboardResponse.json().catch(() => ({}))
+      const catalogPayload = await catalogResponse.json().catch(() => ({}))
+      const targetsPayload = await targetsResponse.json().catch(() => ({}))
 
-      if (!response.ok || !payload?.ok) {
+      if (!dashboardResponse.ok || !payload?.ok) {
         throw new Error(payload?.error || "No se pudo cargar el panel owner.")
+      }
+      if (!catalogResponse.ok || !catalogPayload?.ok) {
+        throw new Error(catalogPayload?.error || "No se pudo cargar el catálogo owner.")
+      }
+      if (!targetsResponse.ok || !targetsPayload?.ok) {
+        throw new Error(targetsPayload?.error || "No se pudieron cargar las metas owner.")
       }
 
       setSummary((payload.summary || null) as SummaryRow | null)
@@ -493,6 +608,8 @@ export default function OwnerDashboardPage() {
       setSubscriptions((payload.subscriptions || []) as SubscriptionRow[])
       setClients((payload.clients || []) as ClientRow[])
       setActivityLog((payload.activityLog || []) as OwnerActivityEntry[])
+      setCatalog((catalogPayload.catalog || null) as OwnerCatalog | null)
+      setTargets((targetsPayload.targets || null) as OwnerTargets | null)
 
       const nextClients = (payload.clients || []) as ClientRow[]
       if (nextClients.length > 0) {
@@ -512,6 +629,8 @@ export default function OwnerDashboardPage() {
       setSubscriptions([])
       setClients([])
       setActivityLog([])
+      setCatalog(null)
+      setTargets(null)
       setSelectedClientId("")
     } finally {
       setLoading(false)
@@ -528,7 +647,7 @@ export default function OwnerDashboardPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "payments" },
         (payload: any) => {
           const p = payload.new || {}
-          const pen = toPEN(Number(p.amount_usd || 0), p.currency || "PEN")
+          const pen = Number(p.amount_pen || toPEN(Number(p.amount_usd || 0), p.currency || "PEN"))
           const note = {
             id: p.id || Date.now().toString(),
             title: "💰 Nuevo pago recibido",
@@ -558,23 +677,6 @@ export default function OwnerDashboardPage() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("owner_profit_target_pen")
-      if (!raw) return
-      const parsed = Number(raw)
-      if (Number.isFinite(parsed) && parsed > 0) {
-        setProfitTargetPen(parsed)
-      }
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("owner_profit_target_pen", String(profitTargetPen))
-    } catch {}
-  }, [profitTargetPen])
-
   const runPlanChange = async (clientId: string, planCode: AdminPlan) => {
     const loadingKey = `plan:${clientId}:${planCode}`
     setActionLoadingKey(loadingKey)
@@ -589,7 +691,7 @@ export default function OwnerDashboardPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "No se pudo actualizar el plan.")
+        throw new Error(payload?.detail || payload?.error || "No se pudo actualizar el plan.")
       }
 
       await loadOwnerDashboard(true)
@@ -617,12 +719,50 @@ export default function OwnerDashboardPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "No se pudo actualizar el estado del cliente.")
+        throw new Error(payload?.detail || payload?.error || "No se pudo actualizar el estado del cliente.")
       }
 
       await loadOwnerDashboard(true)
     } catch (error: any) {
       alert(error.message || "No se pudo actualizar el estado del cliente.")
+    } finally {
+      setActionLoadingKey("")
+    }
+  }
+
+  const runClientDelete = async (client: ClientRow) => {
+    const clientLabel = client.name || client.email || client.phone || "este cliente"
+    const shouldDelete = window.confirm(
+      `Se eliminará por completo a ${clientLabel}.\n\nEsta acción limpia la cuenta operativa para permitir un registro nuevo con el mismo correo o teléfono.\n\n¿Deseas continuar?`
+    )
+
+    if (!shouldDelete) return
+
+    const loadingKey = `delete:${client.id}`
+    setActionLoadingKey(loadingKey)
+
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/client/delete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientId: client.id,
+          email: client.email,
+          phone: client.phone,
+        }),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.detail || payload?.error || "No se pudo eliminar por completo al cliente.")
+      }
+
+      setSelectedClientId("")
+      await loadOwnerDashboard(true)
+      alert("Cliente eliminado por completo. Ya puedes volver a registrarlo desde cero.")
+    } catch (error: any) {
+      alert(error.message || "No se pudo eliminar por completo al cliente.")
     } finally {
       setActionLoadingKey("")
     }
@@ -634,6 +774,147 @@ export default function OwnerDashboardPage() {
 
   const openProfessionalSettings = () => {
     window.open("/dashboard/professional/configuracion", "_blank", "noopener,noreferrer")
+  }
+
+  const handleOwnerLogout = async () => {
+    setSessionBusy(true)
+    try {
+      await supabase.auth.signOut()
+    } finally {
+      window.location.href = "/login"
+    }
+  }
+
+  const handlePlanPriceChange = (planCode: string, field: "price", value: number) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        plans: current.plans.map((plan) =>
+          plan.code === planCode ? { ...plan, [field]: Math.max(0, value) } : plan
+        ),
+      }
+    })
+  }
+
+  const handlePlanLimitChange = (planCode: string, limitKey: string, value: number) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        plans: current.plans.map((plan) =>
+          plan.code === planCode
+            ? {
+                ...plan,
+                limits: {
+                  ...plan.limits,
+                  [limitKey]: Math.max(0, value),
+                },
+              }
+            : plan
+        ),
+      }
+    })
+  }
+
+  const handleAddonFieldChange = (
+    addonCode: string,
+    field:
+      | "price"
+      | "name"
+      | "description"
+      | "extra_messages"
+      | "extra_minutes"
+      | "extra_storage_gb"
+      | "extra_automations",
+    value: string | number
+  ) => {
+    setCatalog((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        addons: current.addons.map((addon) =>
+          addon.code === addonCode
+            ? {
+                ...addon,
+                [field]: typeof value === "number" ? Math.max(0, value) : value,
+              }
+            : addon
+        ),
+      }
+    })
+  }
+
+  const saveCatalog = async () => {
+    if (!catalog) return
+    setCatalogSaving(true)
+    setCatalogNotice("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/catalog", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ catalog }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudo guardar el catálogo owner.")
+      }
+      setCatalog((payload.catalog || catalog) as OwnerCatalog)
+      setCatalogNotice("Catálogo guardado correctamente.")
+    } catch (error: any) {
+      setCatalogNotice(error.message || "No se pudo guardar el catálogo owner.")
+    } finally {
+      setCatalogSaving(false)
+    }
+  }
+
+  const handleTargetsChange = (
+    windowKey: "week" | "month",
+    field: "profitPen" | "salesPen" | "subscribers",
+    value: number
+  ) => {
+    setTargets((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        [windowKey]: {
+          ...current[windowKey],
+          [field]: Math.max(0, value),
+        },
+      }
+    })
+  }
+
+  const saveTargets = async () => {
+    if (!targets) return
+    setTargetsSaving(true)
+    setTargetsNotice("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch("/api/owner/targets", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ targets }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "No se pudieron guardar las metas owner.")
+      }
+      setTargets((payload.targets || targets) as OwnerTargets)
+      setTargetsNotice("Metas owner guardadas correctamente.")
+    } catch (error: any) {
+      setTargetsNotice(error.message || "No se pudieron guardar las metas owner.")
+    } finally {
+      setTargetsSaving(false)
+    }
+  }
+
+  const activeTargetWindow: "week" | "month" = timeFilter === "month" ? "month" : "week"
+  const activeTargets = targets?.[activeTargetWindow] || {
+    profitPen: 4000,
+    salesPen: 12000,
+    subscribers: 12,
   }
 
   const filteredPayments = useMemo(() => {
@@ -716,7 +997,7 @@ export default function OwnerDashboardPage() {
     )
 
     const activeSubscriptions = filteredSubscriptions.filter(
-      (subscription) => String(subscription.status || "").toLowerCase() === "active"
+      (subscription) => getResolvedSubscriptionStatus(subscription) === "active"
     )
 
     const approvedTotal = approvedPayments.reduce(
@@ -767,7 +1048,7 @@ export default function OwnerDashboardPage() {
     const totalCostsPen = fixedCostsPen + variableCostsPen
     const profitPen = approvedRevenuePen - totalCostsPen
     const breakEvenPen = fixedCostsPen / Math.max(0.0001, 1 - MP_FEE_PCT)
-    const targetRevenuePen = breakEvenPen + profitTargetPen
+    const targetRevenuePen = Math.max(activeTargets.salesPen, breakEvenPen)
     const paidClients = filteredClients.filter((client) =>
       ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())
     ).length
@@ -785,10 +1066,12 @@ export default function OwnerDashboardPage() {
       paidClients,
       totalClients,
       subscriberPct: clampPercentage((paidClients / totalClients) * 100),
-      targetProfitPct: clampPercentage((profitPen / Math.max(profitTargetPen, 1)) * 100),
+      subscriberTargetPct: clampPercentage((paidClients / Math.max(activeTargets.subscribers, 1)) * 100),
+      targetProfitPct: clampPercentage((Math.max(profitPen, 0) / Math.max(activeTargets.profitPen, 1)) * 100),
+      salesTargetPct: clampPercentage((approvedRevenuePen / Math.max(activeTargets.salesPen, 1)) * 100),
       breakEvenPct: clampPercentage((approvedRevenuePen / Math.max(breakEvenPen, 1)) * 100),
     }
-  }, [filteredClients, filteredOverview, profitTargetPen])
+  }, [activeTargets, filteredClients, filteredOverview])
 
   const filteredPlanDistribution = useMemo(() => {
     return filteredClients.reduce(
@@ -899,6 +1182,23 @@ export default function OwnerDashboardPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                  onClick={openProfessionalSettings}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configuración
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="rounded-xl bg-white text-[#0F1F63] hover:bg-white/90"
+                  onClick={handleOwnerLogout}
+                  disabled={sessionBusy}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  {sessionBusy ? "Saliendo..." : "Cerrar sesión"}
+                </Button>
                 {/* Realtime notification bell */}
                 <div className="relative">
                   <Button variant="secondary" size="icon"
@@ -1138,11 +1438,112 @@ export default function OwnerDashboardPage() {
                   <p className="text-2xl font-semibold text-[#0F1F63]">Activos</p>
                 </div>
               </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lock className="h-5 w-5 text-[#0F1F63]" />
+                    <h3 className="text-xl font-semibold text-[#0F1F63]">
+                      Cuenta y seguridad
+                    </h3>
+                  </div>
+                  <p className="text-sm leading-6 text-slate-500">
+                    Mantén la sesión owner bajo control, entra a configuración cuando lo
+                    necesites y sal de forma segura desde este mismo panel.
+                  </p>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      className="rounded-2xl"
+                      onClick={openProfessionalSettings}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      Abrir configuración
+                    </Button>
+                    <Button
+                      className="rounded-2xl bg-[#0F1F63] text-white hover:bg-[#132672]"
+                      onClick={handleOwnerLogout}
+                      disabled={sessionBusy}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      {sessionBusy ? "Cerrando sesión..." : "Cerrar sesión owner"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Wallet className="h-5 w-5 text-[#10B981]" />
+                    <h3 className="text-xl font-semibold text-[#0F1F63]">
+                      Estado ejecutivo
+                    </h3>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">meta activa</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargetWindow === "week" ? "Semana" : "Mes"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ventas objetivo</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {fmtPEN(activeTargets.salesPen)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">suscriptores objetivo</p>
+                      <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargets.subscribers}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <OwnerCatalogManager
+                catalog={catalog}
+                saving={catalogSaving}
+                onPlanFieldChange={handlePlanPriceChange}
+                onPlanLimitChange={handlePlanLimitChange}
+                onAddonFieldChange={handleAddonFieldChange}
+                onSave={saveCatalog}
+              />
+              {catalogNotice ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    catalogNotice.toLowerCase().includes("no se pudo")
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {catalogNotice}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {activeSection === "overview" ? (
             <div className="space-y-8">
+              <OwnerTargetsManager
+                targets={targets}
+                saving={targetsSaving}
+                activeWindow={activeTargetWindow}
+                onChange={handleTargetsChange}
+                onSave={saveTargets}
+              />
+              {targetsNotice ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    targetsNotice.toLowerCase().includes("no se pudo")
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {targetsNotice}
+                </div>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {overviewCards.map((card) => (
                   <MetricCard key={card.title} {...card} />
@@ -1160,42 +1561,35 @@ export default function OwnerDashboardPage() {
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        utilidad objetivo
+                        ventana activa
                       </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-lg font-semibold text-[#0F1F63]">S/</span>
-                        <Input
-                          value={profitTargetPen}
-                          onChange={(e) => setProfitTargetPen(Math.max(0, Number(e.target.value || 0)))}
-                          type="number"
-                          min={0}
-                          className="h-10 w-36 rounded-xl border-slate-200 bg-white"
-                        />
-                      </div>
+                      <p className="mt-1 text-lg font-semibold text-[#0F1F63]">
+                        {activeTargetWindow === "week" ? "Semana" : "Mes"}
+                      </p>
                     </div>
                   </div>
 
                   <div className="mt-6 grid gap-4 lg:grid-cols-3">
                     <RadialGauge
-                      label="Suscriptores pagos"
+                      label="Meta de suscriptores"
                       value={filteredBusinessMetrics.paidClients}
-                      max={filteredBusinessMetrics.totalClients}
+                      max={Math.max(activeTargets.subscribers, 1)}
                       tone="blue"
-                      detail={`${filteredClients.length} clientes visibles en este filtro`}
+                      detail={`Penetración actual: ${Math.round(filteredBusinessMetrics.subscriberPct)}%`}
                     />
                     <RadialGauge
                       label="Meta de utilidad"
                       value={Math.max(filteredBusinessMetrics.profitPen, 0)}
-                      max={Math.max(profitTargetPen, 1)}
+                      max={Math.max(activeTargets.profitPen, 1)}
                       tone="emerald"
                       detail={`Utilidad estimada: ${fmtPEN(filteredBusinessMetrics.profitPen)}`}
                     />
                     <RadialGauge
-                      label="Punto de equilibrio"
+                      label="Meta de ventas"
                       value={filteredBusinessMetrics.approvedRevenuePen}
-                      max={Math.max(filteredBusinessMetrics.breakEvenPen, 1)}
+                      max={Math.max(activeTargets.salesPen, 1)}
                       tone="amber"
-                      detail={`Break-even: ${fmtPEN(filteredBusinessMetrics.breakEvenPen)}`}
+                      detail={`Break-even operativo: ${fmtPEN(filteredBusinessMetrics.breakEvenPen)}`}
                     />
                   </div>
 
@@ -1207,21 +1601,42 @@ export default function OwnerDashboardPage() {
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos fijos</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">ventas objetivo</p>
                       <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
-                        {fmtPEN(filteredBusinessMetrics.fixedCostsPen)}
+                        {fmtPEN(activeTargets.salesPen)}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">costos variables</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">utilidad objetivo</p>
                       <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
-                        {fmtPEN(filteredBusinessMetrics.variableCostsPen)}
+                        {fmtPEN(activeTargets.profitPen)}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">utilidad estimada</p>
-                      <p className={`mt-2 text-2xl font-semibold ${filteredBusinessMetrics.profitPen >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {fmtPEN(filteredBusinessMetrics.profitPen)}
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">suscriptores objetivo</p>
+                      <p className="mt-2 text-2xl font-semibold text-[#0F1F63]">
+                        {activeTargets.subscribers}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-blue-500">avance suscriptores</p>
+                      <p className="mt-2 text-2xl font-semibold text-blue-900">
+                        {Math.round(filteredBusinessMetrics.subscriberTargetPct)}%
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-emerald-500">avance utilidad</p>
+                      <p className="mt-2 text-2xl font-semibold text-emerald-900">
+                        {Math.round(filteredBusinessMetrics.targetProfitPct)}%
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-amber-500">avance ventas</p>
+                      <p className="mt-2 text-2xl font-semibold text-amber-900">
+                        {Math.round(filteredBusinessMetrics.salesTargetPct)}%
                       </p>
                     </div>
                   </div>
@@ -1251,9 +1666,15 @@ export default function OwnerDashboardPage() {
                   <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs uppercase tracking-[0.18em] text-slate-400">proyeccion rapida</p>
                     <p className="mt-2 text-sm text-slate-600">
-                      Ingresos objetivo para lograr la utilidad meta:{" "}
+                      Ingresos objetivo activos para esta ventana:{" "}
                       <span className="font-semibold text-[#0F1F63]">
                         {fmtPEN(filteredBusinessMetrics.targetRevenuePen)}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Costos fijos visibles:{" "}
+                      <span className="font-semibold text-[#0F1F63]">
+                        {fmtPEN(filteredBusinessMetrics.fixedCostsPen)}
                       </span>
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
@@ -1318,7 +1739,11 @@ export default function OwnerDashboardPage() {
                         <div>
                           <p className="font-medium text-[#0F1F63]">{entry.clientName}</p>
                           <p className="text-sm text-slate-500">
-                            {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}:{" "}
+                            {entry.action === "plan_change"
+                              ? "Cambio de plan"
+                              : entry.action === "client_delete"
+                                ? "Eliminación completa"
+                                : "Cambio de estado"}:{" "}
                             <span className="font-medium text-slate-700">{entry.previousValue || "—"}</span>
                             {" → "}
                             <span className="font-medium text-slate-700">{entry.nextValue || "—"}</span>
@@ -1415,7 +1840,10 @@ export default function OwnerDashboardPage() {
               </div>
 
               <div className="space-y-4">
-                {filteredSubscriptions.map((subscription) => (
+                {filteredSubscriptions.map((subscription) => {
+                  const resolvedStatus = getResolvedSubscriptionStatus(subscription)
+                  const showTrialRecovery = resolvedStatus === "trial_expired"
+                  return (
                   <div
                     key={subscription.id}
                     className="rounded-2xl border border-slate-200 p-4"
@@ -1436,6 +1864,11 @@ export default function OwnerDashboardPage() {
                           Periodo: {formatDateTime(subscription.current_period_start)} →{" "}
                           {formatDateTime(subscription.current_period_end)}
                         </p>
+                        {showTrialRecovery ? (
+                          <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                            Trial vencido. Conviene activar la secuencia comercial de recuperación por 48 horas.
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="text-left xl:text-right">
@@ -1444,15 +1877,16 @@ export default function OwnerDashboardPage() {
                         </p>
                         <span
                           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${subscriptionStatusClass(
-                            subscription.status
+                            resolvedStatus
                           )}`}
                         >
-                          {subscription.status}
+                          {getResolvedStatusLabel(resolvedStatus)}
                         </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
 
                 {filteredSubscriptions.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
@@ -1501,6 +1935,13 @@ export default function OwnerDashboardPage() {
                             Suscripcion: {formatDateShort(client.subscription_started_at || client.created_at)} · Vence:{" "}
                             {formatDateShort(client.current_period_end)}
                           </p>
+                          {["trial_expired", "trial_recovery_active"].includes(getResolvedClientStatus(client)) ? (
+                            <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                              {getResolvedClientStatus(client) === "trial_recovery_active"
+                                ? "Trial vencido. La recuperación comercial sigue activa dentro de la ventana de 48 horas."
+                                : "Trial vencido. Ya debería entrar a recuperación comercial por 48 horas."}
+                            </p>
+                          ) : null}
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                               <span className="font-semibold text-[#0F1F63]">{client.messages_used.toLocaleString()}</span> mensajes
@@ -1517,10 +1958,10 @@ export default function OwnerDashboardPage() {
                           </span>
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${clientStatusClass(
-                              client.status
+                              getResolvedClientStatus(client)
                             )}`}
                           >
-                            {client.status || "—"}
+                            {getResolvedStatusLabel(getResolvedClientStatus(client))}
                           </span>
                           <ChevronRight className="w-4 h-4 text-slate-400" />
                         </div>
@@ -1575,8 +2016,16 @@ export default function OwnerDashboardPage() {
                             {getOwnerPlanLabel(selectedClient.plan_code)}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
-                            Estado plan: {selectedClient.plan_status || "—"}
+                            Estado plan: {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
                           </p>
+                          {selectedClient.recovery_status && selectedClient.recovery_status !== "inactive" ? (
+                            <p className="mt-2 text-xs text-[#C2410C]">
+                              Recuperación: {getResolvedStatusLabel(selectedClient.recovery_status)}.
+                              {selectedClient.recovery_ends_at
+                                ? ` Ventana hasta ${formatDateTime(selectedClient.recovery_ends_at)}.`
+                                : ""}
+                            </p>
+                          ) : null}
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 bg-[#F8FAFF] p-4">
@@ -1585,10 +2034,10 @@ export default function OwnerDashboardPage() {
                           </p>
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${clientStatusClass(
-                              selectedClient.status
+                              getResolvedClientStatus(selectedClient)
                             )}`}
                           >
-                            {selectedClient.status || "—"}
+                            {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
                           </span>
                         </div>
                       </div>
@@ -1695,7 +2144,23 @@ export default function OwnerDashboardPage() {
                               ? "Actualizando..."
                               : "Dar de baja"}
                           </Button>
+
+                          <Button
+                            variant="outline"
+                            className="rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            disabled={Boolean(actionLoadingKey)}
+                            onClick={() => runClientDelete(selectedClient)}
+                          >
+                            {actionLoadingKey === `delete:${selectedClient.id}`
+                              ? "Eliminando..."
+                              : "Eliminar por completo"}
+                          </Button>
                         </div>
+                        <p className="mt-3 text-xs leading-5 text-slate-500">
+                          Usa <span className="font-medium text-[#0F1F63]">Dar de baja</span> para desactivar sin perder historial.
+                          Usa <span className="font-medium text-red-600">Eliminar por completo</span> cuando necesites
+                          limpiar el registro y volver a probar desde cero con el mismo correo o teléfono.
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -1719,7 +2184,11 @@ export default function OwnerDashboardPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="font-medium text-[#0F1F63]">
-                              {entry.action === "plan_change" ? "Cambio de plan" : "Cambio de estado"}
+                              {entry.action === "plan_change"
+                                ? "Cambio de plan"
+                                : entry.action === "client_delete"
+                                  ? "Eliminación completa"
+                                  : "Cambio de estado"}
                             </p>
                             <p className="text-xs text-slate-500 mt-1">
                               {entry.previousValue || "—"} → {entry.nextValue || "—"}
@@ -1799,14 +2268,21 @@ export default function OwnerDashboardPage() {
                               {formatDateTime(subscription.current_period_start)} →{" "}
                               {formatDateTime(subscription.current_period_end)}
                             </p>
+                            {["trial_expired", "trial_recovery_active"].includes(getResolvedSubscriptionStatus(subscription)) ? (
+                              <p className="mt-2 text-xs font-medium text-[#C2410C]">
+                                {getResolvedSubscriptionStatus(subscription) === "trial_recovery_active"
+                                  ? "Trial vencido. La recuperación comercial está activa y ya no debería verse como activo."
+                                  : "Trial vencido. Conviene pasar a recuperación comercial y marcarlo como expirado."}
+                              </p>
+                            ) : null}
                           </div>
 
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${subscriptionStatusClass(
-                              subscription.status
+                              getResolvedSubscriptionStatus(subscription)
                             )}`}
                           >
-                            {subscription.status}
+                            {getResolvedStatusLabel(getResolvedSubscriptionStatus(subscription))}
                           </span>
                         </div>
                       </div>

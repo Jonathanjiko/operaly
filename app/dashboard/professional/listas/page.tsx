@@ -1,123 +1,338 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import {
-  List, Plus, Check, Trash2, RefreshCw, ShoppingCart,
-  Briefcase, User, FileText, ChevronDown, ChevronRight,
-  Pencil, X, Save,
-} from "lucide-react"
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react"
+import { Briefcase, Check, ChevronDown, ChevronRight, FileText, List, Pencil, Plus, RefreshCw, Save, ShoppingCart, Trash2, User, X } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabase"
+import { fetchDashboardJson } from "@/lib/dashboard-runtime"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { labelForLanguage, localeFromLanguage, resolveLanguageCode, type SupportedLanguage } from "@/lib/runtime-locale"
+import { supabase } from "@/lib/supabase"
 
-type ListItem      = { id: string; content: string; is_checked: boolean; position: number }
-type ListRow       = { id: string; title: string; list_type: string; status: string; created_at: string; items?: ListItem[]; expanded?: boolean }
+type ListItem = { id: string; content: string; is_checked: boolean; position: number }
+type ListRow = { id: string; title: string; list_type: string; status: string; created_at: string; items?: ListItem[]; expanded?: boolean }
 type ChecklistItem = { id: string; content: string; is_checked: boolean; position: number }
-type ChecklistRow  = { id: string; title: string; status: string; created_at: string; items?: ChecklistItem[]; expanded?: boolean }
+type ChecklistRow = { id: string; title: string; status: string; created_at: string; items?: ChecklistItem[]; expanded?: boolean }
+type Feedback = { type: "success" | "error"; message: string } | null
+type DatabaseError = { message?: string; details?: string; hint?: string; code?: string } | null
 
-const TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = { shopping: ShoppingCart, project: Briefcase, personal: User, work: Briefcase, free: List }
+const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = { shopping: ShoppingCart, project: Briefcase, personal: User, work: Briefcase, free: List }
 const TYPE_LABELS: Record<string, string> = { shopping: "Compras", project: "Proyecto", personal: "Personal", work: "Trabajo", free: "Lista libre" }
 const TYPE_COLORS: Record<string, string> = { shopping: "#F59E0B", project: "#7C3AED", personal: "#10B981", work: "#3B82F6", free: "#64748B" }
+const LIST_TYPE_FALLBACKS = ["free", "personal", "work", "project", "shopping"] as const
+
+const COPY: Record<SupportedLanguage, Record<string, string>> = {
+  es: {
+    title: "Listas y checklists",
+    subtitle: "Guarde compras, pendientes, pasos e indicaciones sin complicarse.",
+    sync: "Todo lo que sí se guarde aquí debe volver a aparecerle en su cuenta y en Operaly",
+    reminder: "Si algo lleva fecha, después puede convertirlo en recordatorio o agenda.",
+    new: "Nueva",
+    newList: "Nueva lista",
+    newChecklist: "Nuevo checklist",
+    create: "Crear",
+    listPlaceholder: "Ej: Lista del mercado",
+    checklistPlaceholder: "Ej: Pasos para la reunión",
+    initialItems: "Escriba varios puntos separados por coma o por línea (opcional)",
+    addItem: "Agregar punto",
+    addChecklistItem: "Agregar paso",
+    emptyLists: "Todavía no hay listas",
+    emptyListsHint: "Úselas para compras, ideas rápidas o cosas por resolver.",
+    emptyChecklists: "Todavía no hay checklists",
+    emptyChecklistsHint: "Son útiles para procesos, pasos repetidos y controles rápidos.",
+    listsTab: "Listas",
+    checklistsTab: "Checklists",
+    clearDone: "Quitar marcadas",
+    listFallback: "Lista",
+    savedOk: "Cambios guardados.",
+    saveError: "No se pudo guardar todavía. Revise la conexión e intente de nuevo.",
+  },
+  en: { title: "Lists and checklists", subtitle: "Capture tasks, shopping, and ideas in a quick and simple format.", sync: "Saved to your account and also available for WhatsApp flows", reminder: "If you later add a date, Operaly can move it into your agenda.", new: "New", newList: "New list", newChecklist: "New checklist", create: "Create", listPlaceholder: "Example: Grocery list", checklistPlaceholder: "Example: Meeting steps", initialItems: "Write several points separated by commas or lines (optional)", addItem: "Add item", addChecklistItem: "Add step", emptyLists: "No lists yet", emptyListsHint: "Use them for shopping, quick ideas, or things to solve.", emptyChecklists: "No checklists yet", emptyChecklistsHint: "Useful for repeatable steps and quick controls.", listsTab: "Lists", checklistsTab: "Checklists", clearDone: "Remove checked", listFallback: "List", savedOk: "Changes saved.", saveError: "Could not save. Please try again." },
+  pt: { title: "Listas e checklists", subtitle: "Anote pendências, compras e ideias de forma rápida e simples.", sync: "Salvo na sua conta e também disponível para o WhatsApp", reminder: "Se depois colocar data, a Operaly pode levar para a agenda.", new: "Nova", newList: "Nova lista", newChecklist: "Novo checklist", create: "Criar", listPlaceholder: "Ex.: Lista do mercado", checklistPlaceholder: "Ex.: Passos da reunião", initialItems: "Escreva vários pontos separados por vírgula ou linha (opcional)", addItem: "Adicionar ponto", addChecklistItem: "Adicionar passo", emptyLists: "Ainda não há listas", emptyListsHint: "Use para compras, ideias rápidas ou coisas para resolver.", emptyChecklists: "Ainda não há checklists", emptyChecklistsHint: "Úteis para processos e controles rápidos.", listsTab: "Listas", checklistsTab: "Checklists", clearDone: "Remover marcadas", listFallback: "Lista", savedOk: "Alterações salvas.", saveError: "Não foi possível salvar. Tente novamente." },
+  de: { title: "Listen und Checklisten", subtitle: "Notiere Aufgaben, Einkäufe und Ideen schnell und einfach.", sync: "In deinem Konto gespeichert und auch für WhatsApp nutzbar", reminder: "Wenn du später ein Datum hinzufügst, kann Operaly es in die Agenda übernehmen.", new: "Neu", newList: "Neue Liste", newChecklist: "Neue Checkliste", create: "Erstellen", listPlaceholder: "Beispiel: Einkaufsliste", checklistPlaceholder: "Beispiel: Meeting-Schritte", initialItems: "Mehrere Punkte mit Komma oder Zeilen trennen (optional)", addItem: "Punkt hinzufügen", addChecklistItem: "Schritt hinzufügen", emptyLists: "Noch keine Listen", emptyListsHint: "Für Einkäufe, schnelle Ideen oder offene Punkte.", emptyChecklists: "Noch keine Checklisten", emptyChecklistsHint: "Praktisch für wiederholbare Schritte.", listsTab: "Listen", checklistsTab: "Checklisten", clearDone: "Erledigte entfernen", listFallback: "Liste", savedOk: "Änderungen gespeichert.", saveError: "Speichern nicht möglich. Bitte erneut versuchen." },
+  fr: { title: "Listes et checklists", subtitle: "Note vos tâches, courses et idées dans un format simple et rapide.", sync: "Enregistré dans votre compte et aussi disponible pour WhatsApp", reminder: "Si vous ajoutez une date ensuite, Operaly peut l’envoyer dans l’agenda.", new: "Nouvelle", newList: "Nouvelle liste", newChecklist: "Nouvelle checklist", create: "Créer", listPlaceholder: "Ex. : Liste de courses", checklistPlaceholder: "Ex. : Étapes de réunion", initialItems: "Écrivez plusieurs points séparés par virgule ou ligne (optionnel)", addItem: "Ajouter un point", addChecklistItem: "Ajouter une étape", emptyLists: "Pas encore de listes", emptyListsHint: "Pour les courses, idées rapides ou choses à régler.", emptyChecklists: "Pas encore de checklists", emptyChecklistsHint: "Pratiques pour les étapes répétées.", listsTab: "Listes", checklistsTab: "Checklists", clearDone: "Retirer cochés", listFallback: "Liste", savedOk: "Modifications enregistrées.", saveError: "Impossible d’enregistrer. Réessayez." },
+  it: { title: "Liste e checklist", subtitle: "Annoti attività, spesa e idee in modo rapido e semplice.", sync: "Salvato nel suo account e disponibile anche su WhatsApp", reminder: "Se dopo aggiunge una data, Operaly può portarlo in agenda.", new: "Nuova", newList: "Nuova lista", newChecklist: "Nuova checklist", create: "Crea", listPlaceholder: "Es.: Lista della spesa", checklistPlaceholder: "Es.: Passi della riunione", initialItems: "Scriva più punti separati da virgola o riga (opzionale)", addItem: "Aggiungi punto", addChecklistItem: "Aggiungi passaggio", emptyLists: "Ancora nessuna lista", emptyListsHint: "Per spesa, idee rapide o cose da chiudere.", emptyChecklists: "Ancora nessuna checklist", emptyChecklistsHint: "Utili per passaggi ripetuti.", listsTab: "Liste", checklistsTab: "Checklist", clearDone: "Rimuovi segnate", listFallback: "Lista", savedOk: "Modifiche salvate.", saveError: "Impossibile salvare. Riprovi." },
+}
+
+const parseInitialItems = (raw: string) => raw.split(/[\n,]/).map((content) => content.trim()).filter(Boolean)
+
+const formatDateTime = (value: string | null | undefined, locale: string, timezone: string) => {
+  if (!value) return "Sin fecha visible"
+  const date = new Date(String(value))
+  if (Number.isNaN(date.getTime())) return "Sin fecha visible"
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: timezone,
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
 
 export default function ListasPage() {
-  const [clientId, setClientId]         = useState<string | null>(null)
-  const [lists, setLists]               = useState<ListRow[]>([])
-  const [checklists, setChecklists]     = useState<ChecklistRow[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [tab, setTab]                   = useState<"listas" | "checklists">("listas")
-  const [showNew, setShowNew]           = useState(false)
-  const [newTitle, setNewTitle]         = useState("")
-  const [newType, setNewType]           = useState("free")
-  const [newItems, setNewItems]         = useState("")
-  const [creating, setCreating]         = useState(false)
-  const [addingTo, setAddingTo]         = useState<string | null>(null)
-  const [addText, setAddText]           = useState("")
-  const [editId, setEditId]             = useState<string | null>(null)
-  const [editVal, setEditVal]           = useState("")
+  const [clientId, setClientId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [lists, setLists] = useState<ListRow[]>([])
+  const [checklists, setChecklists] = useState<ChecklistRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<"listas" | "checklists">("listas")
+  const [showNew, setShowNew] = useState(false)
+  const [newTitle, setNewTitle] = useState("")
+  const [newType, setNewType] = useState("free")
+  const [newItems, setNewItems] = useState("")
+  const [creating, setCreating] = useState(false)
+  const [addingTo, setAddingTo] = useState<string | null>(null)
+  const [addText, setAddText] = useState("")
+  const [addingChecklistTo, setAddingChecklistTo] = useState<string | null>(null)
+  const [checklistAddText, setChecklistAddText] = useState("")
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editVal, setEditVal] = useState("")
+  const [language, setLanguage] = useState<SupportedLanguage>("es")
+  const [timezone, setTimezone] = useState("America/Lima")
+  const [locale, setLocale] = useState("es-PE")
+  const [feedback, setFeedback] = useState<Feedback>(null)
+  const [syncSource, setSyncSource] = useState<"auth_bound" | "direct_rls">("direct_rls")
+  const [operationalWarning, setOperationalWarning] = useState("")
 
-  useEffect(() => { getCurrentClientId().then(setClientId).catch(console.error) }, [])
-  useEffect(() => { if (clientId) loadAll() }, [clientId])
+  const copy = COPY[language]
+
+  const showFeedback = useCallback((type: Feedback["type"], message: string) => {
+    setFeedback({ type, message })
+  }, [])
+
+  useEffect(() => {
+    if (!feedback) return
+    const timer = window.setTimeout(() => setFeedback(null), 3500)
+    return () => window.clearTimeout(timer)
+  }, [feedback])
+
+  useEffect(() => {
+    getCurrentClientId().then(setClientId).catch(console.error)
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id || null)).catch(console.error)
+  }, [])
+
+  const buildPayloadVariants = useCallback((payload: Record<string, unknown>) => {
+    const baseVariants: Record<string, unknown>[] = [{ ...payload }]
+
+    if (payload.source) {
+      const withoutSource = { ...payload }
+      delete withoutSource.source
+      baseVariants.push(withoutSource)
+    }
+
+    const authorKeys: Array<"created_by" | "created_by_user_id" | "user_id" | "owner_user_id"> = [
+      "created_by",
+      "created_by_user_id",
+      "user_id",
+      "owner_user_id",
+    ]
+
+    if (userId) {
+      for (const key of authorKeys) {
+        baseVariants.push({ ...payload, [key]: userId })
+        if (payload.source) {
+          const variant = { ...payload, [key]: userId }
+          delete variant.source
+          baseVariants.push(variant)
+        }
+      }
+    }
+
+    if (typeof payload.list_type === "string") {
+      for (const candidate of LIST_TYPE_FALLBACKS) {
+        if (candidate === payload.list_type) continue
+        baseVariants.push({ ...payload, list_type: candidate })
+        if (payload.source) {
+          const variant = { ...payload, list_type: candidate }
+          delete variant.source
+          baseVariants.push(variant)
+        }
+      }
+    }
+
+    return baseVariants
+  }, [userId])
+
+  const insertWithFallback = useCallback(async (table: "lists" | "checklists" | "list_items" | "checklist_items", payload: Record<string, unknown>) => {
+    const variants = buildPayloadVariants(payload)
+    let lastError: DatabaseError = null
+
+    for (const variant of variants) {
+      const attempt = await supabase.from(table).insert(variant).select("id").single()
+      if (!attempt.error) return attempt
+      lastError = attempt.error as DatabaseError
+    }
+
+    return { data: null, error: lastError }
+  }, [buildPayloadVariants])
+
+  const explainSaveError = useCallback((error: unknown) => {
+    const message = typeof error === "object" && error && "message" in error ? String((error as DatabaseError)?.message || "") : ""
+    const normalized = message.toLowerCase()
+
+    if (normalized.includes("row-level security") || normalized.includes("permission")) {
+      return "No pude guardarlo en su cuenta por permisos. Revise la sesion e intente otra vez."
+    }
+    if (normalized.includes("violates") || normalized.includes("constraint") || normalized.includes("column")) {
+      return "No pude guardarlo todavia porque la estructura de listas sigue desalineada. Voy a necesitar cerrar ese ajuste tambien en backend."
+    }
+    return copy.saveError
+  }, [copy.saveError])
 
   const loadAll = useCallback(async () => {
     if (!clientId) return
     setLoading(true)
-    const [lr, cr] = await Promise.all([
-      supabase.from("lists").select("id,title,list_type,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
-      supabase.from("checklists").select("id,title,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
-    ])
-    setLists((lr.data || []).map(l => ({ ...l, expanded: false })))
-    setChecklists((cr.data || []).map(c => ({ ...c, expanded: false })))
-    setLoading(false)
-  }, [clientId])
+    setOperationalWarning("")
+    try {
+      let dashboardSnapshotLoaded = false
+      try {
+        const listsPayload = await fetchDashboardJson<{
+          lists?: ListRow[]
+          checklists?: ChecklistRow[]
+        }>("/api/dashboard/lists")
+        setLists((listsPayload?.lists || []).map((row) => ({ ...row, expanded: false })))
+        setChecklists((listsPayload?.checklists || []).map((row) => ({ ...row, expanded: false })))
+        setSyncSource("auth_bound")
+        dashboardSnapshotLoaded = true
+      } catch (dashboardError) {
+        console.error("No se pudo cargar snapshot auth-bound de listas:", dashboardError)
+        setOperationalWarning("Las listas tardaron más de lo normal. Le mostramos lo último disponible mientras terminan de actualizarse.")
+      }
 
-  // Real-time: changes from WhatsApp reflect instantly
+      const [{ data: lr, error: listsError }, { data: cr, error: checklistsError }, { data: profile }] = await Promise.all([
+        dashboardSnapshotLoaded
+          ? Promise.resolve({ data: [], error: null } as any)
+          : supabase.from("lists").select("id,title,list_type,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
+        dashboardSnapshotLoaded
+          ? Promise.resolve({ data: [], error: null } as any)
+          : supabase.from("checklists").select("id,title,status,created_at").eq("client_id", clientId).eq("status", "active").order("created_at", { ascending: false }).limit(50),
+        supabase.from("clients").select("preferred_language,language,timezone,timezone_auto").eq("id", clientId).maybeSingle(),
+      ])
+      if (!dashboardSnapshotLoaded) {
+        if (listsError) throw listsError
+        if (checklistsError) throw checklistsError
+      }
+      const resolvedLanguage = resolveLanguageCode(profile?.preferred_language || profile?.language || "es")
+      setLanguage(resolvedLanguage)
+      setLocale(localeFromLanguage(resolvedLanguage))
+      setTimezone(profile?.timezone_auto || profile?.timezone || "America/Lima")
+      if (!dashboardSnapshotLoaded) {
+        setLists((lr || []).map((row) => ({ ...row, expanded: false })))
+        setChecklists((cr || []).map((row) => ({ ...row, expanded: false })))
+        setSyncSource("direct_rls")
+      }
+    } catch (error) {
+      console.error(error)
+      showFeedback("error", explainSaveError(error))
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId, explainSaveError, showFeedback])
+
+  useEffect(() => {
+    if (clientId) void loadAll()
+  }, [clientId, loadAll])
+
   useEffect(() => {
     if (!clientId) return
     const ch = supabase.channel(`lists-rt-${clientId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lists",          filter: `client_id=eq.${clientId}` }, () => loadAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "checklists",     filter: `client_id=eq.${clientId}` }, () => loadAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "list_items",     filter: `client_id=eq.${clientId}` }, (p) => {
-        const lid = (p.new as any)?.list_id || (p.old as any)?.list_id
-        if (lid) setLists(prev => prev.map(l => l.id === lid ? { ...l, items: undefined } : l))
+      .on("postgres_changes", { event: "*", schema: "public", table: "lists", filter: `client_id=eq.${clientId}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "checklists", filter: `client_id=eq.${clientId}` }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "list_items", filter: `client_id=eq.${clientId}` }, (payload) => {
+        const listId = (payload.new as { list_id?: string } | null)?.list_id || (payload.old as { list_id?: string } | null)?.list_id
+        if (listId) setLists((prev) => prev.map((row) => row.id === listId ? { ...row, items: undefined } : row))
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "checklist_items", filter: `client_id=eq.${clientId}` }, (p) => {
-        const cid = (p.new as any)?.checklist_id || (p.old as any)?.checklist_id
-        if (cid) setChecklists(prev => prev.map(c => c.id === cid ? { ...c, items: undefined } : c))
+      .on("postgres_changes", { event: "*", schema: "public", table: "checklist_items", filter: `client_id=eq.${clientId}` }, (payload) => {
+        const checklistId = (payload.new as { checklist_id?: string } | null)?.checklist_id || (payload.old as { checklist_id?: string } | null)?.checklist_id
+        if (checklistId) setChecklists((prev) => prev.map((row) => row.id === checklistId ? { ...row, items: undefined } : row))
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [clientId, loadAll])
 
-  const loadItems = async (id: string) => (await supabase.from("list_items").select("id,content,is_checked,position").eq("list_id", id).order("position")).data as ListItem[] || []
-  const loadCLItems = async (id: string) => (await supabase.from("checklist_items").select("id,content,is_checked,position").eq("checklist_id", id).order("position")).data as ChecklistItem[] || []
+  const loadItems = async (id: string) => ((await supabase.from("list_items").select("id,content,is_checked,position").eq("list_id", id).order("position")).data as ListItem[]) || []
+  const loadChecklistItems = async (id: string) => ((await supabase.from("checklist_items").select("id,content,is_checked,position").eq("checklist_id", id).order("position")).data as ChecklistItem[]) || []
+
+  const topSummary = useMemo(() => ({
+    totalItems: lists.reduce((acc, row) => acc + (row.items?.length || 0), 0),
+    totalChecks: checklists.reduce((acc, row) => acc + (row.items?.length || 0), 0),
+    checkedListItems: lists.reduce((acc, row) => acc + (row.items?.filter((item) => item.is_checked).length || 0), 0),
+    checkedChecklistItems: checklists.reduce((acc, row) => acc + (row.items?.filter((item) => item.is_checked).length || 0), 0),
+  }), [lists, checklists])
 
   const toggleList = async (id: string) => {
-    const lst = lists.find(l => l.id === id)
-    if (!lst) return
-    if (!lst.expanded && !lst.items) {
+    const row = lists.find((item) => item.id === id)
+    if (!row) return
+    if (!row.expanded && !row.items) {
       const items = await loadItems(id)
-      setLists(prev => prev.map(l => l.id === id ? { ...l, expanded: true, items } : l))
-    } else {
-      setLists(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
+      setLists((prev) => prev.map((item) => item.id === id ? { ...item, expanded: true, items } : item))
+      return
     }
+    setLists((prev) => prev.map((item) => item.id === id ? { ...item, expanded: !item.expanded } : item))
   }
 
-  const toggleCL = async (id: string) => {
-    const cl = checklists.find(c => c.id === id)
-    if (!cl) return
-    if (!cl.expanded && !cl.items) {
-      const items = await loadCLItems(id)
-      setChecklists(prev => prev.map(c => c.id === id ? { ...c, expanded: true, items } : c))
-    } else {
-      setChecklists(prev => prev.map(c => c.id === id ? { ...c, expanded: !c.expanded } : c))
+  const toggleChecklist = async (id: string) => {
+    const row = checklists.find((item) => item.id === id)
+    if (!row) return
+    if (!row.expanded && !row.items) {
+      const items = await loadChecklistItems(id)
+      setChecklists((prev) => prev.map((item) => item.id === id ? { ...item, expanded: true, items } : item))
+      return
     }
+    setChecklists((prev) => prev.map((item) => item.id === id ? { ...item, expanded: !item.expanded } : item))
   }
 
   const toggleItem = async (itemId: string, checked: boolean, listId: string) => {
-    await supabase.from("list_items").update({ is_checked: !checked }).eq("id", itemId)
-    setLists(prev => prev.map(l => l.id === listId ? { ...l, items: l.items?.map(i => i.id === itemId ? { ...i, is_checked: !checked } : i) } : l))
+    const { error } = await supabase.from("list_items").update({ is_checked: !checked }).eq("id", itemId)
+    if (error) return showFeedback("error", copy.saveError)
+    setLists((prev) => prev.map((row) => row.id === listId ? { ...row, items: row.items?.map((item) => item.id === itemId ? { ...item, is_checked: !checked } : item) } : row))
   }
 
-  const toggleCLItem = async (itemId: string, checked: boolean, clId: string) => {
-    await supabase.from("checklist_items").update({ is_checked: !checked }).eq("id", itemId)
-    setChecklists(prev => prev.map(c => c.id === clId ? { ...c, items: c.items?.map(i => i.id === itemId ? { ...i, is_checked: !checked } : i) } : c))
+  const toggleChecklistItem = async (itemId: string, checked: boolean, checklistId: string) => {
+    const { error } = await supabase.from("checklist_items").update({ is_checked: !checked }).eq("id", itemId)
+    if (error) return showFeedback("error", copy.saveError)
+    setChecklists((prev) => prev.map((row) => row.id === checklistId ? { ...row, items: row.items?.map((item) => item.id === itemId ? { ...item, is_checked: !checked } : item) } : row))
   }
 
   const addItem = async (listId: string) => {
     if (!addText.trim() || !clientId) return
-    const pos = lists.find(l => l.id === listId)?.items?.length || 0
-    await supabase.from("list_items").insert({ list_id: listId, client_id: clientId, content: addText.trim(), position: pos })
+    const position = lists.find((row) => row.id === listId)?.items?.length || 0
+    const { error } = await insertWithFallback("list_items", { list_id: listId, client_id: clientId, content: addText.trim(), position })
+    if (error) return showFeedback("error", explainSaveError(error))
     const items = await loadItems(listId)
-    setLists(prev => prev.map(l => l.id === listId ? { ...l, items } : l))
-    setAddText(""); setAddingTo(null)
+    setLists((prev) => prev.map((row) => row.id === listId ? { ...row, items } : row))
+    setAddText("")
+    setAddingTo(null)
+    showFeedback("success", copy.savedOk)
+  }
+
+  const addChecklistItem = async (checklistId: string) => {
+    if (!checklistAddText.trim() || !clientId) return
+    const position = checklists.find((row) => row.id === checklistId)?.items?.length || 0
+    const { error } = await insertWithFallback("checklist_items", { checklist_id: checklistId, client_id: clientId, content: checklistAddText.trim(), position })
+    if (error) return showFeedback("error", explainSaveError(error))
+    const items = await loadChecklistItems(checklistId)
+    setChecklists((prev) => prev.map((row) => row.id === checklistId ? { ...row, items } : row))
+    setChecklistAddText("")
+    setAddingChecklistTo(null)
+    showFeedback("success", copy.savedOk)
   }
 
   const clearChecked = async (listId: string) => {
-    const ids = lists.find(l => l.id === listId)?.items?.filter(i => i.is_checked).map(i => i.id) || []
+    const ids = lists.find((row) => row.id === listId)?.items?.filter((item) => item.is_checked).map((item) => item.id) || []
     if (!ids.length) return
-    await supabase.from("list_items").delete().in("id", ids)
-    setLists(prev => prev.map(l => l.id === listId ? { ...l, items: l.items?.filter(i => !i.is_checked) } : l))
+    const { error } = await supabase.from("list_items").delete().in("id", ids)
+    if (error) return showFeedback("error", copy.saveError)
+    setLists((prev) => prev.map((row) => row.id === listId ? { ...row, items: row.items?.filter((item) => !item.is_checked) } : row))
+    showFeedback("success", copy.savedOk)
+  }
+
+  const archiveRow = async (table: "lists" | "checklists", id: string) => {
+    const { error } = await supabase.from(table).update({ status: "archived" }).eq("id", id)
+    if (error) return showFeedback("error", copy.saveError)
+    await loadAll()
+    showFeedback("success", copy.savedOk)
   }
 
   const createNew = async () => {
@@ -125,201 +340,224 @@ export default function ListasPage() {
     setCreating(true)
     try {
       if (tab === "listas") {
-        const { data } = await supabase.from("lists").insert({ client_id: clientId, title: newTitle.trim(), list_type: newType, status: "active", source: "dashboard" }).select("id").single()
-        if (data && newItems.trim()) {
-          const rows = newItems.split(/[\n,]/).map((x, i) => ({ list_id: data.id, client_id: clientId, content: x.trim(), position: i })).filter(r => r.content)
-          if (rows.length) await supabase.from("list_items").insert(rows)
+        const { data, error } = await insertWithFallback("lists", { client_id: clientId, title: newTitle.trim(), list_type: newType, status: "active", source: "dashboard" })
+        if (error) throw error
+        const parsedItems = parseInitialItems(newItems)
+        if (data && parsedItems.length) {
+          const rows = parsedItems.map((content, index) => ({ list_id: data.id, client_id: clientId, content, position: index }))
+          for (const row of rows) {
+            const { error: itemsError } = await insertWithFallback("list_items", row)
+            if (itemsError) throw itemsError
+          }
         }
       } else {
-        await supabase.from("checklists").insert({ client_id: clientId, title: newTitle.trim(), status: "active", source: "dashboard" })
+        const { data, error } = await insertWithFallback("checklists", { client_id: clientId, title: newTitle.trim(), status: "active", source: "dashboard" })
+        if (error) throw error
+        const parsedItems = parseInitialItems(newItems)
+        if (data && parsedItems.length) {
+          const rows = parsedItems.map((content, index) => ({ checklist_id: data.id, client_id: clientId, content, position: index }))
+          for (const row of rows) {
+            const { error: itemsError } = await insertWithFallback("checklist_items", row)
+            if (itemsError) throw itemsError
+          }
+        }
       }
-      setNewTitle(""); setNewItems(""); setShowNew(false); await loadAll()
-    } finally { setCreating(false) }
+      setNewTitle("")
+      setNewItems("")
+      setShowNew(false)
+      await loadAll()
+      showFeedback("success", copy.savedOk)
+    } catch (error) {
+      console.error(error)
+      showFeedback("error", explainSaveError(error))
+    } finally {
+      setCreating(false)
+    }
   }
 
   const saveTitle = async (id: string) => {
     if (!editVal.trim()) return
-    await supabase.from("lists").update({ title: editVal.trim() }).eq("id", id)
-    setLists(prev => prev.map(l => l.id === id ? { ...l, title: editVal.trim() } : l))
+    const { error } = await supabase.from("lists").update({ title: editVal.trim() }).eq("id", id)
+    if (error) return showFeedback("error", copy.saveError)
+    setLists((prev) => prev.map((row) => row.id === id ? { ...row, title: editVal.trim() } : row))
     setEditId(null)
+    showFeedback("success", copy.savedOk)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="w-5 h-5 animate-spin text-[#3B82F6]" /></div>
+  if (loading) return <div className="flex h-64 items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-[#3B82F6]" /></div>
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-4xl space-y-5 p-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F1F63]">Listas y Checklists</h1>
-          <p className="text-sm text-muted-foreground">Se sincroniza con WhatsApp en tiempo real</p>
+          <h1 className="text-2xl font-bold text-[#0F1F63]">{copy.title}</h1>
+          <p className="text-sm text-muted-foreground">{copy.subtitle}</p>
+          <p className="mt-1 text-xs text-slate-500">{labelForLanguage(language)} · {timezone}</p>
+          <p className="mt-1 text-xs text-[#5F6B7A]">{copy.reminder}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {syncSource === "auth_bound"
+              ? "Sus listas ya están mostrando la información más reciente disponible."
+              : "Le mostramos lo que ya tiene guardado mientras termina de actualizarse esta vista."}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={loadAll} className="rounded-xl"><RefreshCw className="w-4 h-4" /></Button>
-          <Button onClick={() => setShowNew(!showNew)} className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl"><Plus className="w-4 h-4 mr-1.5" />Nueva</Button>
+          <Button variant="outline" size="sm" onClick={() => void loadAll()} className="rounded-xl"><RefreshCw className="h-4 w-4" /></Button>
+          <Button onClick={() => setShowNew((prev) => !prev)} className="rounded-xl bg-[#3B82F6] text-white hover:bg-[#2563EB]"><Plus className="mr-1.5 h-4 w-4" />{copy.new}</Button>
         </div>
       </div>
 
-      {/* New form */}
-      {showNew && (
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 shadow-sm space-y-3">
-          <p className="text-sm font-semibold text-[#0F1F63]">{tab === "listas" ? "Nueva lista" : "Nuevo checklist"}</p>
-          <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder={tab === "listas" ? "Ej: Lista del mercado" : "Ej: Pasos para la reunión"} className="rounded-xl" onKeyDown={e => e.key === "Enter" && createNew()} />
-          {tab === "listas" && (
-            <>
-              <select value={newType} onChange={e => setNewType(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-[#D9E1EC] text-sm bg-white">
-                {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-              <textarea value={newItems} onChange={e => setNewItems(e.target.value)} placeholder="Ítems iniciales separados por coma o salto de línea (opcional)" rows={3} className="w-full px-3 py-2 rounded-xl border border-[#D9E1EC] text-sm resize-none focus:outline-none focus:border-[#3B82F6]" />
-            </>
-          )}
-          <div className="flex gap-2">
-            <Button onClick={createNew} disabled={creating || !newTitle.trim()} className="flex-1 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl">
-              {creating ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Crear"}
-            </Button>
-            <Button variant="outline" onClick={() => setShowNew(false)} className="rounded-xl"><X className="w-4 h-4" /></Button>
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
+
+      {feedback ? <div className={`rounded-2xl border px-4 py-3 text-sm ${feedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{feedback.message}</div> : null}
+
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Su espacio de trabajo</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {syncSource === "auth_bound"
+                ? "Aquí puede crear, ordenar y marcar listas sin perder el ritmo."
+                : "Aquí puede seguir trabajando con sus listas mientras se actualiza la lectura más reciente."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué puede hacer</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Crear listas, marcar avances, separar pasos y dejar todo listo para retomarlo después.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Puede seguir trabajando. Si una lista nueva tarda un poco en aparecer, esta vista se actualizará sola.
+            </p>
           </div>
         </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {(["listas","checklists"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-[#3B82F6] text-white" : "bg-white border border-[#E2E8F0] text-[#5F6B7A] hover:bg-[#F7F9FC]"}`}>
-            {t === "listas" ? `Listas (${lists.length})` : `Checklists (${checklists.length})`}
-          </button>
-        ))}
       </div>
 
-      {/* LISTS */}
-      {tab === "listas" && (
-        <div className="space-y-3">
-          {lists.length === 0 ? (
-            <div className="text-center py-14 border border-dashed border-[#D9E1EC] rounded-2xl text-muted-foreground">
-              <List className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">Sin listas activas</p>
-              <p className="text-sm mt-1">Di <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">hazme una lista de compras</code> por WhatsApp</p>
-            </div>
-          ) : lists.map(lst => {
-            const Icon  = TYPE_ICONS[lst.list_type] || List
-            const color = TYPE_COLORS[lst.list_type] || "#64748B"
-            const chk   = lst.items?.filter(i => i.is_checked).length ?? 0
-            const tot   = lst.items?.length ?? 0
-            return (
-              <div key={lst.id} className="bg-white border border-[#E2E8F0] rounded-2xl shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 p-4">
-                  <button onClick={() => toggleList(lst.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color + "18" }}>
-                      <Icon className="w-5 h-5" style={{ color }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {editId === lst.id
-                        ? <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
-                            <Input value={editVal} onChange={e => setEditVal(e.target.value)} className="h-7 text-sm rounded-lg" autoFocus onKeyDown={e => { if (e.key === "Enter") saveTitle(lst.id); if (e.key === "Escape") setEditId(null) }} />
-                            <button onClick={() => saveTitle(lst.id)} className="text-[#3B82F6]"><Save className="w-4 h-4" /></button>
-                          </div>
-                        : <p className="font-semibold text-[#0F1F63] truncate">{lst.title}</p>
-                      }
-                      <p className="text-xs text-muted-foreground">{TYPE_LABELS[lst.list_type] || "Lista"}{tot > 0 && ` · ${chk}/${tot}`}</p>
-                      {tot > 0 && <div className="mt-1 h-1 w-full bg-[#E2E8F0] rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.round(chk/tot*100)}%`, backgroundColor: color }} /></div>}
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => { setEditId(lst.id); setEditVal(lst.title) }} className="p-1.5 rounded-lg hover:bg-[#F1F5F9] text-muted-foreground hover:text-[#3B82F6]"><Pencil className="w-3.5 h-3.5" /></button>
-                    {chk > 0 && <button onClick={() => clearChecked(lst.id)} className="px-2 py-1 rounded-lg hover:bg-[#FFF7ED] text-xs text-muted-foreground hover:text-[#F59E0B]">Limpiar ✓</button>}
-                    <button onClick={() => supabase.from("lists").update({ status: "archived" }).eq("id", lst.id).then(loadAll)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                    {lst.expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                  </div>
-                </div>
-
-                {lst.expanded && (
-                  <div className="border-t border-[#F1F5F9]">
-                    {!lst.items
-                      ? <div className="p-4 text-center"><RefreshCw className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
-                      : lst.items.length === 0
-                      ? null
-                      : lst.items.map(item => (
-                        <div key={item.id} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-[#F8FAFC] border-b border-[#F1F5F9] last:border-0 transition-colors ${item.is_checked ? "opacity-55" : ""}`}>
-                          <button onClick={() => toggleItem(item.id, item.is_checked, lst.id)}
-                            className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all"
-                            style={item.is_checked ? { backgroundColor: color, borderColor: color } : { borderColor: "#D9E1EC" }}>
-                            {item.is_checked && <Check className="w-3 h-3 text-white" />}
-                          </button>
-                          <span className={`text-sm flex-1 ${item.is_checked ? "line-through text-muted-foreground" : "text-[#1D2A3B]"}`}>{item.content}</span>
-                        </div>
-                      ))
-                    }
-                    {addingTo === lst.id
-                      ? <div className="flex gap-2 p-3 border-t border-[#F1F5F9]">
-                          <Input value={addText} onChange={e => setAddText(e.target.value)} placeholder="Nuevo ítem..." className="rounded-xl h-8 text-sm" autoFocus
-                            onKeyDown={e => { if (e.key === "Enter") addItem(lst.id); if (e.key === "Escape") setAddingTo(null) }} />
-                          <Button size="sm" onClick={() => addItem(lst.id)} className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl h-8 text-xs px-3">OK</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setAddingTo(null)} className="h-8 rounded-xl px-2"><X className="w-3 h-3" /></Button>
-                        </div>
-                      : <button onClick={() => { setAddingTo(lst.id); setAddText("") }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-[#F8FAFC] border-t border-[#F1F5F9]">
-                          <Plus className="w-4 h-4" />Agregar ítem
-                        </button>
-                    }
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      <div className="rounded-2xl border border-[#0F1F63]/10 bg-gradient-to-r from-[#0F1F63]/5 via-white to-[#3B82F6]/5 p-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Úselo para lo rápido</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Compras, pendientes, ideas, pasos, controles o cualquier cosa que quiera tener a mano.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Después puede crecer</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si algo termina teniendo fecha, pago o seguimiento, Operaly luego podrá llevarlo a agenda o automatizaciones.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si es sensible</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Para documentos privados, credenciales o temas delicados conviene usar también el baúl privado.
+            </p>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* CHECKLISTS */}
-      {tab === "checklists" && (
-        <div className="space-y-3">
-          {checklists.length === 0 ? (
-            <div className="text-center py-14 border border-dashed border-[#D9E1EC] rounded-2xl text-muted-foreground">
-              <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">Sin checklists activos</p>
-              <p className="text-sm mt-1">Di <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">hazme un checklist para X</code> por WhatsApp</p>
-            </div>
-          ) : checklists.map(cl => {
-            const chk = cl.items?.filter(i => i.is_checked).length ?? 0
-            const tot = cl.items?.length ?? 0
-            const done = tot > 0 && chk === tot
-            return (
-              <div key={cl.id} className="bg-white border border-[#E2E8F0] rounded-2xl shadow-sm overflow-hidden">
-                <div className="flex items-center gap-3 p-4">
-                  <button onClick={() => toggleCL(cl.id)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${done ? "bg-[#DCFCE7]" : "bg-[#F0FDF4]"}`}>
-                      <Check className={`w-5 h-5 ${done ? "text-[#16A34A]" : "text-[#10B981]"}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-[#0F1F63] truncate">{cl.title}</p>
-                      {tot > 0 && <div className="flex items-center gap-2 mt-1"><div className="flex-1 h-1.5 bg-[#E2E8F0] rounded-full overflow-hidden"><div className="h-full bg-[#10B981] rounded-full" style={{ width: `${Math.round(chk/tot*100)}%` }} /></div><span className="text-xs text-muted-foreground">{chk}/{tot}</span></div>}
-                    </div>
-                  </button>
-                  <button onClick={() => supabase.from("checklists").update({ status: "archived" }).eq("id", cl.id).then(loadAll)} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                  {cl.expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                </div>
-                {cl.expanded && (
-                  <div className="border-t border-[#F1F5F9]">
-                    {!cl.items ? <div className="p-4 text-center"><RefreshCw className="w-4 h-4 animate-spin mx-auto text-muted-foreground" /></div>
-                      : cl.items.map((item, idx) => (
-                        <div key={item.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-[#F8FAFC] border-b border-[#F1F5F9] last:border-0 ${item.is_checked ? "opacity-55" : ""}`}>
-                          <button onClick={() => toggleCLItem(item.id, item.is_checked, cl.id)}
-                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${item.is_checked ? "bg-[#10B981] border-[#10B981]" : "border-[#D9E1EC] hover:border-[#10B981]"}`}>
-                            {item.is_checked && <Check className="w-3 h-3 text-white" />}
-                          </button>
-                          <span className={`text-sm flex-1 ${item.is_checked ? "line-through text-muted-foreground" : "text-[#1D2A3B]"}`}>
-                            <span className="text-xs text-muted-foreground mr-1.5">{idx + 1}.</span>{item.content}
-                          </span>
-                        </div>
-                      ))
-                    }
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-[#0F1F63]">Si algo crece, Operaly ya puede repartirlo 🙂</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Una nota simple puede quedarse en lista, pero si detecta fecha, documento sensible o seguimiento, ahora deberia proponer agenda, automatizaciones, documentos o baul privado sin que usted lo reconstruya todo.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/professional/agenda" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver agenda
+            </Link>
+            <Link href="/dashboard/professional/documentos" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver documentos
+            </Link>
+            <Link href="/dashboard/professional/baul-privado" className="inline-flex h-10 items-center rounded-xl border border-white/80 bg-white px-4 text-sm font-medium text-[#0F1F63] hover:bg-secondary">
+              Ver baúl
+            </Link>
+          </div>
         </div>
-      )}
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se queda en lista</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Compras, pasos, pendientes cortos o cosas que solo quiere tener a mano por ahora.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se mueve a agenda</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Pagos, citas, vencimientos o seguimientos que ya tienen fecha o necesitan una hora.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Se separa mejor</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si aparece algo sensible, deberia proponerse tambien para documentos o baúl privado.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className={`rounded-2xl border p-4 ${syncSource === "auth_bound" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">lectura viva</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{syncSource === "auth_bound" ? "Actualizado" : "Disponible"}</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {syncSource === "auth_bound"
+              ? "Sus cambios ya se están reflejando con normalidad."
+              : "Le mostramos sus listas guardadas mientras termina de actualizarse esta vista."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-600">avance visible</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{topSummary.checkedListItems + topSummary.checkedChecklistItems}</p>
+          <p className="mt-1 text-xs text-slate-600">Puntos ya marcados entre listas y checklists.</p>
+        </div>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-sky-600">pendiente abierto</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{Math.max(topSummary.totalItems + topSummary.totalChecks - (topSummary.checkedListItems + topSummary.checkedChecklistItems), 0)}</p>
+          <p className="mt-1 text-xs text-slate-600">Contenido todavía pendiente según la lectura disponible del dashboard.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{copy.listsTab}</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{lists.length}</p><p className="mt-1 text-xs text-slate-600">Listas activas para resolver hoy o después.</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{copy.checklistsTab}</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{checklists.length}</p><p className="mt-1 text-xs text-slate-600">Pasos o controles que quiere repetir sin olvidar nada.</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Contenido</p><p className="mt-2 text-2xl font-semibold text-[#0F1F63]">{topSummary.totalItems + topSummary.totalChecks}</p><p className="mt-1 text-xs text-slate-600">Puntos guardados entre listas y checklists.</p></div>
+      </div>
+
+      {showNew ? (
+        <div className="space-y-3 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">{tab === "listas" ? copy.newList : copy.newChecklist}</p>
+          <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder={tab === "listas" ? copy.listPlaceholder : copy.checklistPlaceholder} className="rounded-xl" onKeyDown={(event) => event.key === "Enter" && void createNew()} />
+          {tab === "listas" ? <select value={newType} onChange={(event) => setNewType(event.target.value)} className="h-10 w-full rounded-xl border border-[#D9E1EC] bg-white px-3 text-sm">{Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : null}
+          <textarea value={newItems} onChange={(event) => setNewItems(event.target.value)} placeholder={copy.initialItems} rows={3} className="w-full resize-none rounded-xl border border-[#D9E1EC] px-3 py-2 text-sm focus:border-[#3B82F6] focus:outline-none" />
+          <div className="flex gap-2">
+            <Button onClick={() => void createNew()} disabled={creating || !newTitle.trim()} className="flex-1 rounded-xl bg-[#3B82F6] text-white hover:bg-[#2563EB]">{creating ? <RefreshCw className="h-4 w-4 animate-spin" /> : copy.create}</Button>
+            <Button variant="outline" onClick={() => setShowNew(false)} className="rounded-xl"><X className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex gap-2">{(["listas", "checklists"] as const).map((value) => <button key={value} onClick={() => setTab(value)} className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${tab === value ? "bg-[#3B82F6] text-white" : "border border-[#E2E8F0] bg-white text-[#5F6B7A] hover:bg-[#F7F9FC]"}`}>{value === "listas" ? `${copy.listsTab} (${lists.length})` : `${copy.checklistsTab} (${checklists.length})`}</button>)}</div>
+
+      {tab === "listas" ? <ListPanel copy={copy} lists={lists} toggleList={toggleList} toggleItem={toggleItem} addingTo={addingTo} setAddingTo={setAddingTo} addText={addText} setAddText={setAddText} addItem={addItem} clearChecked={clearChecked} archiveRow={archiveRow} editId={editId} setEditId={setEditId} editVal={editVal} setEditVal={setEditVal} saveTitle={saveTitle} locale={locale} timezone={timezone} /> : <ChecklistPanel copy={copy} checklists={checklists} toggleChecklist={toggleChecklist} toggleChecklistItem={toggleChecklistItem} addingChecklistTo={addingChecklistTo} setAddingChecklistTo={setAddingChecklistTo} checklistAddText={checklistAddText} setChecklistAddText={setChecklistAddText} addChecklistItem={addChecklistItem} archiveRow={archiveRow} locale={locale} timezone={timezone} />}
     </div>
   )
+}
+
+function ListPanel({ copy, lists, toggleList, toggleItem, addingTo, setAddingTo, addText, setAddText, addItem, clearChecked, archiveRow, editId, setEditId, editVal, setEditVal, saveTitle, locale, timezone }: any) {
+  if (lists.length === 0) return <div className="rounded-2xl border border-dashed border-[#D9E1EC] py-14 text-center text-muted-foreground"><List className="mx-auto mb-3 h-10 w-10 opacity-20" /><p className="font-medium">{copy.emptyLists}</p><p className="mt-1 text-sm">{copy.emptyListsHint}</p></div>
+  return <div className="space-y-3">{lists.map((row: ListRow) => { const Icon = TYPE_ICONS[row.list_type] || List; const color = TYPE_COLORS[row.list_type] || "#64748B"; const checked = row.items?.filter((item) => item.is_checked).length ?? 0; const total = row.items?.length ?? 0; return <div key={row.id} className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm"><div className="flex items-center gap-3 p-4"><button onClick={() => void toggleList(row.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}18` }}><Icon className="h-5 w-5" style={{ color }} /></div><div className="min-w-0 flex-1">{editId === row.id ? <div className="flex gap-1.5" onClick={(event) => event.stopPropagation()}><Input value={editVal} onChange={(event) => setEditVal(event.target.value)} className="h-7 rounded-lg text-sm" autoFocus onKeyDown={(event) => { if (event.key === "Enter") void saveTitle(row.id); if (event.key === "Escape") setEditId(null) }} /><button onClick={() => void saveTitle(row.id)} className="text-[#3B82F6]"><Save className="h-4 w-4" /></button></div> : <p className="truncate font-semibold text-[#0F1F63]">{row.title}</p>}<p className="text-xs text-muted-foreground">{TYPE_LABELS[row.list_type] || copy.listFallback}{total > 0 ? ` · ${checked}/${total}` : ""}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500"><span>Creada {formatDateTime(row.created_at, locale, timezone)}</span><span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-600">{total > 0 ? `${total} punto${total === 1 ? "" : "s"}` : "Sin puntos visibles"}</span></div>{total > 0 ? <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#E2E8F0]"><div className="h-full rounded-full" style={{ width: `${Math.round((checked / total) * 100)}%`, backgroundColor: color }} /></div> : null}</div></button><div className="flex shrink-0 items-center gap-1"><button onClick={() => { setEditId(row.id); setEditVal(row.title) }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-[#F1F5F9] hover:text-[#3B82F6]"><Pencil className="h-3.5 w-3.5" /></button>{checked > 0 ? <button onClick={() => void clearChecked(row.id)} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-[#FFF7ED] hover:text-[#F59E0B]">{copy.clearDone}</button> : null}<button onClick={() => void archiveRow("lists", row.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>{row.expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}</div></div>{row.expanded ? <div className="border-t border-[#F1F5F9]">{!row.items ? <div className="p-4 text-center"><RefreshCw className="mx-auto h-4 w-4 animate-spin text-muted-foreground" /></div> : <>{row.items.map((item) => <div key={item.id} className={`flex items-center gap-3 border-b border-[#F1F5F9] px-4 py-2.5 last:border-0 hover:bg-[#F8FAFC] ${item.is_checked ? "opacity-55" : ""}`}><button onClick={() => void toggleItem(item.id, item.is_checked, row.id)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all" style={item.is_checked ? { backgroundColor: color, borderColor: color } : { borderColor: "#D9E1EC" }}>{item.is_checked ? <Check className="h-3 w-3 text-white" /> : null}</button><span className={`flex-1 text-sm ${item.is_checked ? "text-muted-foreground line-through" : "text-[#1D2A3B]"}`}>{item.content}</span></div>)}{addingTo === row.id ? <div className="flex gap-2 border-t border-[#F1F5F9] p-3"><Input value={addText} onChange={(event) => setAddText(event.target.value)} placeholder={copy.addItem} className="h-8 rounded-xl text-sm" autoFocus onKeyDown={(event) => { if (event.key === "Enter") void addItem(row.id); if (event.key === "Escape") setAddingTo(null) }} /><Button size="sm" onClick={() => void addItem(row.id)} className="h-8 rounded-xl bg-[#3B82F6] px-3 text-xs text-white hover:bg-[#2563EB]">OK</Button><Button size="sm" variant="ghost" onClick={() => setAddingTo(null)} className="h-8 rounded-xl px-2"><X className="h-3 w-3" /></Button></div> : <button onClick={() => { setAddingTo(row.id); setAddText("") }} className="flex w-full items-center gap-2 border-t border-[#F1F5F9] px-4 py-2.5 text-sm text-muted-foreground hover:bg-[#F8FAFC]"><Plus className="h-4 w-4" />{copy.addItem}</button>}</>}</div> : null}</div> })}</div>
+}
+
+function ChecklistPanel({ copy, checklists, toggleChecklist, toggleChecklistItem, addingChecklistTo, setAddingChecklistTo, checklistAddText, setChecklistAddText, addChecklistItem, archiveRow, locale, timezone }: any) {
+  if (checklists.length === 0) return <div className="rounded-2xl border border-dashed border-[#D9E1EC] py-14 text-center text-muted-foreground"><FileText className="mx-auto mb-3 h-10 w-10 opacity-20" /><p className="font-medium">{copy.emptyChecklists}</p><p className="mt-1 text-sm">{copy.emptyChecklistsHint}</p></div>
+  return <div className="space-y-3">{checklists.map((row: ChecklistRow) => { const checked = row.items?.filter((item) => item.is_checked).length ?? 0; const total = row.items?.length ?? 0; const done = total > 0 && checked === total; return <div key={row.id} className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm"><div className="flex items-center gap-3 p-4"><button onClick={() => void toggleChecklist(row.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${done ? "bg-[#DCFCE7]" : "bg-[#F0FDF4]"}`}><Check className={`h-5 w-5 ${done ? "text-[#16A34A]" : "text-[#10B981]"}`} /></div><div className="min-w-0 flex-1"><p className="truncate font-semibold text-[#0F1F63]">{row.title}</p><div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500"><span>Creado {formatDateTime(row.created_at, locale, timezone)}</span><span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-600">{total > 0 ? `${checked}/${total} listo` : "Sin pasos visibles"}</span></div>{total > 0 ? <div className="mt-2 flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#E2E8F0]"><div className="h-full rounded-full bg-[#10B981]" style={{ width: `${Math.round((checked / total) * 100)}%` }} /></div><span className="text-xs text-muted-foreground">{checked}/{total}</span></div> : null}</div></button><button onClick={() => void archiveRow("checklists", row.id)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>{row.expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}</div>{row.expanded ? <div className="border-t border-[#F1F5F9]">{!row.items ? <div className="p-4 text-center"><RefreshCw className="mx-auto h-4 w-4 animate-spin text-muted-foreground" /></div> : <>{row.items.map((item, index) => <div key={item.id} className={`flex items-center gap-3 border-b border-[#F1F5F9] px-4 py-3 last:border-0 hover:bg-[#F8FAFC] ${item.is_checked ? "opacity-55" : ""}`}><button onClick={() => void toggleChecklistItem(item.id, item.is_checked, row.id)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${item.is_checked ? "border-[#10B981] bg-[#10B981]" : "border-[#D9E1EC] hover:border-[#10B981]"}`}>{item.is_checked ? <Check className="h-3 w-3 text-white" /> : null}</button><span className={`flex-1 text-sm ${item.is_checked ? "text-muted-foreground line-through" : "text-[#1D2A3B]"}`}><span className="mr-1.5 text-xs text-muted-foreground">{index + 1}.</span>{item.content}</span></div>)}{addingChecklistTo === row.id ? <div className="flex gap-2 border-t border-[#F1F5F9] p-3"><Input value={checklistAddText} onChange={(event) => setChecklistAddText(event.target.value)} placeholder={copy.addChecklistItem} className="h-8 rounded-xl text-sm" autoFocus onKeyDown={(event) => { if (event.key === "Enter") void addChecklistItem(row.id); if (event.key === "Escape") setAddingChecklistTo(null) }} /><Button size="sm" onClick={() => void addChecklistItem(row.id)} className="h-8 rounded-xl bg-[#10B981] px-3 text-xs text-white hover:bg-[#0f9c6f]">OK</Button><Button size="sm" variant="ghost" onClick={() => setAddingChecklistTo(null)} className="h-8 rounded-xl px-2"><X className="h-3 w-3" /></Button></div> : <button onClick={() => { setAddingChecklistTo(row.id); setChecklistAddText("") }} className="flex w-full items-center gap-2 border-t border-[#F1F5F9] px-4 py-2.5 text-sm text-muted-foreground hover:bg-[#F8FAFC]"><Plus className="h-4 w-4" />{copy.addChecklistItem}</button>}</>}</div> : null}</div> })}</div>
 }

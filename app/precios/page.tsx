@@ -1,18 +1,93 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Check, Sparkles, Zap } from "lucide-react"
-import { OPERLAY_PLANS } from "@/lib/plans"
+import { getDefaultOwnerCatalog, type OwnerCatalogPlan } from "@/lib/owner-catalog"
+import { usePricingCurrency } from "@/hooks/usePricingCurrency"
+
+type PublicPlan = {
+  code: string
+  name: string
+  price_pen?: number
+  price_usd?: number
+  per?: string
+  duration_days?: number
+}
 
 export default function PricingPage() {
   const router = useRouter()
+  const [plans, setPlans] = useState<OwnerCatalogPlan[]>(getDefaultOwnerCatalog().plans)
+  const { pricing, isPeru } = usePricingCurrency()
 
   const goToRegister = (planCode: string) => {
     router.push(`/register?plan=${planCode}`)
   }
+
+  useEffect(() => {
+    const loadCatalog = async () => {
+      try {
+        const [plansResponse, catalogResponse] = await Promise.all([
+          fetch("/api/plans", {
+            method: "GET",
+            cache: "no-store",
+          }),
+          fetch("/api/catalog", {
+            method: "GET",
+            cache: "no-store",
+          }),
+        ])
+
+        const publicPlans = (await plansResponse.json().catch(() => ({}))) as { plans?: PublicPlan[] }
+        const payload = await catalogResponse.json().catch(() => ({}))
+        const commercialCatalog =
+          payload?.catalog ||
+          payload?.user_facing?.catalog ||
+          payload?.user_facing
+
+        if (catalogResponse.ok && commercialCatalog?.plans) {
+          const planPricing = new Map(
+            (publicPlans.plans || []).map((plan) => [
+              plan.code,
+              {
+                price: Number(isPeru ? plan.price_pen ?? 0 : plan.price_usd ?? 0),
+                currency: isPeru ? "PEN" : "USD",
+              },
+            ])
+          )
+
+          setPlans(
+            (commercialCatalog.plans as OwnerCatalogPlan[]).map((plan) => {
+              const publicPrice = planPricing.get(plan.code)
+              return publicPrice
+                ? { ...plan, price: publicPrice.price, currency: publicPrice.currency }
+                : plan
+            })
+          )
+          return
+        }
+
+        if (plansResponse.ok && publicPlans.plans) {
+          setPlans((current) =>
+            current.map((plan) => {
+              const publicPlan = publicPlans.plans?.find((entry) => entry.code === plan.code)
+              if (!publicPlan) return plan
+              return {
+                ...plan,
+                price: Number(isPeru ? publicPlan.price_pen ?? 0 : publicPlan.price_usd ?? 0),
+                currency: isPeru ? "PEN" : "USD",
+              }
+            })
+          )
+        }
+      } catch {}
+    }
+
+    void loadCatalog()
+  }, [isPeru])
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,16 +129,16 @@ export default function PricingPage() {
 
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            {OPERLAY_PLANS.map((plan) => (
+            {plans.map((plan) => (
               <div
                 key={plan.code}
                 className={`bg-card rounded-3xl border p-8 relative ${
-                  plan.popular
+                  plan.code === "pro"
                     ? "border-[#34D399] shadow-xl shadow-[#34D399]/10"
                     : "border-border"
                 }`}
               >
-                {plan.popular && (
+                {plan.code === "pro" && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                     <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-[#34D399] to-[#06B6D4] text-white text-sm font-medium">
                       <Zap className="w-4 h-4" />
@@ -78,10 +153,15 @@ export default function PricingPage() {
 
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-4xl font-bold text-[#0F1F63]">
-                      {plan.currency} {plan.price}
+                      {pricing.formatCatalogMoney(plan.price, plan.currency)}
                     </span>
                     <span className="text-muted-foreground">/ mes</span>
                   </div>
+                  {!isPeru && plan.price > 0 && (
+                    <p className="mt-2 text-xs text-[#0369A1]">
+                      Cobro real en Mercado Pago: {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-3 mb-8">
@@ -96,11 +176,11 @@ export default function PricingPage() {
                 <Button
                   onClick={() => goToRegister(plan.code)}
                   className={`w-full rounded-xl h-12 ${
-                    plan.popular
+                    plan.code === "pro"
                       ? "bg-gradient-to-r from-[#34D399] to-[#06B6D4] hover:opacity-90 text-white"
                       : ""
                   }`}
-                  variant={plan.popular ? "default" : "outline"}
+                  variant={plan.code === "pro" ? "default" : "outline"}
                 >
                   {plan.cta}
                 </Button>

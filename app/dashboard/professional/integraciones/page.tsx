@@ -1,11 +1,79 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Plug, ExternalLink, Check, AlertCircle, RefreshCw, Lock } from "lucide-react"
+import {
+  AlertCircle,
+  CalendarDays,
+  Check,
+  Clock3,
+  ExternalLink,
+  FolderOpen,
+  Lock,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { getCurrentClientId } from "@/lib/dashboard-client"
+import { getEffectivePlanCode, type EffectiveLimitsRuntime } from "@/lib/effective-limits"
+import { fetchDashboardRuntime, resolveDashboardPlanCode } from "@/lib/dashboard-runtime"
 import { getDisplayPlanName } from "@/lib/plans"
+
+type GoogleStatusPayload = {
+  ok?: boolean
+  google_enabled?: boolean
+  capability?: {
+    google_enabled?: boolean
+  }
+  connection?: {
+    status?: string | null
+    connection_status?: string | null
+    external_account_email?: string | null
+    connected_at?: string | null
+    granted_scopes?: string[] | null
+    authorized_products?: string[] | null
+  } | null
+  products?: Partial<Record<GoogleProduct, GoogleProductState>>
+  calendar?: GoogleProductState
+  drive?: GoogleProductState
+  gmail?: GoogleProductState
+  contacts?: GoogleProductState
+}
+
+type GoogleProduct = "calendar" | "drive" | "gmail" | "contacts"
+
+type GoogleProductState = {
+  enabled?: boolean | null
+  sync_status?: string | null
+  last_synced_at?: string | null
+  last_error?: string | null
+  metadata?: Record<string, any> | null
+}
+
+type IntegrationCard = {
+  id: "google_drive" | "google_calendar" | "gmail" | "google_contacts"
+  product: GoogleProduct
+  name: string
+  description: string
+  icon: () => JSX.Element
+  useCases: string[]
+}
+
+type IntegrationRuntimeStatus = "blocked" | "connected" | "ready_to_connect" | "coming_soon" | "error"
+
+type ContactsSnapshot = {
+  total: number
+  google: number
+  merged: number
+  birthdays: number
+  withEmail: number
+  synced: number
+  lastSyncedAt: string | null
+  bridgeStatus: "active" | "pending" | "base_only"
+}
 
 const GoogleDriveIcon = () => (
   <svg viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg" className="h-7 w-7">
@@ -35,77 +103,515 @@ const GoogleCalendarIcon = () => (
   </svg>
 )
 
-const INTEGRATIONS = [
+const GoogleContactsIcon = () => (
+  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#34A853]/10 text-[#34A853]">
+    <Users className="h-4 w-4" />
+  </div>
+)
+
+const INTEGRATIONS: IntegrationCard[] = [
   {
     id: "google_drive",
+    product: "drive",
     name: "Google Drive",
-    desc: "Accede a tus archivos desde Operaly. Sube, busca, comparte y analiza documentos desde el flujo operativo.",
+    description: "Ver sus archivos de Drive desde Operaly y traer solo lo que quiera revisar, resumir o compartir.",
     icon: GoogleDriveIcon,
-    features: ["Subir archivos a Drive", "Buscar documentos por nombre", "Analizar PDFs y hojas de calculo"],
-    comingSoon: false,
-  },
-  {
-    id: "gmail",
-    name: "Gmail",
-    desc: "Lee y responde correos desde Operaly. Recibe resumenes de tu bandeja y prepara borradores con IA.",
-    icon: GmailIcon,
-    features: ["Leer correos importantes", "Redactar respuestas con IA", "Resumenes diarios de bandeja"],
-    comingSoon: true,
+    useCases: [
+      "Ubicar archivos por nombre o tema",
+      "Traer un documento cuando quiera revisarlo",
+      "Usarlo luego en correos, casos o WhatsApp",
+    ],
   },
   {
     id: "google_calendar",
+    product: "calendar",
     name: "Google Calendar",
-    desc: "Sincroniza tu agenda de Google con Operaly para crear eventos, revisar agenda y disparar recordatorios.",
+    description: "Mantener su agenda al día para verla desde Operaly, crear eventos y no perder cambios hechos desde Google.",
     icon: GoogleCalendarIcon,
-    features: ["Crear eventos desde dashboard", "Ver agenda del dia", "Recordatorios inteligentes"],
-    comingSoon: true,
+    useCases: [
+      "Ver su agenda del dia desde WhatsApp",
+      "Crear y mover eventos",
+      "Reflejar cambios hechos en Google",
+    ],
+  },
+  {
+    id: "gmail",
+    product: "gmail",
+    name: "Gmail",
+    description: "Preparar correos, revisarlos con usted y enviarlos con asunto, destinatario y adjuntos cuando lo confirme.",
+    icon: GmailIcon,
+    useCases: [
+      "Preparar correos con confirmacion previa",
+      "Adjuntar archivos y enviar a contactos",
+      "Responder desde WhatsApp o desde el dashboard",
+    ],
+  },
+  {
+    id: "google_contacts",
+    product: "contacts",
+    name: "Google Contacts",
+    description: "Traer sus personas desde Google para usarlas en agenda, correo, casos y llamadas sin desordenar la libreta.",
+    icon: GoogleContactsIcon,
+    useCases: [
+      "Traer nombres, telefonos y correos",
+      "Aprovechar cumpleanos y relaciones si existen",
+      "Unir sin crear duplicados innecesarios",
+    ],
   },
 ]
 
+function getProductLabel(product: GoogleProduct) {
+  if (product === "calendar") return "Calendar"
+  if (product === "drive") return "Drive"
+  if (product === "gmail") return "Gmail"
+  return "Contacts"
+}
+
+function getProductState(status: GoogleStatusPayload | null, product: GoogleProduct) {
+  return status?.products?.[product] || status?.[product] || null
+}
+
+function normalizeGoogleError(payload: any, fallback: string) {
+  const detail = payload?.detail
+  const error = detail?.error || payload?.error || payload?.detail
+  if (error === "google_oauth_not_configured") return "Google OAuth todavia no esta listo en el servidor."
+  if (error === "google_addon_required") return "Activa el add-on Google Suite para conectar tu cuenta."
+  if (error === "google_contacts_scope_required") return "Falta conceder el permiso de Google Contacts para poder sincronizar personas."
+  if (typeof error === "string" && error.trim()) return error
+  return fallback
+}
+
+function normalizeGoogleSignal(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+}
+
+function signalMentionsReconnect(value: unknown) {
+  const normalized = normalizeGoogleSignal(value)
+  if (!normalized) return false
+
+  return [
+    "expired",
+    "expir",
+    "revoked",
+    "revoke",
+    "reauth",
+    "re-auth",
+    "reconnect",
+    "disconnected",
+    "not_connected",
+    "token",
+    "invalid_grant",
+    "scope_required",
+    "permission",
+    "oauth",
+    "consent",
+  ].some((fragment) => normalized.includes(fragment))
+}
+
+function getGoogleIntegrationHealth(params: {
+  product: GoogleProduct
+  productState: GoogleProductState | null
+  googleStatus: GoogleStatusPayload | null
+  contactsSyncStatus?: ContactsSnapshot["bridgeStatus"] | "" | "not_connected" | "scope_required" | "syncing" | "ok" | "partial" | "error"
+}) {
+  const { product, productState, googleStatus, contactsSyncStatus } = params
+  const authorizedProducts = googleStatus?.connection?.authorized_products || []
+  const connectionStatus = normalizeGoogleSignal(
+    googleStatus?.connection?.connection_status || googleStatus?.connection?.status
+  )
+  const productSyncStatus = normalizeGoogleSignal(productState?.sync_status)
+  const lastError = normalizeGoogleSignal(productState?.last_error)
+
+  const hasLegacyCalendarConnection =
+    product === "calendar" && !googleStatus?.products && connectionStatus === "connected"
+
+  const appearsAuthorized =
+    Boolean(productState?.enabled) || authorizedProducts.includes(product) || hasLegacyCalendarConnection
+
+  const syncRequiresReconnect =
+    signalMentionsReconnect(productSyncStatus) ||
+    signalMentionsReconnect(lastError) ||
+    (product === "contacts" && ["scope_required", "error", "not_connected"].includes(String(contactsSyncStatus || "")))
+
+  const connectionRequiresReconnect =
+    connectionStatus.length > 0 &&
+    connectionStatus !== "connected" &&
+    signalMentionsReconnect(connectionStatus)
+
+  const needsReconnect = syncRequiresReconnect || (appearsAuthorized && connectionRequiresReconnect)
+
+  return {
+    appearsAuthorized,
+    needsReconnect,
+    connectionStatus,
+    productSyncStatus,
+  }
+}
+
+function StatusPill({ status }: { status: IntegrationRuntimeStatus }) {
+  if (status === "blocked") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#7C3AED]">
+        <Lock className="h-3 w-3" />
+        Requiere add-on
+      </span>
+    )
+  }
+  if (status === "connected") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+        <Check className="h-3 w-3" />
+        Conectado
+      </span>
+    )
+  }
+  if (status === "ready_to_connect") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+        <ExternalLink className="h-3 w-3" />
+        Listo
+      </span>
+    )
+  }
+  if (status === "coming_soon") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+        <Clock3 className="h-3 w-3" />
+        Proximo
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">
+      <AlertCircle className="h-3 w-3" />
+      Error
+    </span>
+  )
+}
+
 export default function IntegracionesPage() {
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [googleEnabled, setGoogleEnabled] = useState(false)
-  const [connecting, setConnecting] = useState<string | null>(null)
   const [planCode, setPlanCode] = useState("trial")
+  const [runtimeSource, setRuntimeSource] = useState<"auth_bound" | "legacy" | "unknown">("unknown")
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatusPayload | null>(null)
+  const [statusError, setStatusError] = useState("")
+  const [operationalWarning, setOperationalWarning] = useState("")
+  const [contactsSyncState, setContactsSyncState] = useState<{
+    status: "not_connected" | "scope_required" | "syncing" | "ok" | "partial" | "error" | ""
+    message: string
+    counts?: Record<string, number>
+    lastSyncedAt?: string | null
+  }>({ status: "", message: "" })
+  const [contactsSnapshot, setContactsSnapshot] = useState<ContactsSnapshot>({
+    total: 0,
+    google: 0,
+    merged: 0,
+    birthdays: 0,
+    withEmail: 0,
+    synced: 0,
+    lastSyncedAt: null,
+    bridgeStatus: "base_only",
+  })
+
+  const googleServerConfigured = !`${statusError} ${operationalWarning}`
+    .toLowerCase()
+    .includes("google oauth todavia no esta listo en el servidor")
+
+  const loadContactsSnapshot = async (clientId: string) => {
+    const extendedResponse = await supabase
+      .from("contacts")
+      .select("id,email,birthday,source,sync_status,last_synced_at")
+      .eq("client_id", clientId)
+
+    if (!extendedResponse.error) {
+      const rows = extendedResponse.data || []
+      const google = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length
+      const merged = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
+      const googleLikeCount = google + merged
+      const synced = rows.filter((contact) => {
+        const normalized = String(contact.sync_status || "").toLowerCase()
+        return normalized.includes("ok") || normalized.includes("sync")
+      }).length
+      const lastSyncedAt =
+        rows
+          .map((contact) => String(contact.last_synced_at || ""))
+          .filter(Boolean)
+          .sort()
+          .at(-1) || null
+
+      setContactsSnapshot({
+        total: rows.length,
+        google,
+        merged,
+        birthdays: rows.filter((contact) => Boolean(contact.birthday)).length,
+        withEmail: rows.filter((contact) => Boolean(contact.email)).length,
+        synced,
+        lastSyncedAt,
+        bridgeStatus: googleLikeCount > 0 ? "active" : rows.length > 0 ? "pending" : "base_only",
+      })
+      return
+    }
+
+    const baseResponse = await supabase
+      .from("contacts")
+      .select("id,email,birthday,source")
+      .eq("client_id", clientId)
+
+    const rows = baseResponse.data || []
+    const google = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("google")).length
+    const merged = rows.filter((contact) => String(contact.source || "").toLowerCase().includes("merge")).length
+    const googleLikeCount = google + merged
+    setContactsSnapshot({
+      total: rows.length,
+      google,
+      merged,
+      birthdays: rows.filter((contact) => Boolean(contact.birthday)).length,
+      withEmail: rows.filter((contact) => Boolean(contact.email)).length,
+      synced: googleLikeCount,
+      lastSyncedAt: null,
+      bridgeStatus: googleLikeCount > 0 ? "active" : rows.length > 0 ? "pending" : "base_only",
+    })
+  }
+
+  const getAuthHeaders = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("No hay sesion activa.")
+    return { Authorization: `Bearer ${token}` }
+  }
+
+  const loadContactsStatus = async () => {
+    try {
+      const response = await fetch("/api/google/contacts/status", {
+        method: "GET",
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) return
+      setContactsSyncState({
+        status: String(payload?.sync_status || "") as
+          | "not_connected"
+          | "scope_required"
+          | "syncing"
+          | "ok"
+          | "partial"
+          | "error"
+          | "",
+        message: String(payload?.message || ""),
+        counts: payload?.counts || undefined,
+        lastSyncedAt: payload?.last_synced_at || payload?.lastSyncedAt || null,
+      })
+    } catch (error) {
+      console.error("No se pudo leer el estado de Google Contacts:", error)
+    }
+  }
+
+  const loadGoogleStatus = async () => {
+    const headers = await getAuthHeaders()
+    const response = await fetch("/api/google/status", {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload?.error || "No se pudo consultar Google.")
+    setGoogleStatus(payload as GoogleStatusPayload)
+    const enabled = payload?.capability?.google_enabled ?? payload?.google_enabled
+    if (typeof enabled === "boolean") setGoogleEnabled(Boolean(enabled))
+  }
 
   useEffect(() => {
     loadData()
   }, [])
 
+  useEffect(() => {
+    if (contactsSyncState.status !== "syncing") return
+    const interval = window.setInterval(() => {
+      loadContactsStatus()
+      loadData()
+    }, 4000)
+    return () => window.clearInterval(interval)
+  }, [contactsSyncState.status])
+
   const loadData = async () => {
     setLoading(true)
+    setStatusError("")
+    setOperationalWarning("")
     try {
       const cid = await getCurrentClientId()
+      let runtimeLoaded = false
+      try {
+        const runtime = await fetchDashboardRuntime()
+        const featureAccess = runtime?.feature_access || runtime?.limits || {}
+        const resolvedPlanCode = resolveDashboardPlanCode(runtime, "")
 
-      const { data: client } = await supabase
-        .from("clients")
-        .select("plan_code")
-        .eq("id", cid)
-        .maybeSingle()
+        if (resolvedPlanCode) {
+          setPlanCode(resolvedPlanCode)
+          setGoogleEnabled(Boolean(featureAccess?.google_enabled ?? false))
+          setRuntimeSource("auth_bound")
+          runtimeLoaded = true
+        }
+      } catch (dashboardRuntimeError) {
+        console.error("No se pudo cargar dashboard runtime de integraciones:", dashboardRuntimeError)
+        setOperationalWarning(
+          "Las integraciones tardaron más de lo normal. Le mostramos el último estado disponible mientras terminan de actualizarse."
+        )
+      }
 
-      if (client?.plan_code) setPlanCode(client.plan_code)
+      if (!runtimeLoaded) {
+        const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
+        if (limitsError) throw limitsError
 
-      const { data: limits, error: limitsError } = await supabase.rpc("get_my_effective_limits")
-      if (limitsError) throw limitsError
+        const effectiveLimits = (limits || {}) as EffectiveLimitsRuntime
+        setPlanCode(getEffectivePlanCode(effectiveLimits))
+        setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+        setRuntimeSource("legacy")
+      }
 
-      setGoogleEnabled(Boolean(limits?.google_enabled ?? false))
+      await loadContactsSnapshot(cid)
+
+      await loadGoogleStatus()
+      await loadContactsStatus()
     } catch (err) {
       console.error(err)
+      setOperationalWarning(err instanceof Error ? err.message : "No se pudo cargar el estado operativo de Google.")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleConnect = async (id: string) => {
-    setConnecting(id)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    alert("Google OAuth estara disponible en breve. La conexion se gestionara desde este dashboard.")
-    setConnecting(null)
+  const integrationStatuses = useMemo(() => {
+    return INTEGRATIONS.map((integration) => {
+      const productState = getProductState(googleStatus, integration.product)
+      const health = getGoogleIntegrationHealth({
+        product: integration.product,
+        productState,
+        googleStatus,
+        contactsSyncStatus: integration.product === "contacts" ? contactsSyncState.status : "",
+      })
+
+      const runtimeStatus: IntegrationRuntimeStatus = !googleEnabled
+        ? "blocked"
+        : health.needsReconnect
+          ? "error"
+          : health.appearsAuthorized
+          ? "connected"
+          : "ready_to_connect"
+
+      return { ...integration, runtimeStatus }
+    })
+  }, [contactsSyncState.status, googleEnabled, googleStatus])
+
+  const connectedProductsCount = useMemo(
+    () => integrationStatuses.filter((integration) => integration.runtimeStatus === "connected").length,
+    [integrationStatuses]
+  )
+
+  const contactsProductConnected =
+    integrationStatuses.find((integration) => integration.product === "contacts")?.runtimeStatus === "connected"
+
+  const reconnectRequiredIntegrations = useMemo(
+    () => integrationStatuses.filter((integration) => integration.runtimeStatus === "error"),
+    [integrationStatuses]
+  )
+
+  const handleSyncContacts = async () => {
+    setActionLoading("sync:contacts")
+    setStatusError("")
+    try {
+      const response = await fetch("/api/google/contacts/sync", {
+        method: "POST",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, "No se pudo sincronizar Google Contacts."))
+      setContactsSyncState({
+        status: String(payload?.sync_status || "syncing") as
+          | "not_connected"
+          | "scope_required"
+          | "syncing"
+          | "ok"
+          | "partial"
+          | "error"
+          | "",
+        message: String(payload?.message || "Estoy trayendo sus contactos en segundo plano."),
+        counts: payload?.counts || undefined,
+        lastSyncedAt: payload?.last_synced_at || null,
+      })
+      await loadData()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "No se pudo sincronizar Google Contacts.")
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleConnectProduct = async (product: GoogleProduct) => {
+    setActionLoading(`connect:${product}`)
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch(`/api/google/${product}/connect`, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo iniciar Google ${getProductLabel(product)}.`))
+      const authUrl = String(payload?.auth_url || "")
+      if (!authUrl) throw new Error("Google no devolvio una URL de autorizacion.")
+      window.location.href = authUrl
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : `No se pudo conectar Google ${getProductLabel(product)}.`)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleValidateProduct = async (product: GoogleProduct) => {
+    setActionLoading(`validate:${product}`)
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch(`/api/google/${product}/validate`, {
+        method: "POST",
+        headers,
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo validar Google ${getProductLabel(product)}.`))
+      await loadGoogleStatus()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : `No se pudo validar Google ${getProductLabel(product)}.`)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleDisconnectProduct = async (product: GoogleProduct) => {
+    setActionLoading(`disconnect:${product}`)
+    setStatusError("")
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch(`/api/google/${product}/disconnect`, {
+        method: "POST",
+        headers,
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(normalizeGoogleError(payload, `No se pudo desconectar Google ${getProductLabel(product)}.`))
+      await loadGoogleStatus()
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : `No se pudo desconectar Google ${getProductLabel(product)}.`)
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
           <RefreshCw className="h-5 w-5 animate-spin" />
           Cargando integraciones...
@@ -114,109 +620,343 @@ export default function IntegracionesPage() {
     )
   }
 
+  const contactsStatusLabel =
+    contactsSyncState.status === "ok"
+      ? "Listo"
+      : contactsSyncState.status === "syncing"
+        ? "Sincronizando"
+        : contactsSyncState.status === "partial"
+          ? "Revisar"
+          : contactsSyncState.status === "scope_required"
+            ? "Falta permiso"
+            : contactsSyncState.status === "error"
+              ? "Error"
+              : contactsSnapshot.bridgeStatus === "active"
+                ? "Listo"
+                : contactsProductConnected
+                  ? "Falta traer personas"
+                  : "Pendiente"
+
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#0F1F63]">Integraciones</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">Conecta tus herramientas de trabajo con Operaly desde el dashboard administrativo</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Conecte sus herramientas y deje todo listo para verlo y usarlo despues con Operaly.
+          </p>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#34D399] to-[#3B82F6]">
-          <Plug className="h-5 w-5 text-white" />
+          <Sparkles className="h-5 w-5 text-white" />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[#4285F4]/20 bg-gradient-to-r from-[#4285F4]/5 via-[#34A853]/5 to-[#EA4335]/5 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center -space-x-1">
-            {["#4285F4", "#34A853", "#FBBC05", "#EA4335"].map((color) => (
-              <div key={color} className="h-3 w-3 rounded-full border border-white" style={{ backgroundColor: color }} />
-            ))}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
-            <p className="text-xs text-muted-foreground">Drive, Gmail y Calendar se habilitan segun tu plan o add-ons, y se conectan desde aqui.</p>
-          </div>
-          {googleEnabled ? (
-            <div className="ml-auto flex items-center gap-1.5 rounded-full border border-[#10B981]/20 bg-[#10B981]/10 px-3 py-1 text-xs font-medium text-[#10B981]">
-              <Check className="h-3 w-3" /> Add-on activo
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[28px] border border-[#4285F4]/15 bg-gradient-to-r from-[#4285F4]/5 via-[#34A853]/5 to-[#EA4335]/5 p-5">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex items-center -space-x-1">
+              {["#4285F4", "#34A853", "#FBBC05", "#EA4335"].map((color) => (
+                <div key={color} className="h-3.5 w-3.5 rounded-full border border-white" style={{ backgroundColor: color }} />
+              ))}
             </div>
-          ) : (
-            <div className="ml-auto flex items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-              <Lock className="h-3 w-3" /> Requiere add-on
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#0F1F63]">Suite de Google</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                Desde aqui deja lista su agenda, sus archivos, su correo y sus personas para verlos en este panel y usarlos luego por WhatsApp.
+              </p>
             </div>
-          )}
+            {googleEnabled ? (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Disponible para usted
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-medium text-slate-600">
+                <Lock className="h-3.5 w-3.5" />
+                Falta activarlo
+              </div>
+            )}
+          </div>
+        </div>
+
+        {false ? (
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-[#0F1F63]">Estado actual</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">plan</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(planCode)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">suite google</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleEnabled ? "Disponible" : "Bloqueada"}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">estado general</p>
+              <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Listo" : "Pendiente"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {runtimeSource === "auth_bound"
+                  ? "Su plan actual ya se está tomando en cuenta."
+                  : runtimeSource === "legacy"
+                    ? "Le mostramos el último estado disponible mientras termina de actualizarse."
+                    : "Estamos preparando la lectura completa de su cuenta."}
+              </p>
+            </div>
+          </div>
+        </div>
+        ) : null}
+      </div>
+
+      {statusError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {statusError === "google_addon_required" ? "Activa el add-on Google Suite para conectar tu cuenta." : statusError}
+        </div>
+      )}
+
+      {operationalWarning ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {operationalWarning}
+        </div>
+      ) : null}
+
+      {reconnectRequiredIntegrations.length > 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Google desconecto {reconnectRequiredIntegrations.length > 1 ? "algunas integraciones" : "una integracion"} de su cuenta.
+          {` `}
+          Vuelva a conectarla{reconnectRequiredIntegrations.length > 1 ? "s" : ""} para seguir usando agenda, correo, archivos o contactos sin cortes.
+        </div>
+      ) : null}
+
+      {false ? (
+      <div className="rounded-2xl border border-[#3B82F6]/15 bg-gradient-to-r from-[#3B82F6]/5 via-white to-[#10B981]/5 p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Su acceso hoy</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              {runtimeSource === "auth_bound"
+                ? "Ya puede revisar con claridad qué integraciones tiene listas para usar."
+                : runtimeSource === "legacy"
+                  ? "Le mostramos el último estado disponible mientras termina de actualizarse esta vista."
+                  : "Estamos preparando sus integraciones."}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Qué debería notar</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Cuando conecte Google, agenda, Drive, Gmail y personas deberían sentirse listos también en WhatsApp.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-white/80 p-4">
+            <p className="text-sm font-semibold text-[#0F1F63]">Si algo tarda</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Si un cambio tarda un poco más en verse, puede seguir usando la cuenta y esta vista se actualizará sola.
+            </p>
+          </div>
+        </div>
+      </div>
+      ) : null}
+
+      {false ? (
+      <div className="rounded-2xl border border-slate-200 bg-card p-4">
+        <p className="text-sm font-semibold text-[#0F1F63]">Conéctelo una vez</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Active aquí sus servicios y después úselos desde Operaly sin tener que reconfigurarlos cada vez.
+        </p>
+      </div>
+      ) : null}
+
+      {false ? (
+      <div className="rounded-2xl border border-[#1A73E8]/15 bg-gradient-to-r from-[#1A73E8]/5 via-white to-[#34A853]/5 px-4 py-3 text-sm text-slate-600">
+        Usted conecta todo desde aqui. Despues, Operaly lo aprovecha sin que tenga que volver a configurarlo cada vez 🙂
+      </div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">cuenta preparada</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{googleServerConfigured ? "Sí" : "No"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {googleServerConfigured ? "Ya puede empezar a conectar lo que necesite." : "Todavia falta dejarlo listo."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">herramientas conectadas</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {connectedProductsCount > 0 ? `${connectedProductsCount}/${INTEGRATIONS.length} conectadas` : "Pendiente"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Aqui ve que parte de Google ya quedo lista y visible en su cuenta.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">para usar ya</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {googleServerConfigured && googleEnabled && connectedProductsCount > 0 ? "Parcialmente" : "Todavia no"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Mientras mas conecte, mas puede resolver Operaly por usted.</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">personas</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">
+            {contactsStatusLabel}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {contactsSnapshot.withEmail} con email · {contactsSnapshot.birthdays} con cumpleanos · utiles para correo, agenda y casos.
+          </p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {INTEGRATIONS.map((integration) => {
+      <div className="grid gap-4 xl:grid-cols-3">
+        {integrationStatuses.map((integration) => {
           const Icon = integration.icon
-          const isBlocked = !googleEnabled && !integration.comingSoon
+          const runtimeStatus = integration.runtimeStatus
+          const productState = getProductState(googleStatus, integration.product)
+          const productLabel = getProductLabel(integration.product)
+          const health = getGoogleIntegrationHealth({
+            product: integration.product,
+            productState,
+            googleStatus,
+            contactsSyncStatus: integration.product === "contacts" ? contactsSyncState.status : "",
+          })
+          const connectionEmail = googleStatus?.connection?.external_account_email || `Google ${productLabel} autorizado`
 
           return (
-            <div
-              key={integration.id}
-              className={`rounded-2xl border bg-card p-5 transition-all ${
-                isBlocked ? "border-border opacity-75" : "border-border hover:border-[#3B82F6]/20 hover:shadow-sm"
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-border bg-white shadow-sm">
+            <div key={integration.id} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <Icon />
                 </div>
+                <StatusPill status={runtimeStatus} />
+              </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <h3 className="font-semibold text-[#0F1F63]">{integration.name}</h3>
-                    {integration.comingSoon ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                        Proximo
-                      </span>
-                    ) : googleEnabled ? (
-                      <span className="rounded-full border border-[#10B981]/20 bg-[#10B981]/5 px-2 py-0.5 text-[10px] font-bold text-[#10B981]">
-                        Disponible
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-[#7C3AED]/20 bg-[#7C3AED]/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#7C3AED]">
-                        Add-on
-                      </span>
-                    )}
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold text-[#0F1F63]">{integration.name}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{integration.description}</p>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {integration.useCases.map((useCase) => (
+                  <div key={useCase} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    {useCase}
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{integration.desc}</p>
+                ))}
+              </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {integration.features.map((feature) => (
-                      <span key={feature} className="rounded-lg border border-border bg-secondary px-2 py-1 text-xs text-muted-foreground">
-                        {feature}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex-shrink-0">
-                  {integration.comingSoon ? (
-                    <button disabled className="h-9 cursor-not-allowed rounded-xl border border-border bg-secondary px-4 text-xs font-medium text-muted-foreground">
-                      Proximamente
-                    </button>
-                  ) : isBlocked ? (
-                    <Link href="/precios">
-                      <button className="h-9 rounded-xl border border-[#7C3AED]/30 bg-[#7C3AED]/5 px-4 text-xs font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/10">
-                        Activar add-on
+              <div className="mt-5 space-y-2">
+                {runtimeStatus === "connected" ? (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-700">
+                      <p className="font-semibold">Cuenta conectada</p>
+                      <p className="mt-1">{connectionEmail}</p>
+                      <p className="mt-1">Estado: {integration.product === "contacts" ? contactsStatusLabel : productState?.sync_status || "listo"}</p>
+                      {integration.product === "contacts" && (
+                        <p className="mt-1">
+                          Personas visibles: {contactsSnapshot.bridgeStatus === "active" ? "si" : "todavia no"} ·{" "}
+                          {contactsSnapshot.google + contactsSnapshot.merged} de Google o unidas
+                        </p>
+                      )}
+                      {productState?.last_error && <p className="mt-1 text-red-700">Ultimo error: {productState.last_error}</p>}
+                    </div>
+                    <div className={`grid gap-2 ${integration.product === "contacts" ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
+                      <button
+                        onClick={() => handleValidateProduct(integration.product)}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 text-sm font-medium text-sky-700 transition-colors hover:bg-sky-100 disabled:opacity-60"
+                      >
+                        {actionLoading === `validate:${integration.product}` ? "Validando..." : "Validar"}
                       </button>
-                    </Link>
-                  ) : connecting === integration.id ? (
-                    <button disabled className="h-9 rounded-xl bg-[#3B82F6] px-4 text-xs font-medium text-white opacity-70">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      {integration.product === "contacts" && (
+                        <button
+                          onClick={handleSyncContacts}
+                          disabled={Boolean(actionLoading)}
+                          className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+                        >
+                          {actionLoading === "sync:contacts"
+                            ? "Sincronizando..."
+                            : contactsSnapshot.bridgeStatus === "active"
+                              ? "Actualizar"
+                              : "Sincronizar"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDisconnectProduct(integration.product)}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {actionLoading === `disconnect:${integration.product}` ? "Desconectando..." : "Desconectar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : runtimeStatus === "blocked" ? (
+                  <Link href="/precios" className="block">
+                    <button className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#7C3AED]/25 bg-[#7C3AED]/5 text-sm font-medium text-[#7C3AED] transition-colors hover:bg-[#7C3AED]/10">
+                      Activar add-on Google
+                      <ExternalLink className="h-3.5 w-3.5" />
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => handleConnect(integration.id)}
-                      className="flex h-9 items-center gap-1.5 rounded-xl bg-[#0F1F63] px-4 text-xs font-medium text-white transition-colors hover:bg-[#1a2f7a]"
-                    >
-                      Conectar <ExternalLink className="h-3 w-3" />
-                    </button>
-                  )}
+                  </Link>
+                ) : runtimeStatus === "error" ? (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                      <p className="font-semibold">Reconectar Google {productLabel}</p>
+                      <p className="mt-1">
+                        {connectionEmail}
+                      </p>
+                      <p className="mt-1">
+                        Google corto esta conexion o ya no tiene permisos vigentes. Vuelva a conectarla para evitar fallas silenciosas.
+                      </p>
+                      {productState?.last_error ? <p className="mt-1 text-amber-900">Ultimo error: {productState.last_error}</p> : null}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        onClick={() => handleConnectProduct(integration.product)}
+                        disabled={Boolean(actionLoading) || !googleServerConfigured}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
+                      >
+                        {actionLoading === `connect:${integration.product}`
+                          ? "Abriendo Google..."
+                          : `Volver a conectar ${productLabel}`}
+                        {integration.product === "contacts" ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleValidateProduct(integration.product)}
+                        disabled={Boolean(actionLoading)}
+                        className="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {actionLoading === `validate:${integration.product}` ? "Validando..." : "Revisar estado"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleConnectProduct(integration.product)}
+                    disabled={Boolean(actionLoading) || !googleServerConfigured}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1A73E8]/20 bg-[#1A73E8]/5 text-sm font-medium text-[#1A73E8] transition-colors hover:bg-[#1A73E8]/10 disabled:opacity-60"
+                  >
+                    {actionLoading === `connect:${integration.product}`
+                      ? "Abriendo Google..."
+                      : !googleServerConfigured
+                        ? "Pendiente"
+                        : `Conectar ${productLabel}`}
+                    {integration.product === "contacts" ? <Users className="h-3.5 w-3.5" /> : <CalendarDays className="h-3.5 w-3.5" />}
+                  </button>
+                )}
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                  {runtimeStatus === "blocked"
+                    ? "Primero hay que activar Google para su cuenta. Despues podra conectarlo desde aqui."
+                    : !googleServerConfigured
+                      ? "Esta pantalla ya esta preparada, pero todavia falta que la conexion quede disponible."
+                      : runtimeStatus === "connected"
+                        ? integration.product === "calendar"
+                          ? "Lo que mueva en Google deberia verse al volver a abrir su agenda en Operaly."
+                          : integration.product === "drive"
+                            ? "Sus archivos remotos ya pueden quedar visibles aqui y traerse solo cuando hagan falta."
+                            : "Esta herramienta ya puede empezar a ayudarle desde Operaly segun el uso que necesite."
+                        : runtimeStatus === "error"
+                          ? health.connectionStatus
+                            ? `La ultima senal de Google fue "${health.connectionStatus}". Revise la conexion y vuelva a autorizarla.`
+                            : "Google ya no confirma esta conexion como vigente. Vuelva a conectarla para continuar."
+                        : "El siguiente paso es conectar este producto para empezar a usarlo desde Operaly."}
                 </div>
               </div>
             </div>
@@ -224,14 +964,99 @@ export default function IntegracionesPage() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-border bg-secondary/50 p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <div>
-            <p className="text-sm text-muted-foreground">
-              Las integraciones de Google se conectan mediante OAuth seguro y se administran desde este dashboard. Tu plan actual es {getDisplayPlanName(planCode)}.
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
+            <AlertCircle className="h-4 w-4 text-[#0F1F63]" />
+          </div>
+          <h2 className="font-semibold text-[#0F1F63]">Qué gana al conectarlo</h2>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4 text-[#34A853]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Drive</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Ver sus archivos remotos y traer solo lo que quiera trabajar sin salir de Operaly.
             </p>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[#1A73E8]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Calendar</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Ver su agenda real y reflejar cambios hechos en Google sin desordenar sus recordatorios.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-[#EA4335]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Gmail</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Preparar correos, revisarlos con usted y enviarlos cuando lo confirme.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-[#34A853]" />
+              <p className="text-sm font-semibold text-[#0F1F63]">Contacts</p>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Tener sus personas listas para correos, agenda, casos y llamadas.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`rounded-2xl border px-4 py-3 text-sm ${
+          contactsSnapshot.bridgeStatus === "active"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            : contactsSnapshot.bridgeStatus === "pending"
+              ? "border-sky-200 bg-sky-50 text-sky-700"
+              : "border-amber-200 bg-amber-50 text-amber-700"
+        }`}
+      >
+        {contactsSnapshot.bridgeStatus === "active"
+          ? "Sus personas de Google ya empiezan a verse aqui junto con la libreta que ya tenia."
+          : contactsSnapshot.bridgeStatus === "pending"
+            ? contactsProductConnected
+              ? "Google Contacts ya esta conectado, pero todavia esta trayendo o actualizando sus personas."
+              : "Todavia falta conectar Google Contacts para completar su libreta."
+            : "Por ahora solo esta viendo su libreta interna. Cuando conecte Contacts, aqui apareceran tambien sus personas de Google."}
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F1F63]/5">
+            <Users className="h-4 w-4 text-[#0F1F63]" />
+          </div>
+          <h2 className="font-semibold text-[#0F1F63]">Personas en Operaly</h2>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Su libreta</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Operaly junta lo que usted ya tenia con lo que llegue desde Google, sin desordenarle los contactos.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Para que sirve</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Sirve para escribir correos, agendar reuniones, ubicar cumpleanos, enviar archivos y trabajar casos.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-[#0F1F63]">Hoy en su cuenta</p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Tiene {contactsSnapshot.total} contacto{contactsSnapshot.total !== 1 ? "s" : ""}. {contactsProductConnected ? "Google Contacts ya puede actualizar esta base." : "El siguiente paso es conectar Google Contacts."}
+              </p>
+            </div>
         </div>
       </div>
     </div>

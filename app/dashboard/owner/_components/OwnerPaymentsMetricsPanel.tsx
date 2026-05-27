@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { getDefaultOwnerCatalog, type OwnerCatalog } from "@/lib/owner-catalog"
 import {
   AlertCircle,
   BarChart3,
@@ -115,8 +116,13 @@ function formatPercent(value: number) {
   return `${((value || 0) * 100).toFixed(1)}%`
 }
 
-function labelItemCode(itemCode: string) {
+function labelItemCode(itemCode: string, catalog: OwnerCatalog | null) {
   const value = String(itemCode || "").trim().toLowerCase()
+  const catalogPlan = catalog?.plans.find((plan) => plan.code === value)
+  if (catalogPlan) return catalogPlan.name
+
+  const catalogAddon = catalog?.addons.find((addon) => addon.code === value)
+  if (catalogAddon) return catalogAddon.name
 
   const labels: Record<string, string> = {
     core: "Operaly Core",
@@ -150,6 +156,7 @@ export default function OwnerPaymentsMetricsPanel() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [data, setData] = useState<FunnelResponse | null>(null)
+  const [catalog, setCatalog] = useState<OwnerCatalog>(getDefaultOwnerCatalog())
 
   const fetchMetrics = async (isRefresh = false, nextDays?: number) => {
     const targetDays = nextDays ?? days
@@ -163,18 +170,28 @@ export default function OwnerPaymentsMetricsPanel() {
     setError("")
 
     try {
-      const res = await fetch(`/api/owner/metrics/payments-funnel?days=${targetDays}`, {
-        method: "GET",
-        cache: "no-store",
-      })
+      const [res, catalogRes] = await Promise.all([
+        fetch(`/api/owner/metrics/payments-funnel?days=${targetDays}`, {
+          method: "GET",
+          cache: "no-store",
+        }),
+        fetch("/api/catalog", {
+          method: "GET",
+          cache: "no-store",
+        }),
+      ])
 
       const payload = await res.json()
+      const catalogPayload = await catalogRes.json().catch(() => ({}))
 
       if (!res.ok || !payload?.ok) {
         throw new Error(payload?.detail || payload?.error || "metrics_failed")
       }
 
       setData(payload)
+      if (catalogRes.ok && catalogPayload?.catalog) {
+        setCatalog(catalogPayload.catalog as OwnerCatalog)
+      }
     } catch (err: any) {
       setError(err?.message || "No se pudieron cargar las métricas.")
     } finally {
@@ -516,7 +533,7 @@ export default function OwnerPaymentsMetricsPanel() {
                       {data.by_item.map((row) => (
                         <tr key={row.item_code} className="border-b border-slate-100">
                           <td className="px-3 py-3 text-slate-900">
-                            {labelItemCode(row.item_code)}
+                            {labelItemCode(row.item_code, catalog)}
                           </td>
                           <td className="px-3 py-3 text-slate-700">{row.initiated}</td>
                           <td className="px-3 py-3 text-slate-700">{row.checkout_created}</td>
@@ -620,7 +637,7 @@ export default function OwnerPaymentsMetricsPanel() {
                   Top item
                 </p>
                 <p className="mt-2 text-lg font-semibold text-slate-950">
-                  {topItem ? labelItemCode(topItem.item_code) : "Sin datos"}
+                  {topItem ? labelItemCode(topItem.item_code, catalog) : "Sin datos"}
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
                   {topItem

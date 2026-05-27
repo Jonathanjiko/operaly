@@ -1,140 +1,177 @@
 import Image from "next/image"
 
-export function Footer() {
-  const footerLinks = {
-    Producto: [
-      { label: "Funcionalidades", href: "#funciones" },
-      { label: "Precios", href: "#precios" },
-      { label: "Integraciones", href: "#" },
-      { label: "API", href: "#" },
-    ],
-    Soluciones: [
-      { label: "Para Profesionales", href: "#soluciones" },
-      { label: "Para Empresas", href: "#soluciones" },
-      { label: "Para Clínicas", href: "#" },
-      { label: "Para Restaurantes", href: "#" },
-    ],
-    Recursos: [
-      { label: "Blog", href: "#" },
-      { label: "Centro de ayuda", href: "#" },
-      { label: "Tutoriales", href: "#" },
-      { label: "Casos de éxito", href: "#" },
-    ],
-    Empresa: [
-      { label: "Sobre nosotros", href: "#" },
-      { label: "Contacto", href: "#" },
-      { label: "Empleo", href: "#" },
-      { label: "Prensa", href: "#" },
-    ],
-  }
+const languages = [
+  { code: "es", label: "Español" },
+  { code: "en", label: "English" },
+  { code: "pt", label: "Português" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+  { code: "it", label: "Italiano" },
+]
+
+const footerCopy: Record<string, {
+  description: string
+  product: string
+  productLinks: string[]
+  resources: string
+  resourcesLinks: string[]
+  company: string
+  companyLinks: string[]
+  rights: string
+}> = {
+  es: {
+    description:
+      "Operaly es un producto desarrollado por Alderete Yangali Group Holding SAC, empresa con base en Perú y visión para Latinoamérica y el mundo.",
+    product: "Producto",
+    productLinks: ["Qué hace Operaly", "Planes", "Preguntas frecuentes", "Entrar"],
+    resources: "Recursos",
+    resourcesLinks: ["Contáctese con nosotros", "support@operaly.app"],
+    company: "Empresa",
+    companyLinks: ["Términos y condiciones", "Política de privacidad", "Preferencias de cookies"],
+    rights: "© 2026 Operaly. Todos los derechos reservados.",
+  },
+  en: {
+    description:
+      "Operaly is a product developed by Alderete Yangali Group Holding SAC, a company based in Peru with a view toward Latin America and the world.",
+    product: "Product",
+    productLinks: ["What Operaly does", "Plans", "Frequently asked questions", "Sign in"],
+    resources: "Resources",
+    resourcesLinks: ["Contact us", "support@operaly.app"],
+    company: "Company",
+    companyLinks: ["Terms and conditions", "Privacy policy", "Cookie settings"],
+    rights: "© 2026 Operaly. All rights reserved.",
+  },
+  pt: {
+    description:
+      "Operaly é um produto desenvolvido pela Alderete Yangali Group Holding SAC, empresa com base no Peru e visão para a América Latina e o mundo.",
+    product: "Produto",
+    productLinks: ["O que a Operaly faz", "Planos", "Perguntas frequentes", "Entrar"],
+    resources: "Recursos",
+    resourcesLinks: ["Fale conosco", "support@operaly.app"],
+    company: "Empresa",
+    companyLinks: ["Termos e condições", "Política de privacidade", "Preferências de cookies"],
+    rights: "© 2026 Operaly. Todos os direitos reservados.",
+  },
+  fr: {
+    description:
+      "Operaly est un produit développé par Alderete Yangali Group Holding SAC, une entreprise basée au Pérou avec une vision pour l’Amérique latine et le monde.",
+    product: "Produit",
+    productLinks: ["Ce que fait Operaly", "Offres", "Questions fréquentes", "Entrer"],
+    resources: "Ressources",
+    resourcesLinks: ["Contactez-nous", "support@operaly.app"],
+    company: "Entreprise",
+    companyLinks: ["Conditions générales", "Politique de confidentialité", "Préférences de cookies"],
+    rights: "© 2026 Operaly. Tous droits réservés.",
+  },
+  de: {
+    description:
+      "Operaly ist ein Produkt der Alderete Yangali Group Holding SAC, einem Unternehmen mit Sitz in Peru und Blick auf Lateinamerika und die Welt.",
+    product: "Produkt",
+    productLinks: ["Was Operaly macht", "Pläne", "Häufige Fragen", "Anmelden"],
+    resources: "Ressourcen",
+    resourcesLinks: ["Kontaktieren Sie uns", "support@operaly.app"],
+    company: "Unternehmen",
+    companyLinks: ["Allgemeine Geschäftsbedingungen", "Datenschutz", "Cookie-Einstellungen"],
+    rights: "© 2026 Operaly. Alle Rechte vorbehalten.",
+  },
+  it: {
+    description:
+      "Operaly è un prodotto sviluppato da Alderete Yangali Group Holding SAC, azienda con sede in Perù e visione per l’America Latina e il mondo.",
+    product: "Prodotto",
+    productLinks: ["Cosa fa Operaly", "Piani", "Domande frequenti", "Accedi"],
+    resources: "Risorse",
+    resourcesLinks: ["Contattaci", "support@operaly.app"],
+    company: "Azienda",
+    companyLinks: ["Termini e condizioni", "Informativa sulla privacy", "Preferenze cookie"],
+    rights: "© 2026 Operaly. Tutti i diritti riservati.",
+  },
+}
+
+export function Footer({ locale = "es" }: { locale?: string }) {
+  const t = footerCopy[locale] || footerCopy.es
 
   return (
-    <footer className="bg-[#0F1F63] text-white">
+    <footer id="contacto" className="bg-[linear-gradient(180deg,#09112B_0%,#0F1F63_100%)] text-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Main footer */}
-        <div className="py-16 grid grid-cols-2 md:grid-cols-6 gap-8">
-          {/* Brand */}
-          <div className="col-span-2">
-            <div className="mb-4">
-              <Image 
-                src="/images/operaly-logo.png" 
-                alt="Operaly" 
-                width={140} 
-                height={140}
-                className="h-12 w-auto brightness-0 invert"
-              />
+        <div className="grid gap-10 py-16 lg:grid-cols-[1.2fr_0.85fr_0.8fr_0.85fr]">
+          <div>
+            <Image
+              src="/images/operaly-logo.png"
+              alt="Operaly"
+              width={180}
+              height={180}
+              className="h-12 w-auto brightness-0 invert"
+            />
+            <p className="mt-5 max-w-sm text-sm leading-7 text-white/72">{t.description}</p>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {languages.map((language) => (
+                <a
+                  key={language.code}
+                  href={`/?lang=${language.code}`}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    locale === language.code
+                      ? "bg-white text-[#0F1F63]"
+                      : "bg-white/10 text-white/76 hover:bg-white/14"
+                  }`}
+                >
+                  {language.label}
+                </a>
+              ))}
             </div>
-            <p className="text-white/60 text-sm max-w-xs mb-6">
-              El asistente de IA para WhatsApp que transforma la forma en que gestionas tu negocio.
-            </p>
-            <div className="flex items-center gap-3">
-              {/* Social icons */}
+
+            <div className="mt-6 flex items-center gap-3">
               {[
-                { name: "instagram", href: "#", icon: <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" /> },
-                { name: "tiktok", href: "#", icon: <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" /> },
-                { name: "linkedin", href: "#", icon: <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /> },
-                { name: "x", href: "#", icon: <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /> },
+                { label: "Instagram", short: "ig", href: "https://www.instagram.com/operaly.app" },
+                { label: "Facebook", short: "f", href: "https://www.facebook.com/operaly.app" },
+                { label: "TikTok", short: "tt", href: "https://www.tiktok.com/@operaly.app" },
+                { label: "LinkedIn", short: "in", href: "https://www.linkedin.com/company/operaly" },
+                { label: "X", short: "x", href: "https://x.com/operaly_app" },
               ].map((social) => (
                 <a
-                  key={social.name}
+                  key={social.label}
                   href={social.href}
-                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                  aria-label={social.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs font-bold uppercase text-white/84"
+                  aria-label={social.label}
                 >
-                  <svg className="w-5 h-5 text-white/80" fill="currentColor" viewBox="0 0 24 24">
-                    {social.icon}
-                  </svg>
+                  {social.short}
                 </a>
               ))}
             </div>
           </div>
 
-          {/* Links */}
-          {Object.entries(footerLinks).map(([title, links]) => (
-            <div key={title}>
-              <h4 className="font-semibold text-sm mb-4">{title}</h4>
-              <ul className="space-y-3">
-                {links.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-white/60 hover:text-white transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.product}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="#producto" className="hover:text-white">{t.productLinks[0]}</a></li>
+              <li><a href="#planes" className="hover:text-white">{t.productLinks[1]}</a></li>
+              <li><a href="#preguntas" className="hover:text-white">{t.productLinks[2]}</a></li>
+              <li><a href="/dashboard" className="hover:text-white">{t.productLinks[3]}</a></li>
+            </ul>
+          </div>
 
-        {/* Legal credibility & Languages */}
-        <div className="py-8 border-t border-white/10">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            {/* Credibility note */}
-            <div className="text-sm text-white/50 space-y-1">
-              <p>
-                Operaly es un producto desarrollado por{" "}
-                <span className="text-white/70 font-medium">Alderete Yangali Group Holding SAC</span>, 
-                empresa con base en Perú.
-              </p>
-              <p>Disponible para Latinoamérica y el mundo.</p>
-            </div>
-            
-            {/* Supported languages */}
-            <div className="flex flex-col md:items-end gap-2">
-              <p className="text-xs text-white/40 uppercase tracking-wider">Idiomas disponibles</p>
-              <div className="flex flex-wrap gap-2">
-                {["Español", "English", "Português", "Français", "Deutsch", "Italiano"].map((lang) => (
-                  <span 
-                    key={lang} 
-                    className="px-3 py-1 text-xs font-medium rounded-full bg-white/10 text-white/70"
-                  >
-                    {lang}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.resources}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="/contacto" className="hover:text-white">{t.resourcesLinks[0]}</a></li>
+              <li><a href="mailto:support@operaly.app" className="hover:text-white">{t.resourcesLinks[1]}</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/72">{t.company}</h4>
+            <ul className="mt-5 space-y-3 text-sm text-white/72">
+              <li><a href="/terminos-y-condiciones" className="hover:text-white">{t.companyLinks[0]}</a></li>
+              <li><a href="/politica-de-privacidad" className="hover:text-white">{t.companyLinks[1]}</a></li>
+              <li><a href="/cookies" className="hover:text-white">{t.companyLinks[2]}</a></li>
+            </ul>
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div className="py-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/50">
-            © 2026 Operaly. Todos los derechos reservados.
-          </p>
-          <div className="flex items-center gap-6">
-            <a href="#" className="text-sm text-white/50 hover:text-white transition-colors">
-              Términos de servicio
-            </a>
-            <a href="#" className="text-sm text-white/50 hover:text-white transition-colors">
-              Política de privacidad
-            </a>
-            <a href="#" className="text-sm text-white/50 hover:text-white transition-colors">
-              Cookies
-            </a>
-          </div>
+        <div className="border-t border-white/10 py-6 text-sm text-white/55">
+          {t.rights}
         </div>
       </div>
     </footer>
