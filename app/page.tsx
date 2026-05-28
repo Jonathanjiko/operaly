@@ -5,33 +5,6 @@ import { FinalCTA } from "@/components/landing/final-cta"
 import { Footer } from "@/components/landing/footer"
 import { headers } from "next/headers"
 
-const _SITE_META: Record<string, { title: string; description: string }> = {
-  es: {
-    title: "Operaly | Tu asistente de IA para WhatsApp",
-    description: "Operaly es el asistente de IA para WhatsApp que ayuda a profesionales a gestionar clientes, agenda y tareas.",
-  },
-  en: {
-    title: "Operaly | Your AI Assistant for WhatsApp",
-    description: "Operaly is the AI assistant for WhatsApp that helps professionals manage clients, schedule appointments, and automate tasks.",
-  },
-  pt: {
-    title: "Operaly | Seu Assistente de IA para WhatsApp",
-    description: "Operaly é o assistente de IA para WhatsApp que ajuda profissionais a gerenciar clientes e automatizar tarefas.",
-  },
-  fr: {
-    title: "Operaly | Votre Assistant IA pour WhatsApp",
-    description: "Operaly est l'assistant IA pour WhatsApp qui aide les professionnels à gérer clients et tâches.",
-  },
-  de: {
-    title: "Operaly | Ihr KI-Assistent für WhatsApp",
-    description: "Operaly ist der KI-Assistent für WhatsApp für Fachleute.",
-  },
-  it: {
-    title: "Operaly | Il Tuo Assistente IA per WhatsApp",
-    description: "Operaly è l'assistente IA per WhatsApp per professionisti.",
-  },
-}
-
 const COUNTRY_LOCALE: Record<string, string> = {
   AR: "es",
   BO: "es",
@@ -59,21 +32,6 @@ const COUNTRY_LOCALE: Record<string, string> = {
 
 const languages = ["es", "en", "pt", "fr", "de", "it"]
 
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams: { lang?: string }
-}) {
-  const locale = searchParams?.lang ?? "es"
-  const meta = _SITE_META[locale] ?? _SITE_META["es"]
-
-  return {
-    title: meta.title,
-    description: meta.description,
-    keywords: "WhatsApp, IA, asistente virtual, agenda, automatización",
-  }
-}
-
 async function getRequestLocale() {
   const requestHeaders = await headers()
   const country = String(
@@ -81,7 +39,6 @@ async function getRequestLocale() {
       requestHeaders.get("cf-ipcountry") ||
       ""
   ).toUpperCase()
-
   return COUNTRY_LOCALE[country] || "en"
 }
 
