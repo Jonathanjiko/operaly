@@ -62,10 +62,9 @@ const languages = ["es", "en", "pt", "fr", "de", "it"]
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string }>
+  searchParams: { lang?: string }
 }) {
-  const { lang } = await searchParams
-  const locale = lang ?? "es"
+  const locale = searchParams?.lang ?? "es"
   const meta = _SITE_META[locale] ?? _SITE_META["es"]
 
   return {
