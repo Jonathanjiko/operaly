@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { cookies } from 'next/headers'
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -37,16 +36,13 @@ export const metadata: Metadata = {
   },
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const cookieStore = await cookies()
-  const locale = cookieStore.get('operaly_web_locale')?.value ?? 'es'
-
   return (
-    <html lang={locale}>
+    <html lang="es">
       <body className={`${inter.variable} ${plusJakarta.variable} font-sans antialiased`}>
         {children}
         <CookieConsent />
