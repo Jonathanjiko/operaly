@@ -22,7 +22,7 @@ const PAID_PLANS: OperalyPlanCode[] = ["core", "pro", "pro_plus"]
 const PLAN_FEATURES: Record<string, string[]> = {
   core:     ["Agente IA en WhatsApp 24/7", "Tareas, agenda y contactos", "Dashboard privado", "Documentos básicos", "Soporte por WhatsApp"],
   pro:      ["Todo lo de Core", "🎙️ Voz: audios y llamadas (20 min/mes)", "Automatizaciones activas", "Análisis de documentos con IA", "Mensajes a terceros"],
-  pro_plus: ["Todo lo de Pro", "🤖 Llamadas conversacionales IA (60 min/mes)", "Análisis profundo por profesión", "Agente personalizado avanzado", "Acceso API + Google Suite"],
+  pro_plus: ["Todo lo de Pro", "🤖 Llamadas conversacionales IA (180 min/mes)", "Análisis profundo por profesión", "Agente personalizado avanzado", "Acceso API + Google Suite"],
 }
 
 const TRUST = [

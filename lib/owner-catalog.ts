@@ -61,7 +61,7 @@ const DEFAULT_PLAN_LIMITS: Record<OperalyPlanCode, OwnerPlanLimits> = {
     ia_limit: 250,
     calls_minutes: 5,
     storage_gb: 0.5,
-    contacts_limit: 100,
+    contacts_limit: 20,
     automations_limit: 2,
   },
   core: {
@@ -73,17 +73,17 @@ const DEFAULT_PLAN_LIMITS: Record<OperalyPlanCode, OwnerPlanLimits> = {
   },
   pro: {
     ia_limit: 3000,
-    calls_minutes: 30,
+    calls_minutes: 20,
     storage_gb: 5,
     contacts_limit: 1000,
-    automations_limit: 15,
+    automations_limit: 20,
   },
   pro_plus: {
-    ia_limit: 5000,
-    calls_minutes: 60,
-    storage_gb: 10,
+    ia_limit: 8000,
+    calls_minutes: 180,
+    storage_gb: 20,
     contacts_limit: 2000,
-    automations_limit: 30,
+    automations_limit: 50,
   },
 }
 
