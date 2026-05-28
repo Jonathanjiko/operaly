@@ -8,11 +8,11 @@ import { headers } from "next/headers"
 const _SITE_META: Record<string, { title: string; description: string }> = {
   es: {
     title: "Operaly | Tu asistente de IA para WhatsApp",
-    description: "Operaly es el asistente de IA para WhatsApp que ayuda a profesionales a gestionar clientes, agenda y tareas diarias.",
+    description: "Operaly es el asistente de IA para WhatsApp que ayuda a profesionales a gestionar clientes, agenda y tareas.",
   },
   en: {
     title: "Operaly | Your AI Assistant for WhatsApp",
-    description: "Operaly is the AI assistant for WhatsApp that helps professionals manage clients, schedule appointments, and automate daily tasks.",
+    description: "Operaly is the AI assistant for WhatsApp that helps professionals manage clients, schedule appointments, and automate tasks.",
   },
   pt: {
     title: "Operaly | Seu Assistente de IA para WhatsApp",
@@ -24,11 +24,11 @@ const _SITE_META: Record<string, { title: string; description: string }> = {
   },
   de: {
     title: "Operaly | Ihr KI-Assistent für WhatsApp",
-    description: "Operaly ist der KI-Assistent für WhatsApp für Fachleute und Unternehmen.",
+    description: "Operaly ist der KI-Assistent für WhatsApp für Fachleute.",
   },
   it: {
     title: "Operaly | Il Tuo Assistente IA per WhatsApp",
-    description: "Operaly è l'assistente IA per WhatsApp per professionisti e aziende.",
+    description: "Operaly è l'assistente IA per WhatsApp per professionisti.",
   },
 }
 
@@ -67,10 +67,11 @@ export async function generateMetadata({
   const { lang } = await searchParams
   const locale = lang ?? "es"
   const meta = _SITE_META[locale] ?? _SITE_META["es"]
+
   return {
     title: meta.title,
     description: meta.description,
-    keywords: "WhatsApp, IA, asistente virtual, agenda, automatización, profesionales",
+    keywords: "WhatsApp, IA, asistente virtual, agenda, automatización",
   }
 }
 
@@ -81,6 +82,7 @@ async function getRequestLocale() {
       requestHeaders.get("cf-ipcountry") ||
       ""
   ).toUpperCase()
+
   return COUNTRY_LOCALE[country] || "en"
 }
 
