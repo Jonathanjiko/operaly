@@ -166,49 +166,57 @@ Y si no puede verificar:
 
 ### Verificación pública
 
-Se revisó públicamente `https://operaly.app` / `https://www.operaly.app` y el sitio sigue mostrando contenido viejo en landing:
+Se verificó la producción real con Vercel CLI y `curl`:
 
-- Trial todavía muestra `100 contacts and 2 automations`
-- Pro todavía muestra `60 min of voice and calls`
-- en inglés sigue saliendo `Cobro real en soles` en vez de `Billed in soles`
+- proyecto Vercel: `operaly`
+- scope: `jarojas1688-9993s-projects`
+- último deployment de producción inspeccionado:
+  - `dpl_GWtJVWvQKLVY5GTuyxMQf45VPdzC`
+  - aliasado a:
+    - `https://operaly.app`
+    - `https://www.operaly.app`
+    - `https://operaly-git-main-jarojas1688-9993s-projects.vercel.app`
 
-Eso significa que, al momento de esta certificación:
+Hallazgo clave:
 
-- la capa de código ya está corregida;
-- el build ya pasa;
-- pero la producción pública todavía no refleja esos cambios.
+- no había branch equivocada ni dominio apuntando a otro proyecto;
+- el dominio ya estaba sobre el deployment de producción correcto;
+- la diferencia anterior vino de una lectura pública desactualizada y no del alias actual.
 
-Conclusión operativa:
+Validación pública confirmada en `https://www.operaly.app/?lang=en`:
 
-- el problema residual ya no es frontend build;
-- es verificación de deploy / branch de producción / caché de Vercel o dominio.
+- Trial: `20 contacts and 2 automations`
+- Pro: `20 min of voice and calls`
+- label PEN en inglés: `Billed in soles`
+- ya no aparece `Cobro real en soles` en inglés
+
+Validación adicional:
+
+- `GET /api/dashboard/status` responde `401` sin auth pública, que es el comportamiento esperado para un endpoint protegido.
 
 ## 6. Decisión
 
 ### Estado recomendado
 
-**A) continue frontend hardening**
+**B) frontend public launch candidate ready**
 
 Justificación:
 
 - el build blocker quedó resuelto;
-- el código candidato sí está listo;
-- pero la verificación pública todavía no pasa porque `operaly.app` sigue sirviendo contenido desactualizado;
-- por lo tanto todavía no se puede declarar “public launch candidate ready” con honestidad.
+- el deployment de producción correcto está activo;
+- la landing pública ya sirve los strings corregidos;
+- el dashboard nuevo tiene fallback seguro cuando backend/status no están disponibles;
+- el endpoint protegido del widget ya está desplegado.
 
 ## 7. Riesgo residual
 
-- el sitio público aún no refleja el estado corregido del repositorio;
+- el FAQ expandido no se verificó con interacción real de navegador dentro de esta corrida, aunque el contenido corregido sí está en el código desplegado;
 - persiste el warning de `middleware` deprecado hacia `proxy`, pero no bloquea el lanzamiento;
 - la calidad final del widget depende de que las envs de Vercel estén realmente presentes y correctas.
 
 ## 8. Próximo paso exacto
 
-1. confirmar en Vercel que `Production Branch = main`
-2. confirmar que el deployment actual incluye el commit más reciente de `main`
-3. revisar `operaly.app` y `operaly.app?lang=en`
-4. confirmar visualmente:
-   - `Pro = 20 min`
-   - FAQ correcta
-   - label PEN por locale
-5. autenticar sesión y validar `/api/dashboard/status` en dashboard real
+1. abrir sesión real en producción
+2. validar el widget de plan dentro del dashboard autenticado
+3. validar checklist inicial en cuenta nueva
+4. revisar luego la migración futura de `middleware` → `proxy`
