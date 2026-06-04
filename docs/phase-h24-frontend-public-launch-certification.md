@@ -166,42 +166,49 @@ Y si no puede verificar:
 
 ### Verificación pública
 
-La verificación pública debe confirmar en `operaly.app`:
+Se revisó públicamente `https://operaly.app` / `https://www.operaly.app` y el sitio sigue mostrando contenido viejo en landing:
 
-- landing responde `200`
-- pricing actualizado
-- FAQ de Pro ya no menciona `60 min`
-- label PEN por locale
-- deploy servido desde `main`
+- Trial todavía muestra `100 contacts and 2 automations`
+- Pro todavía muestra `60 min of voice and calls`
+- en inglés sigue saliendo `Cobro real en soles` en vez de `Billed in soles`
 
-En esta corrida no se usó el dashboard autenticado de Vercel, así que la confirmación final de producción depende del deploy ya disparado por el push posterior a esta certificación.
+Eso significa que, al momento de esta certificación:
+
+- la capa de código ya está corregida;
+- el build ya pasa;
+- pero la producción pública todavía no refleja esos cambios.
+
+Conclusión operativa:
+
+- el problema residual ya no es frontend build;
+- es verificación de deploy / branch de producción / caché de Vercel o dominio.
 
 ## 6. Decisión
 
 ### Estado recomendado
 
-**B) frontend public launch candidate ready**
+**A) continue frontend hardening**
 
 Justificación:
 
 - el build blocker quedó resuelto;
-- la experiencia pública y el dashboard ya tienen fallback seguro en ausencia de backend disponible;
-- el dashboard no inventa datos;
-- la capa visual de onboarding/estado de plan ya está integrada;
-- el siguiente riesgo principal ya no es build/frontend base, sino verificación final del deploy público en Vercel.
+- el código candidato sí está listo;
+- pero la verificación pública todavía no pasa porque `operaly.app` sigue sirviendo contenido desactualizado;
+- por lo tanto todavía no se puede declarar “public launch candidate ready” con honestidad.
 
 ## 7. Riesgo residual
 
-- el sitio público aún debe confirmarse en producción tras el último push;
+- el sitio público aún no refleja el estado corregido del repositorio;
 - persiste el warning de `middleware` deprecado hacia `proxy`, pero no bloquea el lanzamiento;
 - la calidad final del widget depende de que las envs de Vercel estén realmente presentes y correctas.
 
 ## 8. Próximo paso exacto
 
-1. confirmar deploy de Vercel desde `main`
-2. revisar `operaly.app` y `operaly.app?lang=en`
-3. confirmar visualmente:
+1. confirmar en Vercel que `Production Branch = main`
+2. confirmar que el deployment actual incluye el commit más reciente de `main`
+3. revisar `operaly.app` y `operaly.app?lang=en`
+4. confirmar visualmente:
    - `Pro = 20 min`
    - FAQ correcta
    - label PEN por locale
-4. autenticar sesión y validar `/api/dashboard/status` en dashboard real
+5. autenticar sesión y validar `/api/dashboard/status` en dashboard real
