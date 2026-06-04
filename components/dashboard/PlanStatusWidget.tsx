@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, AlertTriangle, Mail, FolderOpen, MessageCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Mail, MessageCircle } from "lucide-react"
 import { fetchDashboardJson } from "@/lib/dashboard-runtime"
 import {
+  canonicalDashboardPlanStatus,
   type DashboardStatusPayload,
   formatPlanStatusDate,
+  getDashboardPlanPresentation,
   getUsagePercent,
   isDashboardPlanActive,
-  normalizeDashboardStatus,
 } from "@/lib/dashboard-status"
 
 function UsageRow({
@@ -106,11 +107,21 @@ export function PlanStatusWidget() {
     )
   }
 
+  const normalizedStatus = canonicalDashboardPlanStatus(status.plan.status)
+  const presentation = getDashboardPlanPresentation(status.plan.status)
   const active = isDashboardPlanActive(status.plan.status)
 
   if (!active) {
-    const expiredLabel =
-      normalizeDashboardStatus(status.plan.status) === "cancelled" ? "Tu suscripción fue cancelada" : "Tu suscripción venció"
+    const detailLabel =
+      normalizedStatus === "pending_payment"
+        ? "Tu plan sigue pendiente de pago. No mostraremos este plan como activo hasta que el backend confirme el cobro."
+        : normalizedStatus === "past_due"
+          ? "Tu último pago no se confirmó y el acceso operativo quedó restringido."
+          : normalizedStatus === "canceled"
+            ? "Tu suscripción fue cancelada y el acceso operativo quedó cerrado."
+            : normalizedStatus === "expired_trial"
+              ? "Tu periodo de prueba terminó y ahora necesitas elegir un plan."
+              : "Tu suscripción venció y el acceso operativo quedó restringido."
 
     return (
       <div className="w-full max-w-[340px] rounded-[26px] border border-amber-200 bg-amber-50/90 p-5 shadow-sm">
@@ -119,16 +130,22 @@ export function PlanStatusWidget() {
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-amber-900">{expiredLabel}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-amber-900">{presentation.title}</p>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${presentation.badgeClass}`}>
+                {presentation.badgeLabel}
+              </span>
+            </div>
             <p className="mt-1 text-sm text-amber-800">
               Plan {status.plan.name}
-              {status.plan.current_period_end ? ` — venció el ${formatPlanStatusDate(status.plan.current_period_end)}` : ""}
+              {status.plan.current_period_end ? ` — ${normalizedStatus === "pending_payment" ? "vence" : "cerró"} el ${formatPlanStatusDate(status.plan.current_period_end)}` : ""}
             </p>
+            <p className="mt-2 text-sm leading-6 text-amber-800">{detailLabel}</p>
             <Link
               href="/dashboard/professional/configuracion"
               className="mt-4 inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
             >
-              Actualizar plan →
+              {normalizedStatus === "pending_payment" ? "Completar pago →" : "Actualizar plan →"}
             </Link>
           </div>
         </div>
@@ -143,9 +160,9 @@ export function PlanStatusWidget() {
           <p className="text-sm text-slate-500">Tu plan</p>
           <p className="text-lg font-semibold text-[#0F1F63]">{status.plan.name}</p>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${presentation.badgeClass}`}>
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Activo
+          {presentation.badgeLabel}
         </span>
       </div>
 

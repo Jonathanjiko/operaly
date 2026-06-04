@@ -78,10 +78,14 @@ function derivePlanStatus(planCode: string, subscriptionStatus: string, currentP
   const endAt = currentPeriodEnd ? new Date(currentPeriodEnd).getTime() : null
   const expiredByDate = Boolean(endAt && Number.isFinite(endAt) && endAt < now)
 
-  if (normalizedSubscription === "cancelled" || normalizedSubscription === "canceled") return "cancelled"
-  if (normalizedSubscription === "expired" || expiredByDate) return "expired"
-  if (planCode === "trial") return "trialing"
-  if (normalizedSubscription === "trialing") return "trialing"
+  if (["pending_payment", "pending-payment", "pending payment"].includes(normalizedSubscription)) return "pending_payment"
+  if (["past_due", "past-due", "past due", "failed"].includes(normalizedSubscription)) return "past_due"
+  if (normalizedSubscription === "cancelled" || normalizedSubscription === "canceled") return "canceled"
+  if (normalizedSubscription === "expired") return planCode === "trial" ? "expired_trial" : "expired"
+  if (expiredByDate) return planCode === "trial" ? "expired_trial" : "expired"
+  if (normalizedSubscription === "trialing" || normalizedSubscription === "trial") return "trialing"
+  if (normalizedSubscription === "active" || normalizedSubscription === "paid") return "active"
+  if (planCode === "trial" && !normalizedSubscription) return "trialing"
   return "active"
 }
 
@@ -181,6 +185,7 @@ export async function GET(request: Request) {
         code: planCode,
         name: getDisplayPlanName(planCode),
         status: planStatus,
+        subscription_status: String(subscription?.status || client?.plan_status || ""),
         current_period_end: subscription?.current_period_end || null,
         is_active: ["active", "trialing"].includes(planStatus),
       },
