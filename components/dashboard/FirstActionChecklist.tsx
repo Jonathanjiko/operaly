@@ -24,6 +24,7 @@ const DISMISS_KEY = "operaly:first-action-checklist:dismissed"
 export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps) {
   const [status, setStatus] = useState<DashboardStatusPayload | null>(null)
   const [dismissed, setDismissed] = useState(false)
+  const [statusState, setStatusState] = useState<"loading" | "ready" | "error">("loading")
 
   useEffect(() => {
     try {
@@ -37,9 +38,15 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
     const loadStatus = async () => {
       try {
         const payload = await fetchDashboardJson<DashboardStatusPayload>("/api/dashboard/status")
-        if (payload?.ok) setStatus(payload)
+        if (payload?.ok) {
+          setStatus(payload)
+          setStatusState("ready")
+          return
+        }
+        setStatusState("error")
       } catch {
         setStatus(null)
+        setStatusState("error")
       }
     }
 
@@ -126,6 +133,11 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
       </div>
 
       <div className="grid gap-4 p-5 md:grid-cols-3">
+        {statusState === "error" ? (
+          <div className="md:col-span-3 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No pudimos verificar ahora mismo el estado de WhatsApp o Google. Puede seguir y revisarlos desde Configuración e Integraciones.
+          </div>
+        ) : null}
         {steps.map((step) => {
           const Icon =
             step.id === "whatsapp" ? MessageCircle : step.id === "google" ? PlugZap : CalendarClock
@@ -146,6 +158,12 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
 
               <h3 className="mt-4 text-base font-semibold text-[#0F1F63]">{step.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
+              {statusState === "loading" && step.id !== "agenda" ? (
+                <p className="mt-2 text-xs text-slate-500">Verificando estado...</p>
+              ) : null}
+              {statusState === "error" && step.id !== "agenda" ? (
+                <p className="mt-2 text-xs text-amber-700">Estado no confirmado todavía.</p>
+              ) : null}
 
               <Link
                 href={step.href}

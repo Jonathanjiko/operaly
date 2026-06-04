@@ -42,14 +42,21 @@ function UsageRow({
 
 export function PlanStatusWidget() {
   const [status, setStatus] = useState<DashboardStatusPayload | null>(null)
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading")
 
   useEffect(() => {
     const loadStatus = async () => {
       try {
         const payload = await fetchDashboardJson<DashboardStatusPayload>("/api/dashboard/status")
-        if (payload?.ok) setStatus(payload)
+        if (payload?.ok) {
+          setStatus(payload)
+          setLoadState("ready")
+          return
+        }
+        setLoadState("error")
       } catch {
         setStatus(null)
+        setLoadState("error")
       }
     }
 
@@ -66,10 +73,35 @@ export function PlanStatusWidget() {
     ]
   }, [status])
 
-  if (!status) {
+  if (loadState === "loading") {
     return (
       <div className="w-full max-w-[340px] rounded-[26px] border border-slate-200 bg-white/90 p-5 shadow-sm">
         <p className="text-sm text-slate-500">Cargando estado del plan...</p>
+      </div>
+    )
+  }
+
+  if (loadState === "error" || !status) {
+    return (
+      <div className="w-full max-w-[340px] rounded-[26px] border border-amber-200 bg-white/92 p-5 shadow-sm">
+        <p className="text-sm font-semibold text-[#0F1F63]">Estado de plan no disponible</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          No pudimos confirmar ahora mismo su consumo, Google o WhatsApp. Puede revisar su plan e integraciones desde el panel.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/professional/configuracion"
+            className="inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+          >
+            Ver plan
+          </Link>
+          <Link
+            href="/dashboard/professional/integraciones"
+            className="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Revisar Google
+          </Link>
+        </div>
       </div>
     )
   }
