@@ -40,12 +40,13 @@ export default function LoginPage() {
 
   const handleOAuthLogin = async (provider: "google") => {
     try {
-      const redirectTo = `${window.location.origin}/dashboard`
+      const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set("next", "/dashboard")
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo,
+          redirectTo: callbackUrl.toString(),
           queryParams: {
             access_type: "offline",
             prompt: "consent",
