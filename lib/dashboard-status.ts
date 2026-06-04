@@ -13,6 +13,7 @@ export type DashboardStatusPayload = {
   payment: {
     status: string
     checkout_url: string | null
+    status_component?: DashboardPaymentStatusComponent | null
   }
   usage: {
     period: string
@@ -39,6 +40,15 @@ export type DashboardStatusPayload = {
     activation_status: string
     welcome_sent: boolean
   }
+}
+
+export type DashboardPaymentStatusComponent = {
+  status_key: string
+  tone: "success" | "warning" | "error" | "neutral"
+  title: string
+  description?: string | null
+  cta_label?: string | null
+  cta_href?: string | null
 }
 
 export function normalizeDashboardStatus(value: unknown) {
@@ -73,6 +83,101 @@ export function normalizeDashboardPaymentStatus(value: unknown) {
   if (["cancelled", "canceled"].includes(normalized)) return "canceled"
 
   return normalized || "unknown"
+}
+
+export function buildFallbackPaymentStatusComponent({
+  planStatus,
+  paymentStatus,
+  gateAllowed,
+  checkoutUrl,
+}: {
+  planStatus: unknown
+  paymentStatus: unknown
+  gateAllowed: boolean
+  checkoutUrl?: string | null
+}): DashboardPaymentStatusComponent {
+  const normalizedPlanStatus = canonicalDashboardPlanStatus(planStatus)
+  const normalizedPaymentStatus = normalizeDashboardPaymentStatus(paymentStatus)
+  const actionHref = checkoutUrl || "/dashboard/professional/configuracion"
+
+  if (
+    normalizedPlanStatus === "pending_payment" ||
+    normalizedPaymentStatus === "pending_payment" ||
+    normalizedPaymentStatus === "pending"
+  ) {
+    return {
+      status_key: "pending_payment",
+      tone: "warning",
+      title: "Pago pendiente",
+      description: "Completa tu pago para activar tu plan.",
+      cta_label: "Completar pago",
+      cta_href: actionHref,
+    }
+  }
+
+  if (normalizedPlanStatus === "past_due" || normalizedPaymentStatus === "failed") {
+    return {
+      status_key: "past_due",
+      tone: "warning",
+      title: "Pago vencido",
+      description: "Tu suscripción necesita regularización para volver a operar.",
+      cta_label: "Regularizar pago",
+      cta_href: actionHref,
+    }
+  }
+
+  if (normalizedPlanStatus === "canceled" || normalizedPaymentStatus === "canceled") {
+    return {
+      status_key: "rejected",
+      tone: "error",
+      title: "Pago rechazado",
+      description: "Tu último intento no se confirmó.",
+      cta_label: "Intentar nuevamente",
+      cta_href: actionHref,
+    }
+  }
+
+  if (normalizedPlanStatus === "expired_trial") {
+    return {
+      status_key: "expired_trial",
+      tone: "warning",
+      title: "Trial vencido",
+      description: "Tu prueba terminó y ahora necesitas elegir un plan.",
+      cta_label: "Actualizar plan",
+      cta_href: actionHref,
+    }
+  }
+
+  if (normalizedPlanStatus === "trialing") {
+    return {
+      status_key: "trialing",
+      tone: "success",
+      title: "Trial activo",
+      description: "Tu prueba sigue vigente.",
+      cta_label: null,
+      cta_href: null,
+    }
+  }
+
+  if (normalizedPlanStatus === "active" && gateAllowed) {
+    return {
+      status_key: "active",
+      tone: "success",
+      title: "Pago aprobado",
+      description: "Tu plan ya está operativo.",
+      cta_label: null,
+      cta_href: null,
+    }
+  }
+
+  return {
+    status_key: "unknown",
+    tone: "neutral",
+    title: "Estado de pago no disponible",
+    description: "No pudimos confirmar tu estado comercial ahora mismo.",
+    cta_label: null,
+    cta_href: null,
+  }
 }
 
 export function normalizeWhatsappActivationStatus(value: unknown) {

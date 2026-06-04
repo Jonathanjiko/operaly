@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, Mail, MessageCircle, ShieldAlert } from "lucide-react"
+import { AlertCircle, CheckCircle2, Clock3, Mail, MessageCircle, XCircle } from "lucide-react"
 import { fetchDashboardJson } from "@/lib/dashboard-runtime"
 import {
+  buildFallbackPaymentStatusComponent,
   canonicalDashboardPlanStatus,
-  formatPlanStatusDate,
   getDashboardPlanPresentation,
   getUsagePercent,
   isDashboardPlanActive,
-  normalizeDashboardPaymentStatus,
   normalizeWhatsappActivationStatus,
+  type DashboardPaymentStatusComponent,
   type DashboardStatusPayload,
 } from "@/lib/dashboard-status"
 
@@ -50,7 +50,7 @@ function ActionLink({ href, label }: { href: string; label: string }) {
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="mt-4 inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+        className="mt-3 inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
       >
         {label}
       </a>
@@ -60,10 +60,70 @@ function ActionLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="mt-4 inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+      className="mt-3 inline-flex rounded-full bg-[#0F1F63] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
     >
       {label}
     </Link>
+  )
+}
+
+function CompactStatusCard({ component }: { component: DashboardPaymentStatusComponent }) {
+  const toneStyles = {
+    success: {
+      shell: "border-emerald-200 bg-emerald-50/90",
+      iconWrap: "bg-emerald-100 text-emerald-700",
+      title: "text-emerald-900",
+      body: "text-emerald-800",
+    },
+    warning: {
+      shell: "border-amber-200 bg-amber-50/90",
+      iconWrap: "bg-amber-100 text-amber-700",
+      title: "text-amber-900",
+      body: "text-amber-800",
+    },
+    error: {
+      shell: "border-red-200 bg-red-50/90",
+      iconWrap: "bg-red-100 text-red-700",
+      title: "text-red-900",
+      body: "text-red-800",
+    },
+    neutral: {
+      shell: "border-slate-200 bg-white/92",
+      iconWrap: "bg-slate-100 text-slate-700",
+      title: "text-[#0F1F63]",
+      body: "text-slate-600",
+    },
+  } as const
+
+  const tone = toneStyles[component.tone] || toneStyles.neutral
+  const icon =
+    component.tone === "success" ? (
+      <CheckCircle2 className="h-4.5 w-4.5" />
+    ) : component.tone === "error" ? (
+      <XCircle className="h-4.5 w-4.5" />
+    ) : component.tone === "warning" ? (
+      <Clock3 className="h-4.5 w-4.5" />
+    ) : (
+      <AlertCircle className="h-4.5 w-4.5" />
+    )
+
+  return (
+    <div className={`w-full rounded-[22px] border p-4 shadow-sm ${tone.shell}`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${tone.iconWrap}`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm font-semibold ${tone.title}`}>{component.title}</p>
+          {component.description ? (
+            <p className={`mt-1 text-sm leading-5 ${tone.body}`}>{component.description}</p>
+          ) : null}
+          {component.cta_label && component.cta_href ? (
+            <ActionLink href={component.cta_href} label={`${component.cta_label} →`} />
+          ) : null}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -134,7 +194,6 @@ export function PlanStatusWidget() {
   }
 
   const normalizedStatus = canonicalDashboardPlanStatus(status.plan.status)
-  const normalizedPaymentStatus = normalizeDashboardPaymentStatus(status.payment.status)
   const presentation = getDashboardPlanPresentation(status.plan.status)
   const active = isDashboardPlanActive(status.plan.status) && status.plan.gate_allowed
   const whatsappPhone = status.whatsapp.normalized_phone || status.whatsapp.phone || "Pendiente"
@@ -142,52 +201,28 @@ export function PlanStatusWidget() {
     Boolean(status.whatsapp.welcome_sent) ||
     normalizeWhatsappActivationStatus(status.whatsapp.activation_status) === "active"
 
-  if (!active) {
-    const actionHref = status.payment.checkout_url || "/dashboard/professional/configuracion"
-    const detailLabel =
-      normalizedStatus === "pending_payment" || normalizedPaymentStatus === "pending_payment"
-        ? "Tu plan todavía no se marca activo. Apenas el backend confirme el cobro, verás todo operativo aquí."
-        : normalizedStatus === "past_due"
-          ? "Tu último pago no se confirmó y el acceso operativo quedó restringido."
-          : normalizedStatus === "canceled"
-            ? "Tu suscripción fue cancelada y el acceso operativo quedó cerrado."
-            : normalizedStatus === "expired_trial"
-              ? "Tu periodo de prueba terminó y ahora necesitas elegir un plan."
-              : "Tu suscripción venció y el acceso operativo quedó restringido."
+  const compactStatusComponent =
+    status.payment.status_component ||
+    buildFallbackPaymentStatusComponent({
+      planStatus: status.plan.status,
+      paymentStatus: status.payment.status,
+      gateAllowed: status.plan.gate_allowed,
+      checkoutUrl: status.payment.checkout_url,
+    })
 
+  if (!active) {
     return (
-      <div className="w-full max-w-[340px] rounded-[26px] border border-amber-200 bg-amber-50/90 p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <ShieldAlert className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-amber-900">{status.plan.name}</p>
-              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${presentation.badgeClass}`}>
-                {presentation.badgeLabel}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-amber-800">
-              {normalizedStatus === "pending_payment" || normalizedPaymentStatus === "pending_payment"
-                ? "Pending Payment"
-                : "Suscripción restringida"}
-              {status.plan.current_period_end ? ` · ${formatPlanStatusDate(status.plan.current_period_end)}` : ""}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-amber-800">{detailLabel}</p>
-            <ActionLink
-              href={actionHref}
-              label={normalizedStatus === "pending_payment" || normalizedPaymentStatus === "pending_payment" ? "Completar pago →" : "Actualizar plan →"}
-            />
-          </div>
-        </div>
+      <div className="w-full max-w-[340px]">
+        <CompactStatusCard component={compactStatusComponent} />
       </div>
     )
   }
 
   return (
     <div className="w-full max-w-[340px] rounded-[26px] border border-slate-200 bg-white/92 p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+      <CompactStatusCard component={compactStatusComponent} />
+
+      <div className="mt-4 flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-slate-500">Tu plan</p>
           <p className="text-lg font-semibold text-[#0F1F63]">{status.plan.name}</p>
@@ -236,12 +271,14 @@ export function PlanStatusWidget() {
         </div>
       </div>
 
-      <Link
-        href="/dashboard/professional/configuracion"
-        className="mt-4 inline-flex rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#7C3AED] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
-      >
-        Upgrade →
-      </Link>
+      {normalizedStatus === "trialing" ? null : (
+        <Link
+          href="/dashboard/professional/configuracion"
+          className="mt-4 inline-flex rounded-full bg-gradient-to-r from-[#25D366] via-[#3B82F6] to-[#7C3AED] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+        >
+          Upgrade →
+        </Link>
+      )}
     </div>
   )
 }

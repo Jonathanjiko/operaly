@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { getDisplayPlanName } from "@/lib/plans"
+import { buildFallbackPaymentStatusComponent } from "@/lib/dashboard-status"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -254,6 +255,12 @@ export async function GET(request: Request) {
               : planStatus),
     ).trim()
     const checkoutUrl = !gateAllowed && planCode !== "trial" ? `/iniciar-pago?plan=${planCode}&cid=${clientId}` : null
+    const paymentStatusComponent = buildFallbackPaymentStatusComponent({
+      planStatus,
+      paymentStatus,
+      gateAllowed,
+      checkoutUrl,
+    })
 
     const response = NextResponse.json({
       ok: true,
@@ -270,6 +277,7 @@ export async function GET(request: Request) {
       payment: {
         status: paymentStatus,
         checkout_url: checkoutUrl,
+        status_component: paymentStatusComponent,
       },
       usage: {
         period: String(usageResp.data?.period_month || usageResp.data?.period_yyyymm || month),
