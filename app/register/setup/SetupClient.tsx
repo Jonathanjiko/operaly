@@ -39,6 +39,30 @@ function getCookieValue(name: string) {
   return value ? decodeURIComponent(value) : ""
 }
 
+const DIAL: Record<string, string> = {
+  PE: "51", MX: "52", CO: "57", AR: "54", CL: "56", EC: "593",
+  ES: "34", US: "1", CA: "1", GB: "44", BR: "55", FR: "33",
+  DE: "49", IT: "39", PT: "351", NL: "31", AU: "61", JP: "81",
+  KR: "82", IN: "91", AE: "971", SA: "966", ZA: "27", TR: "90",
+  RU: "7", BO: "591", PY: "595", UY: "598", VE: "58", CN: "86",
+}
+
+const LOCAL_LEN: Record<string, [number, number]> = {
+  PE: [9, 9], MX: [10, 10], CO: [10, 10], AR: [10, 10], CL: [9, 9],
+  EC: [9, 9], ES: [9, 9], US: [10, 10], CA: [10, 10], GB: [10, 10],
+  BR: [10, 11], FR: [9, 9], DE: [10, 12], IT: [9, 10], PT: [9, 9],
+  NL: [9, 9], AU: [9, 9], JP: [10, 11], KR: [9, 10], IN: [10, 10],
+  AE: [9, 9], SA: [9, 9], ZA: [9, 10], TR: [10, 10], RU: [10, 10],
+  BO: [8, 8], PY: [9, 9], UY: [8, 9], VE: [10, 10], CN: [11, 11],
+}
+
+const PHONE_PLACEHOLDER: Record<string, string> = {
+  PE: "999 123 456", MX: "55 1234 5678", CO: "310 123 4567",
+  AR: "11 1234 5678", CL: "9 1234 5678", US: "555 123 4567",
+  GB: "7911 123456", ES: "612 345 678", BR: "11 91234 5678",
+  OT: "Escribe tu número con código país",
+}
+
 function validateAnyPhone(input: string, countryCode: string): { ok: boolean; value: string; error: string } {
   const raw = (input || "").trim()
   if (!raw) return { ok: false, value: "", error: "Ingresa tu número de teléfono." }
@@ -114,6 +138,8 @@ export default function SetupClient() {
 
   const selectedPlan = useMemo(() => getPlanByCode(planCode), [planCode])
   const progress = Math.round((step / totalSteps) * 100)
+  const normalizedPhonePreview = useMemo(() => validateAnyPhone(phone, countryCode), [phone, countryCode])
+  const dialCode = DIAL[countryCode] ? `+${DIAL[countryCode]}` : ""
 
   useEffect(() => {
     const hydrate = async () => {
@@ -399,6 +425,29 @@ export default function SetupClient() {
             <div>
               <h1 className="text-3xl font-bold text-[#132B73] mb-2">Tu nombre profesional</h1>
               <p className="text-[#5F6B7A] mb-8">Operaly te identificará con este nombre.</p>
+              {false ? (
+                <div className="rounded-2xl border border-[#D9E1EC] bg-[#F8FBFF] p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-14 min-w-[84px] items-center justify-center rounded-2xl bg-white px-4 font-mono text-base font-semibold text-[#132B73] shadow-sm">
+                      {dialCode}
+                    </div>
+                    <Input
+                      placeholder={PHONE_PLACEHOLDER[countryCode] || "Tu número local"}
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value)
+                        if (phoneError) setPhoneError("")
+                      }}
+                      className={`h-14 rounded-2xl text-lg font-mono ${phoneError ? "border-red-400 focus:border-red-400" : "border-[#D9E1EC]"}`}
+                      autoFocus
+                      onKeyDown={(e) => e.key === "Enter" && canContinue && nextStep()}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs text-[#7A8493]">
+                    Seleccionaste <strong>{countryCode}</strong>. Escribe solo tu número local y Operaly lo guardará normalizado.
+                  </p>
+                </div>
+              ) : null}
               <Input
                 placeholder="Ej: Dr. Juan Pérez"
                 value={fullName}
@@ -520,7 +569,7 @@ export default function SetupClient() {
                 <div className="flex justify-between"><span className="text-[#5F6B7A]">Nombre</span><span className="font-semibold text-[#132B73]">{fullName}</span></div>
                 <div className="flex justify-between"><span className="text-[#5F6B7A]">Especialidad</span><span className="font-semibold text-[#132B73]">{profession}</span></div>
                 <div className="flex justify-between"><span className="text-[#5F6B7A]">País</span><span className="font-semibold text-[#132B73]">{countryCode} — {city}</span></div>
-                <div className="flex justify-between"><span className="text-[#5F6B7A]">WhatsApp</span><span className="font-semibold text-[#132B73] font-mono">{phone}</span></div>
+                <div className="flex justify-between"><span className="text-[#5F6B7A]">WhatsApp</span><span className="font-semibold text-[#132B73] font-mono">{normalizedPhonePreview.ok ? normalizedPhonePreview.value : phone}</span></div>
                 <div className="flex justify-between border-t border-[#E2E8F0] pt-2 mt-1">
                   <span className="text-[#5F6B7A]">Plan</span>
                   <span className={`font-bold text-base ${planCode === "trial" ? "text-[#3B82F6]" : "text-[#7C3AED]"}`}>

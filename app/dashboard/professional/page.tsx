@@ -1024,6 +1024,7 @@ export default function ProfessionalDashboardPage() {
         </div>
       </div>
 
+      {false && (
       <div className="grid gap-4 lg:grid-cols-3">
         {commercialHighlights.map((item) => (
           <div key={item.label} className="rounded-2xl border border-[#D9E1EC] bg-white p-5 shadow-sm">
@@ -1032,6 +1033,37 @@ export default function ProfessionalDashboardPage() {
             <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
           </div>
         ))}
+      </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">WhatsApp registrado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{profile?.phone || "Pendiente"}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {profile?.phoneNormalized && profile.phoneNormalized !== profile.phone
+              ? `Normalizado: ${profile.phoneNormalized}`
+              : "Este es el número que debe recibir la bienvenida y operar con Operaly."}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link href="/dashboard/professional/configuracion">
+              <Button variant="outline" className="rounded-xl border-[#D9E1EC]">
+                Revisar número
+              </Button>
+            </Link>
+            <Link href="/connect-whatsapp">
+              <Button className="rounded-xl bg-gradient-to-r from-[#25D366] to-[#06B6D4] text-white hover:opacity-90">
+                Ver activación
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#D9E1EC] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Plan aplicado</p>
+          <p className="mt-2 text-lg font-semibold text-[#0F1F63]">{getDisplayPlanName(profile?.planCode || "trial")}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{describeThreshold(commercialSignals.highestThreshold)}</p>
+        </div>
       </div>
 
       {commercialSignals.offers.length > 0 && (
@@ -1125,6 +1157,7 @@ export default function ProfessionalDashboardPage() {
         </div>
       )}
 
+      {false && (
       <div className="bg-gradient-to-r from-[#7C3AED]/5 via-[#3B82F6]/5 to-[#06B6D4]/5 rounded-2xl border border-[#7C3AED]/20 p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center">
@@ -1166,6 +1199,7 @@ export default function ProfessionalDashboardPage() {
           </div>
         </div>
       </div>
+      )}
 
       {false ? (
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

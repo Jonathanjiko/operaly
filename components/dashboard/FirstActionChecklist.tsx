@@ -2,16 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, ChevronRight, MessageCircle, CalendarClock, PlugZap, X } from "lucide-react"
+import { CalendarClock, CheckCircle2, ChevronRight, MessageCircle, PlugZap, Wallet, X } from "lucide-react"
 import { fetchDashboardJson } from "@/lib/dashboard-runtime"
-import type { DashboardStatusPayload } from "@/lib/dashboard-status"
+import {
+  canonicalDashboardPlanStatus,
+  normalizeWhatsappActivationStatus,
+  type DashboardStatusPayload,
+} from "@/lib/dashboard-status"
 
 type FirstActionChecklistProps = {
   agendaReady: boolean
 }
 
 type ChecklistStep = {
-  id: "whatsapp" | "google" | "agenda"
+  id: "billing" | "whatsapp" | "google" | "agenda"
   title: string
   description: string
   href: string
@@ -54,33 +58,70 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
   }, [])
 
   const steps = useMemo<ChecklistStep[]>(() => {
-    const whatsappConnected = Boolean(status?.whatsapp.connected)
-    const googleConnected = Boolean(status?.google.connected)
+    const planStatus = canonicalDashboardPlanStatus(status?.plan.status)
+    const paymentReady = status
+      ? Boolean(status.plan.gate_allowed) && ["active", "trialing"].includes(planStatus)
+      : false
+    const checkoutHref = status?.payment.checkout_url || "/dashboard/professional/configuracion"
+    const whatsappReady =
+      paymentReady &&
+      (Boolean(status?.whatsapp.welcome_sent) ||
+        normalizeWhatsappActivationStatus(status?.whatsapp.activation_status) === "active")
+    const googleReady = paymentReady && Boolean(status?.google.connected)
+
+    if (status && !paymentReady && status.plan.code !== "trial") {
+      return [
+        {
+          id: "billing",
+          title: "Activa tu plan",
+          description: "Tu cuenta todavía no queda operativa hasta que el backend confirme el pago.",
+          href: checkoutHref,
+          cta: "Completar pago",
+          done: false,
+        },
+        {
+          id: "whatsapp",
+          title: "WhatsApp quedará listo después",
+          description: "El número se considera listo cuando el pago se aprueba y la bienvenida ya fue enviada.",
+          href: "/dashboard/professional/configuracion",
+          cta: "Ver número",
+          done: false,
+        },
+        {
+          id: "google",
+          title: "Google se habilita al activar",
+          description: "Tus integraciones deben sentirse activas solo cuando el plan ya quedó vigente.",
+          href: "/dashboard/professional/integraciones",
+          cta: "Revisar integraciones",
+          done: false,
+        },
+      ]
+    }
 
     return [
       {
         id: "whatsapp",
         title: "Conecta tu WhatsApp",
-        description: "Asegura el número desde el que Operaly te acompaña a diario.",
+        description: "Solo queda listo cuando la bienvenida ya fue enviada o el backend marcó la activación.",
         href: "/dashboard/professional/configuracion",
-        cta: whatsappConnected ? "Listo" : "Revisar número",
-        done: whatsappConnected,
+        cta: whatsappReady ? "Listo" : "Revisar WhatsApp",
+        done: whatsappReady,
       },
       {
         id: "google",
         title: "Conecta Google Suite",
         description: "Gmail, Calendar y Drive hacen que el asistente se sienta completo.",
         href: "/dashboard/professional/integraciones",
-        cta: googleConnected ? "Conectado" : "Conectar Google",
-        done: googleConnected,
+        cta: googleReady ? "Conectado" : "Conectar Google",
+        done: googleReady,
       },
       {
         id: "agenda",
         title: "Crea tu primera acción",
         description: "Agenda una cita o deja una tarea para que Operaly empiece a ayudarte.",
         href: "/dashboard/professional/agenda",
-        cta: agendaReady ? "En marcha" : "Ir a agenda",
-        done: agendaReady,
+        cta: paymentReady && agendaReady ? "En marcha" : "Ir a agenda",
+        done: paymentReady && agendaReady,
       },
     ]
   }, [agendaReady, status])
@@ -95,12 +136,10 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
       <div className="bg-[linear-gradient(135deg,#0F1F63_0%,#3B82F6_58%,#A855F7_100%)] px-6 py-5 text-white">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-              Primeros pasos
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Primeros pasos</p>
             <h2 className="mt-2 text-xl font-semibold">Deja Operaly listo para ayudarte de verdad</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/78">
-              Completa estas tres acciones una sola vez. Después tu día empieza mucho más ordenado.
+              Completa estas acciones una sola vez. Después tu día empieza mucho más ordenado.
             </p>
           </div>
 
@@ -138,9 +177,16 @@ export function FirstActionChecklist({ agendaReady }: FirstActionChecklistProps)
             No pudimos verificar ahora mismo el estado de WhatsApp o Google. Puede seguir y revisarlos desde Configuración e Integraciones.
           </div>
         ) : null}
+
         {steps.map((step) => {
           const Icon =
-            step.id === "whatsapp" ? MessageCircle : step.id === "google" ? PlugZap : CalendarClock
+            step.id === "billing"
+              ? Wallet
+              : step.id === "whatsapp"
+                ? MessageCircle
+                : step.id === "google"
+                  ? PlugZap
+                  : CalendarClock
 
           return (
             <div

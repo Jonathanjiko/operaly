@@ -65,6 +65,14 @@ function isConnectedGoogleStatus(value: unknown) {
   return ["connected", "ok", "active", "synced"].includes(normalizeStatus(value))
 }
 
+function isSuccessfulWelcomeStatus(value: unknown) {
+  return ["sent", "delivered", "success", "completed"].includes(normalizeStatus(value))
+}
+
+function isPendingWelcomeStatus(value: unknown) {
+  return ["pending", "queued", "processing", "requested"].includes(normalizeStatus(value))
+}
+
 function getCurrentPeriods() {
   const now = new Date()
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -111,10 +119,10 @@ export async function GET(request: Request) {
 
     const { month, legacy } = getCurrentPeriods()
 
-    const [clientResp, subscriptionResp, usageResp, googleResp] = await Promise.all([
+    const [clientResp, subscriptionResp, usageResp, googleResp, prefsResp, welcomeResp, paymentResp] = await Promise.all([
       admin
         .from("clients")
-        .select("id, plan_code, plan_status, phone, phone_normalized")
+        .select("id, plan_code, plan_status, phone, phone_normalized, phone_verification_status")
         .eq("id", clientId)
         .maybeSingle(),
       admin
@@ -133,9 +141,29 @@ export async function GET(request: Request) {
         .maybeSingle(),
       admin
         .from("google_connections")
-        .select("*")
+        .select("connection_status, status, granted_scopes, scopes, authorized_products, updated_at")
         .eq("client_id", clientId)
         .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("client_preferences")
+        .select("pref_key, pref_value")
+        .eq("client_id", clientId)
+        .in("pref_key", ["welcome_initial_status", "welcome_initial_sent_at", "pending_welcome_message"]),
+      admin
+        .from("scheduled_messages")
+        .select("status, message_status, delivery_status, sent_at, updated_at")
+        .eq("client_id", clientId)
+        .eq("message_kind", "welcome_initial")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("payments")
+        .select("status, created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
     ])
@@ -150,6 +178,7 @@ export async function GET(request: Request) {
 
     const planCode = String(subscription?.plan_code || client?.plan_code || "trial").trim().toLowerCase()
     const planStatus = derivePlanStatus(planCode, String(subscription?.status || client?.plan_status || ""), subscription?.current_period_end || null)
+    const gateAllowed = ["active", "trialing"].includes(planStatus)
 
     let messagesLimit = PLAN_LIMIT_FALLBACK[planCode]?.messages ?? 0
     let callsLimit = PLAN_LIMIT_FALLBACK[planCode]?.calls ?? 0
@@ -177,6 +206,54 @@ export async function GET(request: Request) {
 
     const connectionStatus = String(googleConnection?.connection_status || googleConnection?.status || "")
     const googleConnected = isConnectedGoogleStatus(connectionStatus)
+    const normalizedPhone = String(client?.phone_normalized || "").trim() || null
+    const rawPhone = String(client?.phone || "").trim() || null
+    const phoneVerificationStatus = normalizeStatus(client?.phone_verification_status || "pending")
+    const preferenceMap = ((prefsResp.data || []) as Array<{ pref_key?: string; pref_value?: string }>).reduce<Record<string, string>>(
+      (acc, row) => {
+        const key = String(row.pref_key || "").trim()
+        if (!key) return acc
+        acc[key] = String(row.pref_value || "")
+        return acc
+      },
+      {},
+    )
+    const latestWelcomeStatus =
+      String(
+        welcomeResp.data?.delivery_status ||
+          welcomeResp.data?.message_status ||
+          welcomeResp.data?.status ||
+          preferenceMap.welcome_initial_status ||
+          "",
+      ).trim() || null
+    const welcomeSent =
+      isSuccessfulWelcomeStatus(latestWelcomeStatus) ||
+      Boolean(preferenceMap.welcome_initial_sent_at)
+    const pendingWelcome =
+      isPendingWelcomeStatus(latestWelcomeStatus) ||
+      normalizeStatus(preferenceMap.pending_welcome_message) === "true"
+    const activationStatus = !normalizedPhone && !rawPhone
+      ? "missing_phone"
+      : !gateAllowed
+        ? "awaiting_plan"
+        : welcomeSent || ["verified", "active", "connected"].includes(phoneVerificationStatus)
+          ? "active"
+          : ["failed", "rejected", "invalid"].includes(phoneVerificationStatus)
+            ? "attention"
+            : pendingWelcome || ["pending", "requested", "sent"].includes(phoneVerificationStatus)
+              ? "pending"
+              : "pending"
+    const paymentStatus = String(
+      paymentResp.data?.status ||
+        (planStatus === "pending_payment"
+          ? "pending_payment"
+          : planStatus === "past_due"
+            ? "failed"
+            : planStatus === "canceled"
+              ? "canceled"
+              : planStatus),
+    ).trim()
+    const checkoutUrl = !gateAllowed && planCode !== "trial" ? `/iniciar-pago?plan=${planCode}&cid=${clientId}` : null
 
     const response = NextResponse.json({
       ok: true,
@@ -186,8 +263,13 @@ export async function GET(request: Request) {
         name: getDisplayPlanName(planCode),
         status: planStatus,
         subscription_status: String(subscription?.status || client?.plan_status || ""),
+        gate_allowed: gateAllowed,
         current_period_end: subscription?.current_period_end || null,
-        is_active: ["active", "trialing"].includes(planStatus),
+        is_active: gateAllowed,
+      },
+      payment: {
+        status: paymentStatus,
+        checkout_url: checkoutUrl,
       },
       usage: {
         period: String(usageResp.data?.period_month || usageResp.data?.period_yyyymm || month),
@@ -208,8 +290,11 @@ export async function GET(request: Request) {
         },
       },
       whatsapp: {
-        connected: Boolean(client?.phone_normalized || client?.phone),
-        phone: client?.phone_normalized || client?.phone || null,
+        connected: Boolean(normalizedPhone || rawPhone),
+        phone: rawPhone,
+        normalized_phone: normalizedPhone,
+        activation_status: activationStatus,
+        welcome_sent: welcomeSent,
       },
     })
     response.headers.set("Cache-Control", "no-store, max-age=0")

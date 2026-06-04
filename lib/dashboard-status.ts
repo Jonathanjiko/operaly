@@ -6,8 +6,13 @@ export type DashboardStatusPayload = {
     name: string
     status: string
     subscription_status: string
+    gate_allowed: boolean
     current_period_end: string | null
     is_active: boolean
+  }
+  payment: {
+    status: string
+    checkout_url: string | null
   }
   usage: {
     period: string
@@ -30,6 +35,9 @@ export type DashboardStatusPayload = {
   whatsapp: {
     connected: boolean
     phone: string | null
+    normalized_phone: string | null
+    activation_status: string
+    welcome_sent: boolean
   }
 }
 
@@ -53,6 +61,28 @@ export function canonicalDashboardPlanStatus(value: unknown) {
 
 export function isDashboardPlanActive(status: unknown) {
   return ["active", "trialing"].includes(canonicalDashboardPlanStatus(status))
+}
+
+export function normalizeDashboardPaymentStatus(value: unknown) {
+  const normalized = normalizeDashboardStatus(value)
+
+  if (["approved", "paid", "succeeded", "active"].includes(normalized)) return "approved"
+  if (["pending_payment", "pending-payment", "pending payment"].includes(normalized)) return "pending_payment"
+  if (["pending", "processing", "initiated"].includes(normalized)) return "pending"
+  if (["past_due", "past-due", "past due", "failed", "declined"].includes(normalized)) return "failed"
+  if (["cancelled", "canceled"].includes(normalized)) return "canceled"
+
+  return normalized || "unknown"
+}
+
+export function normalizeWhatsappActivationStatus(value: unknown) {
+  const normalized = normalizeDashboardStatus(value)
+
+  if (["active", "verified", "connected", "ready"].includes(normalized)) return "active"
+  if (["pending", "requested", "queued", "awaiting_plan", "welcome_pending"].includes(normalized)) return "pending"
+  if (["failed", "rejected", "missing_phone", "disconnected", "attention"].includes(normalized)) return "attention"
+
+  return normalized || "unknown"
 }
 
 export function formatPlanStatusDate(value: string | null | undefined) {
