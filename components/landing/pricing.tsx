@@ -65,6 +65,15 @@ type PricingTexts = {
   modalCta: string
 }
 
+const PEN_LABEL: Record<string, string> = {
+  es: "Cobro real en soles",
+  en: "Billed in soles",
+  pt: "Cobrado em soles",
+  fr: "Facturé en soles",
+  de: "Abgerechnet in Soles",
+  it: "Fatturato in soles",
+}
+
 const pricingCopy: Record<"es" | "en", PricingTexts> = {
   es: {
     eyebrow: "Tu liberaciÃ³n, tu plan",
@@ -132,7 +141,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
         "250 mensajes IA",
         "5 min de voz y llamadas",
         "0.5 GB de almacenamiento",
-        "100 contactos y 2 automatizaciones",
+        "20 contactos y 2 automatizaciones",
         "Google Suite incluido durante trial",
       ],
     },
@@ -154,7 +163,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
       cta: "Elegir Pro",
       features: [
         "3000 mensajes IA",
-        "60 min de voz y llamadas",
+        "20 min de voz y llamadas",
         "5 GB de almacenamiento",
         "1000 contactos y 20 automatizaciones",
         "Google Suite incluido",
@@ -182,7 +191,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
         "250 AI messages",
         "5 min of voice and calls",
         "0.5 GB of storage",
-        "100 contacts and 2 automations",
+        "20 contacts and 2 automations",
         "Google Suite included during trial",
       ],
     },
@@ -204,7 +213,7 @@ const localizedPlanCards: Record<"es" | "en", Record<string, { title: string; de
       cta: "Choose Pro",
       features: [
         "3000 AI messages",
-        "60 min of voice and calls",
+        "20 min of voice and calls",
         "5 GB of storage",
         "1000 contacts and 20 automations",
         "Google Suite included",
@@ -568,7 +577,7 @@ const faqByLocale: Record<"es" | "en", { question: string; answer: string }[]> =
     {
       question: "¿Cuál es el plan más inteligente?",
       answer:
-        "Depende de tu uso. Para empezar, el Trial te da 7 días completos. Si ya sabes que Operaly es para ti, Pro es el punto donde el producto se siente más completo: Google incluido, 60 minutos de voz, 3000 mensajes y todas las funciones activas.",
+        "Depende de tu uso. Para empezar, el Trial te da 7 días completos. Si ya sabes que Operaly es para ti, Pro es el punto donde el producto se siente más completo: Google incluido, 20 minutos de voz, 3000 mensajes y todas las funciones activas.",
     },
   ],
   en: [
@@ -610,7 +619,7 @@ const faqByLocale: Record<"es" | "en", { question: string; answer: string }[]> =
     {
       question: "Which plan is the smartest choice?",
       answer:
-        "It depends on your usage. To start, Trial gives you 7 full days. If you already know Operaly is for you, Pro is the point where the product feels most complete: Google included, 60 voice minutes, 3000 messages and every key function active.",
+        "It depends on your usage. To start, Trial gives you 7 full days. If you already know Operaly is for you, Pro is the point where the product feels most complete: Google included, 20 voice minutes, 3000 messages and every key function active.",
     },
   ],
 }
@@ -620,11 +629,12 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
   const [selectedPlan, setSelectedPlan] = useState("pro")
   const [selectedFeature, setSelectedFeature] = useState<FeatureCard | null>(null)
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
-  const isSpanish = locale === "es"
-  const t = isSpanish ? pricingCopy.es : pricingCopy.en
-  const localizedPlans = isSpanish ? localizedPlanCards.es : localizedPlanCards.en
-  const detailGroups = isSpanish ? detailSets.es : detailSets.en
-  const faqItems = isSpanish ? faqByLocale.es : faqByLocale.en
+  const contentLocale = locale === "en" ? "en" : "es"
+  const isSpanish = contentLocale === "es"
+  const t = pricingCopy[contentLocale]
+  const localizedPlans = localizedPlanCards[contentLocale]
+  const detailGroups = detailSets[contentLocale]
+  const faqItems = faqByLocale[contentLocale]
 
   useEffect(() => {
     const loadPublicPlans = async () => {
@@ -785,7 +795,7 @@ export function Pricing({ locale = "es" }: { locale?: string }) {
                     </p>
                     {!isPeru && plan.price > 0 ? (
                       <p className={`mt-2 text-xs ${isActive ? "text-white/60" : "text-[#0369A1]"}`}>
-                        Cobro real en soles: {pricing.formatPen(pricing.toPenAmount(plan.price, plan.currency))}
+                        {(PEN_LABEL[locale] ?? PEN_LABEL["es"])}: S/ {pricing.toPenAmount(plan.price, plan.currency)}
                       </p>
                     ) : null}
                   </div>

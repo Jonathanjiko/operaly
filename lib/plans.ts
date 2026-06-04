@@ -25,7 +25,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
       "250 mensajes IA",
       "5 min de voz y llamadas",
       "0.5 GB de almacenamiento",
-      "100 contactos y 2 automatizaciones",
+      "20 contactos y 2 automatizaciones",
       "Google Suite incluido durante trial",
     ],
   },
@@ -56,7 +56,7 @@ export const OPERLAY_PLANS: OperalyPlan[] = [
     popular: true,
     features: [
       "3000 mensajes IA",
-      "60 min de voz y llamadas",
+      "20 min de voz y llamadas",
       "5 GB de almacenamiento",
       "1000 contactos y 20 automatizaciones",
       "Google Suite incluido",

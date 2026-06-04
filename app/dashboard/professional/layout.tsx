@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import NotificationBell from "@/components/dashboard/NotificationBell"
+import { PlanStatusWidget } from "@/components/dashboard/PlanStatusWidget"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -668,7 +669,10 @@ export default function ProfessionalDashboardLayout({
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500">{currentPage.subtitle}</p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
+              <div className="hidden xl:block">
+                <PlanStatusWidget />
+              </div>
               <div className="hidden items-center gap-2 xl:flex">
                 <Link
                   href={accessRestricted ? "#" : "/dashboard/professional/configuracion"}

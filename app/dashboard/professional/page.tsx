@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { FirstActionChecklist } from "@/components/dashboard/FirstActionChecklist"
 import { supabase } from "@/lib/supabase"
 import { getClientContext } from "@/lib/client-context"
 import { labelForLanguage, localeFromLanguage } from "@/lib/runtime-locale"
@@ -900,6 +901,8 @@ export default function ProfessionalDashboardPage() {
 
   return (
     <div className="space-y-8">
+      <FirstActionChecklist agendaReady={todayTasks.length > 0 || upcomingEvents.length > 0} />
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#0F1F63]">
