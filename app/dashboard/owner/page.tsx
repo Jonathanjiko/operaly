@@ -65,6 +65,10 @@ type PaymentRow = {
   order_number: string | null
   transaction_id: string | null
   created_at: string
+  canonical_status?: string | null
+  anomaly_code?: string | null
+  requires_review?: boolean
+  counts_as_revenue?: boolean
 }
 
 type SubscriptionRow = {
@@ -84,6 +88,8 @@ type SubscriptionRow = {
   canonical_status?: string | null
   owner_dashboard_status?: string | null
   recovery_status?: string | null
+  anomaly_code?: string | null
+  requires_review?: boolean
 }
 
 type ClientRow = {
@@ -117,6 +123,19 @@ type ClientRow = {
   converted_after_recovery?: boolean
   blocked_reason?: string | null
   gate_allowed?: boolean
+  anomaly_code?: string | null
+  requires_review?: boolean
+}
+
+type OwnerTruthPayload = {
+  ok?: boolean
+  truth?: Record<string, any>
+  data?: Record<string, any>
+  clients?: Array<Record<string, any>>
+  subscriptions?: Array<Record<string, any>>
+  payments?: Array<Record<string, any>>
+  summary?: Record<string, any>
+  revenue?: Record<string, any>
 }
 
 type OwnerActivityEntry = {
@@ -194,34 +213,56 @@ function isPastDate(value: string | null | undefined) {
   return parsed.getTime() < Date.now()
 }
 
+function asTruthArray<T = Record<string, any>>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
+function normalizeOwnerTruthStatus(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase()
+
+  if (!normalized) return ""
+  if (["pending_payment", "pending-payment", "pending payment"].includes(normalized)) return "pending_payment"
+  if (["trial_active", "trialing", "trial"].includes(normalized)) return "trial_active"
+  if (["core_active", "core active"].includes(normalized)) return "core_active"
+  if (["pro_active", "pro active"].includes(normalized)) return "pro_active"
+  if (["pro_plus_active", "pro+_active", "pro plus active"].includes(normalized)) return "pro_plus_active"
+  if (["past_due", "past-due", "past due"].includes(normalized)) return "past_due"
+  if (["cancelled", "canceled"].includes(normalized)) return "canceled"
+  if (["rejected", "declined", "failed"].includes(normalized)) return "rejected"
+  if (["anomaly", "needs_review", "requires_review"].includes(normalized)) return "anomaly"
+  if (["paid_active", "active", "approved", "paid", "succeeded"].includes(normalized)) return "active"
+  if (["trial_expired", "expired_trial"].includes(normalized)) return "expired_trial"
+  if (["paid_expired", "expired"].includes(normalized)) return "expired"
+  if (normalized === "blocked") return "blocked"
+  if (normalized === "inactive") return "inactive"
+
+  return normalized
+}
+
 function getResolvedSubscriptionStatus(subscription: SubscriptionRow) {
-  const ownerStatus = String(subscription.owner_dashboard_status || "").toLowerCase()
+  const ownerStatus = normalizeOwnerTruthStatus(subscription.owner_dashboard_status)
   if (ownerStatus) return ownerStatus
-  const canonicalStatus = String(subscription.canonical_status || "").toLowerCase()
-  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
-  if (canonicalStatus === "paid_expired") return "expired"
+  const canonicalStatus = normalizeOwnerTruthStatus(subscription.canonical_status)
   if (canonicalStatus) return canonicalStatus
   const rawStatus = String(subscription.status || "").toLowerCase()
   const planCode = String(subscription.plan_code || "").toLowerCase()
   const expired = isPastDate(subscription.current_period_end)
 
-  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && planCode === "trial") return "expired_trial"
   if (expired && rawStatus === "active") return "expired"
   return rawStatus || "inactive"
 }
 
 function getResolvedClientStatus(client: ClientRow) {
-  const ownerStatus = String(client.owner_dashboard_status || "").toLowerCase()
+  const ownerStatus = normalizeOwnerTruthStatus(client.owner_dashboard_status)
   if (ownerStatus) return ownerStatus
-  const canonicalStatus = String(client.canonical_status || "").toLowerCase()
-  if (canonicalStatus === "trial_active" || canonicalStatus === "paid_active") return "active"
-  if (canonicalStatus === "paid_expired") return "expired"
+  const canonicalStatus = normalizeOwnerTruthStatus(client.canonical_status)
   if (canonicalStatus) return canonicalStatus
   const rawStatus = String(client.status || "").toLowerCase()
   const planCode = String(client.plan_code || "").toLowerCase()
   const expired = isPastDate(client.current_period_end)
 
-  if (expired && planCode === "trial") return "trial_expired"
+  if (expired && planCode === "trial") return "expired_trial"
   if (expired && rawStatus === "active") return "expired"
   return rawStatus || "inactive"
 }
@@ -248,6 +289,57 @@ function getOwnerPlanLabel(planCode: string | null | undefined) {
   if (normalized === "owner_unlimited") return "Owner ilimitado"
   if (normalized === "internal") return "Interno"
   return getDisplayPlanName(planCode)
+}
+
+function getOwnerDisplayStatusLabel(status: string) {
+  if (status === "trial_recovery_active") return "trial expirado en recuperación"
+  if (status === "expired_trial") return "Trial Expired"
+  if (status === "expired") return "expirado"
+  if (status === "inactive") return "inactivo"
+  if (status === "blocked") return "bloqueado"
+  if (status === "active") return "Active"
+  if (status === "trial_active") return "Trial Active"
+  if (status === "core_active") return "Core Active"
+  if (status === "pro_active") return "Pro Active"
+  if (status === "pro_plus_active") return "Pro Plus Active"
+  if (status === "pending_payment") return "Pending Payment"
+  if (status === "past_due") return "Past Due"
+  if (status === "canceled") return "Canceled"
+  if (status === "rejected") return "Rejected"
+  if (status === "anomaly") return "Anomaly"
+  if (status === "converted") return "convertido"
+  return status || "sin estado"
+}
+
+function getOwnerDisplayStatusClass(status: string | null | undefined) {
+  const normalized = normalizeOwnerTruthStatus(status)
+
+  if (["active", "core_active", "pro_active", "pro_plus_active", "trial_active"].includes(normalized)) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700"
+  }
+
+  if (normalized === "pending_payment" || normalized === "past_due") {
+    return "border-amber-200 bg-amber-50 text-amber-700"
+  }
+
+  if (normalized === "rejected" || normalized === "anomaly" || normalized === "blocked" || normalized === "expired_trial" || normalized === "expired") {
+    return "border-red-200 bg-red-50 text-red-700"
+  }
+
+  if (normalized === "inactive" || normalized === "canceled") {
+    return "border-slate-200 bg-slate-100 text-slate-700"
+  }
+
+  return "border-slate-200 bg-slate-100 text-slate-700"
+}
+
+function shouldCountPaymentAsRevenue(payment: PaymentRow) {
+  if (payment.counts_as_revenue != null) {
+    return Boolean(payment.counts_as_revenue)
+  }
+
+  const status = normalizeOwnerTruthStatus(payment.canonical_status || payment.status)
+  return ["active", "core_active", "pro_active", "pro_plus_active"].includes(status)
 }
 
 function MetricCard({
@@ -356,6 +448,245 @@ function UsageBar({
   )
 }
 
+function mergeOwnerTruthData(
+  dashboardPayload: Record<string, any>,
+  truthPayload: OwnerTruthPayload | null | undefined
+) {
+  const truthRoot = (truthPayload?.truth || truthPayload?.data || truthPayload || {}) as Record<string, any>
+  const truthClients = asTruthArray<Record<string, any>>(truthRoot.clients || truthPayload?.clients)
+  const truthSubscriptions = asTruthArray<Record<string, any>>(truthRoot.subscriptions || truthPayload?.subscriptions)
+  const truthPayments = asTruthArray<Record<string, any>>(truthRoot.payments || truthPayload?.payments)
+  const truthSummary = (truthRoot.summary || truthPayload?.summary || {}) as Record<string, any>
+  const truthRevenue = (truthRoot.revenue || {}) as Record<string, any>
+
+  const dashboardClients = ((dashboardPayload.clients || []) as ClientRow[]).map((client) => ({ ...client }))
+  const dashboardSubscriptions = ((dashboardPayload.subscriptions || []) as SubscriptionRow[]).map((subscription) => ({ ...subscription }))
+  const dashboardPayments = ((dashboardPayload.payments || []) as PaymentRow[]).map((payment) => ({ ...payment }))
+
+  const clientMap = new Map(dashboardClients.map((client) => [String(client.id), client]))
+  const subscriptionMap = new Map(dashboardSubscriptions.map((subscription) => [String(subscription.id), subscription]))
+  const paymentMap = new Map(dashboardPayments.map((payment) => [String(payment.id), payment]))
+
+  truthClients.forEach((row) => {
+    const id = String(row.id || row.client_id || "")
+    if (!id) return
+
+    const next: ClientRow = {
+      ...(clientMap.get(id) || {
+        id,
+        name: null,
+        email: null,
+        phone: null,
+        country_code: null,
+        city: null,
+        timezone: null,
+        plan_code: null,
+        plan_status: null,
+        status: null,
+        created_at: String(row.created_at || new Date().toISOString()),
+        subscription_started_at: null,
+        current_period_end: null,
+        latest_payment_at: null,
+        messages_used: 0,
+        audio_minutes_used: 0,
+        automations_used: 0,
+        storage_used_mb: 0,
+        docs_count: 0,
+      }),
+      name: row.name ?? row.client_name ?? clientMap.get(id)?.name ?? null,
+      email: row.email ?? clientMap.get(id)?.email ?? null,
+      phone: row.phone ?? row.whatsapp_phone ?? clientMap.get(id)?.phone ?? null,
+      country_code: row.country_code ?? clientMap.get(id)?.country_code ?? null,
+      city: row.city ?? clientMap.get(id)?.city ?? null,
+      timezone: row.timezone ?? clientMap.get(id)?.timezone ?? null,
+      plan_code: row.plan_code ?? row.entitlement_plan_code ?? clientMap.get(id)?.plan_code ?? null,
+      plan_status: row.subscription_status ?? row.plan_status ?? clientMap.get(id)?.plan_status ?? null,
+      status: row.subscription_status ?? row.status ?? clientMap.get(id)?.status ?? null,
+      current_period_end: row.current_period_end ?? clientMap.get(id)?.current_period_end ?? null,
+      latest_payment_at: row.latest_payment_at ?? clientMap.get(id)?.latest_payment_at ?? null,
+      canonical_status:
+        row.owner_console_status ||
+        row.canonical_status ||
+        row.canonical_plan_status ||
+        row.payment_status ||
+        clientMap.get(id)?.canonical_status ||
+        null,
+      owner_dashboard_status:
+        row.owner_console_status ||
+        row.owner_dashboard_status ||
+        clientMap.get(id)?.owner_dashboard_status ||
+        null,
+      gate_allowed:
+        typeof row.gate_allowed === "boolean" ? row.gate_allowed : clientMap.get(id)?.gate_allowed,
+      anomaly_code: row.anomaly_code ?? row.anomaly?.code ?? null,
+      requires_review:
+        Boolean(row.requires_review) || Boolean(row.anomaly_code) || Boolean(row.anomaly?.code),
+    }
+
+    clientMap.set(id, next)
+  })
+
+  truthSubscriptions.forEach((row) => {
+    const id = String(row.id || row.subscription_id || "")
+    if (!id) return
+    const clientId = String(row.client_id || row.id_client || "")
+    const current = subscriptionMap.get(id)
+
+    subscriptionMap.set(id, {
+      ...(current || {
+        id,
+        client_id: clientId,
+        client_name: null,
+        client_phone: null,
+        country_code: null,
+        city: null,
+        plan_code: "",
+        status: "",
+        amount: 0,
+        currency_code: "PEN",
+        current_period_start: null,
+        current_period_end: null,
+        created_at: String(row.created_at || new Date().toISOString()),
+      }),
+      client_id: clientId || current?.client_id || "",
+      client_name: row.client_name ?? current?.client_name ?? null,
+      client_phone: row.client_phone ?? current?.client_phone ?? null,
+      country_code: row.country_code ?? current?.country_code ?? null,
+      city: row.city ?? current?.city ?? null,
+      plan_code: String(row.plan_code || row.entitlement_plan_code || current?.plan_code || ""),
+      status: String(row.subscription_status || row.status || current?.status || ""),
+      current_period_start: row.current_period_start ?? current?.current_period_start ?? null,
+      current_period_end: row.current_period_end ?? current?.current_period_end ?? null,
+      canonical_status:
+        row.owner_console_status || row.canonical_status || row.subscription_status || current?.canonical_status || null,
+      owner_dashboard_status:
+        row.owner_console_status || row.owner_dashboard_status || current?.owner_dashboard_status || null,
+      anomaly_code: row.anomaly_code ?? row.anomaly?.code ?? null,
+      requires_review:
+        Boolean(row.requires_review) || Boolean(row.anomaly_code) || Boolean(row.anomaly?.code),
+    })
+  })
+
+  truthPayments.forEach((row) => {
+    const id = String(row.id || row.payment_id || "")
+    if (!id) return
+    const current = paymentMap.get(id)
+
+    paymentMap.set(id, {
+      ...(current || {
+        id,
+        client_id: String(row.client_id || ""),
+        client_name: null,
+        client_phone: null,
+        country_code: null,
+        city: null,
+        plan_code: null,
+        status: "",
+        amount: 0,
+        currency_code: "PEN",
+        payment_method: null,
+        payment_method_brand: null,
+        order_number: null,
+        transaction_id: null,
+        created_at: String(row.created_at || new Date().toISOString()),
+      }),
+      client_id: String(row.client_id || current?.client_id || ""),
+      client_name: row.client_name ?? current?.client_name ?? null,
+      client_phone: row.client_phone ?? current?.client_phone ?? null,
+      country_code: row.country_code ?? current?.country_code ?? null,
+      city: row.city ?? current?.city ?? null,
+      plan_code: row.plan_code ?? row.entitlement_plan_code ?? current?.plan_code ?? null,
+      status: String(row.payment_status || row.status || current?.status || ""),
+      amount: Number(row.amount_pen ?? row.amount ?? row.display_amount ?? current?.amount ?? 0),
+      currency_code: String(row.currency_code || row.currency || current?.currency_code || "PEN"),
+      payment_method: row.payment_method ?? row.provider ?? current?.payment_method ?? null,
+      payment_method_brand: row.payment_method_brand ?? current?.payment_method_brand ?? null,
+      order_number: row.order_number ?? row.provider_ref ?? current?.order_number ?? null,
+      transaction_id: row.transaction_id ?? row.provider_ref ?? current?.transaction_id ?? null,
+      created_at: String(row.created_at || row.paid_at || current?.created_at || new Date().toISOString()),
+      canonical_status:
+        row.owner_console_status || row.canonical_status || row.payment_status || current?.canonical_status || null,
+      anomaly_code: row.anomaly_code ?? row.anomaly?.code ?? null,
+      requires_review:
+        Boolean(row.requires_review) || Boolean(row.anomaly_code) || Boolean(row.anomaly?.code),
+      counts_as_revenue:
+        typeof row.counts_as_revenue === "boolean"
+          ? row.counts_as_revenue
+          : typeof row.revenue_confirmed === "boolean"
+            ? row.revenue_confirmed
+            : current?.counts_as_revenue,
+    })
+  })
+
+  const clients = Array.from(clientMap.values())
+  const subscriptions = Array.from(subscriptionMap.values())
+  const payments = Array.from(paymentMap.values())
+
+  const approvedPayments = payments.filter((payment) => shouldCountPaymentAsRevenue(payment))
+  const pendingPayments = payments.filter(
+    (payment) => normalizeOwnerTruthStatus(payment.canonical_status || payment.status) === "pending_payment"
+  )
+  const failedPayments = payments.filter((payment) => {
+    const status = normalizeOwnerTruthStatus(payment.canonical_status || payment.status)
+    return status === "rejected" || status === "anomaly"
+  })
+  const activeSubscriptions = subscriptions.filter((subscription) => {
+    const status = getResolvedSubscriptionStatus(subscription)
+    return ["active", "core_active", "pro_active", "pro_plus_active", "trial_active"].includes(status)
+  })
+
+  const summary: SummaryRow = {
+    total_clients: Number(truthSummary.total_clients ?? clients.length),
+    active_clients: Number(
+      truthSummary.active_clients ??
+        clients.filter((client) => ["active", "core_active", "pro_active", "pro_plus_active", "trial_active"].includes(getResolvedClientStatus(client))).length
+    ),
+    trial_clients: Number(
+      truthSummary.trial_clients ??
+        clients.filter((client) => String(client.plan_code || "").toLowerCase() === "trial").length
+    ),
+    paid_clients: Number(
+      truthSummary.paid_clients ??
+        clients.filter((client) => ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())).length
+    ),
+    pro_plus_clients: Number(
+      truthSummary.pro_plus_clients ??
+        clients.filter((client) => String(client.plan_code || "").toLowerCase() === "pro_plus").length
+    ),
+    payments_approved_total: Number(
+      truthRevenue.approved_total_pen ??
+        truthSummary.payments_approved_total ??
+        approvedPayments.reduce((acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"), 0)
+    ),
+    payments_pending_total: Number(
+      truthRevenue.pending_total_pen ??
+        truthSummary.payments_pending_total ??
+        pendingPayments.reduce((acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"), 0)
+    ),
+    payments_failed_total: Number(
+      truthRevenue.failed_total_pen ??
+        truthSummary.payments_failed_total ??
+        failedPayments.reduce((acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"), 0)
+    ),
+    payments_today_total: Number(truthSummary.payments_today_total ?? 0),
+    payments_week_total: Number(truthSummary.payments_week_total ?? 0),
+    payments_month_total: Number(
+      truthRevenue.revenue_confirmed_pen ?? truthSummary.payments_month_total ?? 0
+    ),
+    subscriptions_active: Number(truthSummary.subscriptions_active ?? activeSubscriptions.length),
+    subscriptions_pending: Number(
+      truthSummary.subscriptions_pending ??
+        subscriptions.filter((subscription) => getResolvedSubscriptionStatus(subscription) === "pending_payment").length
+    ),
+    subscriptions_cancelled: Number(
+      truthSummary.subscriptions_cancelled ??
+        subscriptions.filter((subscription) => getResolvedSubscriptionStatus(subscription) === "canceled").length
+    ),
+  }
+
+  return { clients, subscriptions, payments, summary }
+}
+
 export default function OwnerDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -457,73 +788,15 @@ export default function OwnerDashboardPage() {
   }
 
   const paymentStatusClass = (status: string | null | undefined) => {
-    const normalized = String(status || "").toLowerCase()
-
-    if (["approved", "paid", "succeeded"].includes(normalized)) {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    }
-
-    if (normalized === "pending") {
-      return "border-amber-200 bg-amber-50 text-amber-700"
-    }
-
-    if (["failed", "declined"].includes(normalized)) {
-      return "border-red-200 bg-red-50 text-red-700"
-    }
-
-    return "border-slate-200 bg-slate-100 text-slate-700"
+    return getOwnerDisplayStatusClass(status)
   }
 
   const subscriptionStatusClass = (status: string | null | undefined) => {
-    const normalized = String(status || "").toLowerCase()
-
-    if (normalized === "active") {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    }
-
-    if (normalized === "pending") {
-      return "border-amber-200 bg-amber-50 text-amber-700"
-    }
-
-    if (normalized === "cancelled") {
-      return "border-slate-200 bg-slate-100 text-slate-700"
-    }
-
-    if (normalized === "trial_expired" || normalized === "expired") {
-      return "border-red-200 bg-red-50 text-red-700"
-    }
-
-    if (normalized === "trial_recovery_active") {
-      return "border-amber-200 bg-amber-50 text-amber-700"
-    }
-
-    return "border-slate-200 bg-slate-100 text-slate-700"
+    return getOwnerDisplayStatusClass(status)
   }
 
   const clientStatusClass = (status: string | null | undefined) => {
-    const normalized = String(status || "").toLowerCase()
-
-    if (normalized === "active") {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700"
-    }
-
-    if (normalized === "blocked") {
-      return "border-red-200 bg-red-50 text-red-700"
-    }
-
-    if (normalized === "inactive") {
-      return "border-slate-200 bg-slate-100 text-slate-700"
-    }
-
-    if (normalized === "trial_expired" || normalized === "expired") {
-      return "border-red-200 bg-red-50 text-red-700"
-    }
-
-    if (normalized === "trial_recovery_active") {
-      return "border-amber-200 bg-amber-50 text-amber-700"
-    }
-
-    return "border-slate-200 bg-slate-100 text-slate-700"
+    return getOwnerDisplayStatusClass(status)
   }
 
 
@@ -571,8 +844,13 @@ export default function OwnerDashboardPage() {
       })
 
       const headers = await getAuthHeaders()
-      const [dashboardResponse, catalogResponse, targetsResponse] = await Promise.all([
+      const [dashboardResponse, truthResponse, catalogResponse, targetsResponse] = await Promise.all([
         fetch("/api/owner/dashboard", {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        }),
+        fetch("/api/owner/console/truth", {
           method: "GET",
           headers,
           cache: "no-store",
@@ -590,6 +868,7 @@ export default function OwnerDashboardPage() {
       ])
 
       const payload = await dashboardResponse.json().catch(() => ({}))
+      const truthPayload = await truthResponse.json().catch(() => ({}))
       const catalogPayload = await catalogResponse.json().catch(() => ({}))
       const targetsPayload = await targetsResponse.json().catch(() => ({}))
 
@@ -603,15 +882,24 @@ export default function OwnerDashboardPage() {
         throw new Error(targetsPayload?.error || "No se pudieron cargar las metas owner.")
       }
 
-      setSummary((payload.summary || null) as SummaryRow | null)
-      setPayments((payload.payments || []) as PaymentRow[])
-      setSubscriptions((payload.subscriptions || []) as SubscriptionRow[])
-      setClients((payload.clients || []) as ClientRow[])
+      const mergedTruth = truthResponse.ok && truthPayload?.ok
+        ? mergeOwnerTruthData(payload as Record<string, any>, truthPayload as OwnerTruthPayload)
+        : {
+            summary: (payload.summary || null) as SummaryRow | null,
+            payments: (payload.payments || []) as PaymentRow[],
+            subscriptions: (payload.subscriptions || []) as SubscriptionRow[],
+            clients: (payload.clients || []) as ClientRow[],
+          }
+
+      setSummary((mergedTruth.summary || null) as SummaryRow | null)
+      setPayments((mergedTruth.payments || []) as PaymentRow[])
+      setSubscriptions((mergedTruth.subscriptions || []) as SubscriptionRow[])
+      setClients((mergedTruth.clients || []) as ClientRow[])
       setActivityLog((payload.activityLog || []) as OwnerActivityEntry[])
       setCatalog((catalogPayload.catalog || null) as OwnerCatalog | null)
       setTargets((targetsPayload.targets || null) as OwnerTargets | null)
 
-      const nextClients = (payload.clients || []) as ClientRow[]
+      const nextClients = (mergedTruth.clients || []) as ClientRow[]
       if (nextClients.length > 0) {
         setSelectedClientId((current) => {
           if (current && nextClients.some((client) => client.id === current)) {
@@ -984,21 +1272,21 @@ export default function OwnerDashboardPage() {
   }, [activityLog, selectedClientId])
 
   const filteredOverview = useMemo(() => {
-    const approvedPayments = filteredPayments.filter((payment) =>
-      ["approved", "paid", "succeeded"].includes(String(payment.status || "").toLowerCase())
+    const approvedPayments = filteredPayments.filter((payment) => shouldCountPaymentAsRevenue(payment))
+
+    const pendingPayments = filteredPayments.filter((payment) =>
+      normalizeOwnerTruthStatus(payment.canonical_status || payment.status) === "pending_payment"
     )
 
-    const pendingPayments = filteredPayments.filter(
-      (payment) => String(payment.status || "").toLowerCase() === "pending"
-    )
+    const failedPayments = filteredPayments.filter((payment) => {
+      const normalized = normalizeOwnerTruthStatus(payment.canonical_status || payment.status)
+      return normalized === "rejected" || normalized === "anomaly"
+    })
 
-    const failedPayments = filteredPayments.filter((payment) =>
-      ["failed", "declined"].includes(String(payment.status || "").toLowerCase())
-    )
-
-    const activeSubscriptions = filteredSubscriptions.filter(
-      (subscription) => getResolvedSubscriptionStatus(subscription) === "active"
-    )
+    const activeSubscriptions = filteredSubscriptions.filter((subscription) => {
+      const normalized = getResolvedSubscriptionStatus(subscription)
+      return ["active", "core_active", "pro_active", "pro_plus_active", "trial_active"].includes(normalized)
+    })
 
     const approvedTotal = approvedPayments.reduce(
       (acc, payment) => acc + toPEN(Number(payment.amount || 0), payment.currency_code || "PEN"),
@@ -1050,6 +1338,7 @@ export default function OwnerDashboardPage() {
     const breakEvenPen = fixedCostsPen / Math.max(0.0001, 1 - MP_FEE_PCT)
     const targetRevenuePen = Math.max(activeTargets.salesPen, breakEvenPen)
     const paidClients = filteredClients.filter((client) =>
+      ["core_active", "pro_active", "pro_plus_active", "active"].includes(getResolvedClientStatus(client)) &&
       ["core", "pro", "pro_plus"].includes(String(client.plan_code || "").toLowerCase())
     ).length
     const totalClients = Math.max(filteredClients.length, 1)
@@ -1811,11 +2100,14 @@ export default function OwnerDashboardPage() {
                         </p>
                         <span
                           className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium mt-3 ${paymentStatusClass(
-                            payment.status
+                            payment.canonical_status || payment.status
                           )}`}
                         >
-                          {payment.status}
+                          {getOwnerDisplayStatusLabel(normalizeOwnerTruthStatus(payment.canonical_status || payment.status))}
                         </span>
+                        {payment.requires_review && payment.anomaly_code ? (
+                          <p className="mt-2 text-xs font-semibold text-red-700">Requiere revisión · {payment.anomaly_code}</p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1842,7 +2134,7 @@ export default function OwnerDashboardPage() {
               <div className="space-y-4">
                 {filteredSubscriptions.map((subscription) => {
                   const resolvedStatus = getResolvedSubscriptionStatus(subscription)
-                  const showTrialRecovery = resolvedStatus === "trial_expired"
+                  const showTrialRecovery = resolvedStatus === "expired_trial"
                   return (
                   <div
                     key={subscription.id}
@@ -1880,8 +2172,11 @@ export default function OwnerDashboardPage() {
                             resolvedStatus
                           )}`}
                         >
-                          {getResolvedStatusLabel(resolvedStatus)}
+                          {getOwnerDisplayStatusLabel(resolvedStatus)}
                         </span>
+                        {subscription.requires_review && subscription.anomaly_code ? (
+                          <p className="mt-2 text-xs font-semibold text-red-700">Requiere revisión · {subscription.anomaly_code}</p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1935,7 +2230,7 @@ export default function OwnerDashboardPage() {
                             Suscripcion: {formatDateShort(client.subscription_started_at || client.created_at)} · Vence:{" "}
                             {formatDateShort(client.current_period_end)}
                           </p>
-                          {["trial_expired", "trial_recovery_active"].includes(getResolvedClientStatus(client)) ? (
+                          {["expired_trial", "trial_recovery_active"].includes(getResolvedClientStatus(client)) ? (
                             <p className="mt-2 text-xs font-medium text-[#C2410C]">
                               {getResolvedClientStatus(client) === "trial_recovery_active"
                                 ? "Trial vencido. La recuperación comercial sigue activa dentro de la ventana de 48 horas."
@@ -1961,8 +2256,13 @@ export default function OwnerDashboardPage() {
                               getResolvedClientStatus(client)
                             )}`}
                           >
-                            {getResolvedStatusLabel(getResolvedClientStatus(client))}
+                            {getOwnerDisplayStatusLabel(getResolvedClientStatus(client))}
                           </span>
+                          {client.requires_review && client.anomaly_code ? (
+                            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                              Requiere revisión · {client.anomaly_code}
+                            </span>
+                          ) : null}
                           <ChevronRight className="w-4 h-4 text-slate-400" />
                         </div>
                       </div>
@@ -2016,11 +2316,11 @@ export default function OwnerDashboardPage() {
                             {getOwnerPlanLabel(selectedClient.plan_code)}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
-                            Estado plan: {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
+                            Estado plan: {getOwnerDisplayStatusLabel(getResolvedClientStatus(selectedClient))}
                           </p>
                           {selectedClient.recovery_status && selectedClient.recovery_status !== "inactive" ? (
                             <p className="mt-2 text-xs text-[#C2410C]">
-                              Recuperación: {getResolvedStatusLabel(selectedClient.recovery_status)}.
+                              Recuperación: {getOwnerDisplayStatusLabel(selectedClient.recovery_status)}.
                               {selectedClient.recovery_ends_at
                                 ? ` Ventana hasta ${formatDateTime(selectedClient.recovery_ends_at)}.`
                                 : ""}
@@ -2037,8 +2337,13 @@ export default function OwnerDashboardPage() {
                               getResolvedClientStatus(selectedClient)
                             )}`}
                           >
-                            {getResolvedStatusLabel(getResolvedClientStatus(selectedClient))}
+                            {getOwnerDisplayStatusLabel(getResolvedClientStatus(selectedClient))}
                           </span>
+                          {selectedClient.requires_review && selectedClient.anomaly_code ? (
+                            <p className="mt-2 text-xs font-semibold text-red-700">
+                              Requiere revisión · {selectedClient.anomaly_code}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -2231,11 +2536,14 @@ export default function OwnerDashboardPage() {
 
                           <span
                             className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${paymentStatusClass(
-                              payment.status
+                              payment.canonical_status || payment.status
                             )}`}
                           >
-                            {payment.status}
+                            {getOwnerDisplayStatusLabel(normalizeOwnerTruthStatus(payment.canonical_status || payment.status))}
                           </span>
+                          {payment.requires_review && payment.anomaly_code ? (
+                            <p className="mt-2 text-xs font-semibold text-red-700">Requiere revisión · {payment.anomaly_code}</p>
+                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -2268,7 +2576,7 @@ export default function OwnerDashboardPage() {
                               {formatDateTime(subscription.current_period_start)} →{" "}
                               {formatDateTime(subscription.current_period_end)}
                             </p>
-                            {["trial_expired", "trial_recovery_active"].includes(getResolvedSubscriptionStatus(subscription)) ? (
+                            {["expired_trial", "trial_recovery_active"].includes(getResolvedSubscriptionStatus(subscription)) ? (
                               <p className="mt-2 text-xs font-medium text-[#C2410C]">
                                 {getResolvedSubscriptionStatus(subscription) === "trial_recovery_active"
                                   ? "Trial vencido. La recuperación comercial está activa y ya no debería verse como activo."
@@ -2282,8 +2590,11 @@ export default function OwnerDashboardPage() {
                               getResolvedSubscriptionStatus(subscription)
                             )}`}
                           >
-                            {getResolvedStatusLabel(getResolvedSubscriptionStatus(subscription))}
+                            {getOwnerDisplayStatusLabel(getResolvedSubscriptionStatus(subscription))}
                           </span>
+                          {subscription.requires_review && subscription.anomaly_code ? (
+                            <p className="mt-2 text-xs font-semibold text-red-700">Requiere revisión · {subscription.anomaly_code}</p>
+                          ) : null}
                         </div>
                       </div>
                     ))}
